@@ -8669,14 +8669,30 @@ body.prd-resizing {
     color: #1e293b;
 }
 
+/* 宽表兜底：章节正文的表格统一放进横向滚动容器，窄抽屉下不再逐字竖排 */
+.prd-table-scroll {
+    overflow-x: auto;
+    margin: 8px 0;
+}
+
+.prd-table-scroll table {
+    margin: 0;
+    min-width: 100%;
+}
+
+/* 空态处置矩阵 8 列，给一个最小宽度让列不被压到 30px，窄抽屉下横向滚动查看 */
+#prd-sec-XK-13 .prd-table-scroll table {
+    min-width: 560px;
+}
+
 /* XK-06 热力结论规则表：自动列宽会按内容比例分配，「触发条件」列被压到 38px、表头逐字竖排；
    改为定宽布局：首列 88px（短标签不拆行），其余两列平分剩余宽度 */
-#prd-sec-XK-06 .prd-sec-body table {
+#prd-sec-XK-06 .prd-table-scroll table {
     table-layout: fixed;
 }
 
-#prd-sec-XK-06 .prd-sec-body th:first-child,
-#prd-sec-XK-06 .prd-sec-body td:first-child {
+#prd-sec-XK-06 .prd-table-scroll th:first-child,
+#prd-sec-XK-06 .prd-table-scroll td:first-child {
     width: 88px;
     white-space: nowrap;
 }
