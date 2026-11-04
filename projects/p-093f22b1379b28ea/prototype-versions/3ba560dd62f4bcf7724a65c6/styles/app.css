@@ -3692,6 +3692,11 @@ body {
     vertical-align: -1.5px;
 }
 
+.heat-legend .sw.h0 {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+}
+
 .heat-legend .sw.h1 {
     background: #e8f5e9;
     border: 1px solid #c8e6c9;
