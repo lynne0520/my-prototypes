@@ -1232,6 +1232,44 @@ body {
     transform: translateY(-1px);
 }
 
+/* 时间范围 + 学情来源合并入口：外部只回显「范围 · 已选 N 份」，设置项统一在弹窗内完成 */
+.filter-scope {
+    gap: 8px;
+    max-width: 460px;
+    white-space: nowrap;
+}
+
+.filter-scope .fa-calendar-day {
+    font-size: 14px;
+}
+
+.filter-scope-range {
+    font-weight: 700;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.filter-scope-sep {
+    color: rgba(59, 130, 246, 0.45);
+}
+
+.filter-scope-count {
+    font-weight: 600;
+}
+
+.filter-scope-caret {
+    font-size: 11px;
+    opacity: 0.7;
+    transition: var(--transition);
+}
+
+.filter-scope:hover .filter-scope-caret {
+    opacity: 1;
+    transform: translateY(1px);
+}
+
 /* 掌握程度全局设置入口（紧随已选作业入口：对整个学科学情生效，视觉降级为次要胶囊） */
 .filter-setup {
     display: flex;
@@ -1774,6 +1812,69 @@ body {
     font-size: 11px;
 }
 
+/* 学情来源弹窗：顶部统计时间范围条（原筛选栏的档位与日期控件迁入，与下方勾选同屏一次设定） */
+.source-timebar {
+    margin: 0 32px 16px;
+    padding: 14px 18px;
+    background: #f8fafc;
+    border: 1px solid #eef2f7;
+    border-radius: 14px;
+    flex-shrink: 0;
+}
+
+.source-timebar-hd {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.source-timebar-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.source-timebar-title i {
+    color: var(--primary);
+    margin-right: 5px;
+}
+
+.source-timebar-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.source-timebar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.source-timebar-row .segmented-control {
+    margin-bottom: 0;
+}
+
+.source-timebar-row .date-range {
+    background: #fff;
+}
+
+.source-timebar-row .date-range input {
+    max-width: 160px;
+}
+
+/* 弹窗高度兜底：时间条占位后两栏列表不得被压成 0 高；极矮视口下两栏区域整体滚动而不裁切 */
+.source-column .check-list {
+    min-height: 180px;
+}
+
+.modal-content.source-columns {
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
 .source-empty {
     flex: 1;
     display: flex;
@@ -2028,6 +2129,96 @@ body {
     gap: 16px;
     border-top: 1px solid var(--border-color);
     background: #fcfdfe;
+}
+
+/* 弹窗底栏左侧：当前时间范围 + 已选份数（与筛选栏胶囊同源，靠 margin-right:auto 推到左端） */
+.modal-scope-echo {
+    margin-right: auto;
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-muted);
+    flex-wrap: nowrap;
+    white-space: normal;
+    row-gap: 2px;
+    min-width: 0;
+}
+
+.modal-scope-echo > i {
+    color: var(--primary);
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.modal-scope-label {
+    font-weight: 600;
+    color: var(--secondary);
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.modal-scope-echo .filter-scope-sep,
+.modal-scope-echo #modalCountEcho,
+.modal-scope-echo #stKpModalCountEcho {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.modal-scope-range {
+    font-weight: 700;
+    color: var(--text-main);
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 38vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 底栏按钮不参与收缩：回显过长时只压缩回显文本，按钮不换行、不竖排 */
+.modal-footer > .btn {
+    flex-shrink: 0;
+}
+
+/* 底栏新增回显后：按钮垂直居中；整行不换行（整行换行会让按钮竖排），靠回显文本自身收缩兼底 */
+.modal-footer {
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
+/* 勾选行：任务名占满剩余宽度并单行省略，避免窄弹窗下逐字竖排；日期不参与收缩 */
+.check-item > i {
+    flex-shrink: 0;
+}
+
+.check-item > span:not(.item-date) {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.check-item .item-date {
+    flex-shrink: 0;
+}
+
+/* 窄视口：双栏改为上下排列，每栏列表限高可滚动；底栏收紧内边距给回显腾宽 */
+@media (max-width: 760px) {
+    .modal-footer {
+        padding: 18px 20px;
+    }
+
+    .modal-content.source-columns {
+        flex-direction: column;
+    }
+
+    .source-column .check-list {
+        min-height: 140px;
+        max-height: 220px;
+    }
 }
 
 /* Mastery Setup Modal */
@@ -7664,7 +7855,7 @@ body {
     cursor: help;
 }
 
-/* 徽章悬停气泡：状态判定口径 + 该生判定数字（替代原生 title 的样式化说明） */
+/* 徽章悬停气泡：一句话说明（只回答「为什么给这个状态」，不再堆判定口径与指标） */
 .stu-watch-tip {
     position: absolute;
     bottom: calc(100% + 8px);
@@ -7672,19 +7863,17 @@ body {
     transform: translateX(-50%);
     z-index: 40;
     display: none;
-    flex-direction: column;
-    gap: 4px;
-    width: 320px;
-    max-width: 320px;
-    padding: 9px 11px;
+    width: max-content;
+    max-width: 260px;
+    padding: 6px 10px;
     background: #ffffff;
     border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+    border-radius: 6px;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.14);
     font-size: 11.5px;
     font-weight: 400;
-    line-height: 1.55;
-    color: var(--text-muted);
+    line-height: 1.5;
+    color: var(--text-main);
     text-align: left;
     white-space: normal;
 }
@@ -7699,19 +7888,9 @@ body {
     border-top-color: #ffffff;
 }
 
-.stu-watch-tip-title {
-    font-size: 12px;
-    color: var(--text-main);
-}
-
-.stu-watch-tip-rule {
-    padding-bottom: 5px;
-    border-bottom: 1px dashed #e2e8f0;
-}
-
 .stu-watch-tag:hover .stu-watch-tip,
 .stu-watch-tag:focus-within .stu-watch-tip {
-    display: flex;
+    display: block;
 }
 
 .stu-watch-tag.wtag-down {
@@ -8173,6 +8352,16 @@ body {
 
 .st-kp-timebar .filter-count {
     margin-left: auto;
+}
+
+/* 学生追踪筛选条合并：学科下拉独立，胶囊回显「时间范围 · 已选 N 份」（设置项在弹窗内）；
+   宽度随视口收敛，窄视口下不撑出筛选条 */
+.st-kp-timebar .filter-scope {
+    max-width: 100%;
+}
+
+.st-kp-timebar .filter-scope .filter-scope-range {
+    max-width: min(220px, 42vw);
 }
 
 /* ===== 学生追踪-知识点分析：个人失分明细 / 个人教学建议 / 详情弹窗增强（同步学科学情-知识点分析优化） ===== */
