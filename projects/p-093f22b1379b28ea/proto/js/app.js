@@ -2092,13 +2092,14 @@ function renderPeriodInsights() {
 }
 
 /* ---------------- 学生阶段性学情状态判定（V2.0 方案；完整判定规则见 PRD XK-10） ----------------
-   原型阶段说明：暂无真实数据接入，本页状态与判定数字（Δ / 波动带 L·U / 突破场次 n_low·n_high /
-   有效场次 / R_pre·R_post / avg_p·avg_r）均为「模拟数据」，由 stSimStatus 按学号稳定生成，
+   原型阶段说明：暂无真实数据接入，本页状态与判定数字（前后半段差值 / 低于·高于平时水平次数 /
+   有效场次 / 平均得分率 / 与班级平均差）均为「模拟数据」，由 stSimStatus 按学号稳定生成，
    仅用于演示 UI 与状态联动（KPI 卡 / 需关注弹层 / 列表徽章 同源）。
-   真实计算口径（留一法残差 / MAD 个人波动带 / 低位双条件 / 持续性确认 / Δ_th 分学科校准）不在原型内实时执行，
+   判定算法（留一法残差 / MAD 个人波动带 / 低位双条件 / 持续性确认 / 阈值分学科校准）不在原型内实时执行，
    完整规则以 PRD 抽屉 XK-10「学生状态判定规则（V2.0）」为准，待真实数据接入后据此实现。
    状态名沿用教学语言：待观察 / 断崖下跌 / 持续低位 / 低位回升 / 明显进步 / 平稳（V2.0 新增「待观察」，
-   样本不足不归入平稳）；徽章 / 弹层悬停展示该生判定数字与口径；学生列表标题旁小问号 hover 展开「状态判定说明（V2.0）」浮层。 */
+   样本不足不归入平稳）；徽章悬停只给一句话结论（前后半段差多少 + 几次超出平时水平），
+   不向教师展示 Δ_th / SD_r / MAD 等口径；完整口径集中在学生列表标题旁小问号的「状态判定说明」浮层。 */
 
 // 学生名册（按截图学号降序，刘鸿锦(40313) 为默认选中）；置于顶层供状态引擎与周期概览 KPI 卡共用
 const ST_STUDENTS = [
@@ -2146,14 +2147,14 @@ const ST_STATUS_RULES = {
     lowPeriods: 2          // 持续低位连续命中周期数：≥ 2（周期不重叠）
 };
 
-// 状态定义（V2.0 六状态，按判定优先级排序；watch=true 计入「需关注」；hint=列表头部判定说明同源口径文案，用于徽章悬停气泡）
+// 状态定义（V2.0 六状态，按判定优先级排序；watch=true 计入「需关注」；hint=教师语言的一句话判定口径，供图例与浮层复用）
 const ST_STATUS_DEFS = {
-    pending: { label: '待观察',   cls: 'wtag-pend', watch: false, advice: '样本不足不判趋势：补足有效场次（≥4 场且前/后半段各 ≥2 场）后再评估', hint: '有效场次 <4、或前 / 后半段各 <2、或波动带不可用且无替代——不判趋势，补充数据' },
-    cliff:   { label: '断崖下跌', cls: 'wtag-down', watch: true,  advice: '紧急排查近期诱因（状态 / 难度跳变 / 知识断层），优先个别辅导', hint: 'Δ ≤ −Δ_th（默认 8%，取 max(8, 0.8×SD_Δ) 分学科校准），且后半段 ≥2 场低于波动带下限 L（需优先跟进）' },
-    low:     { label: '持续低位', cls: 'wtag-low',  watch: true,  advice: '系统性补基础：先做前置诊断，再安排同点巩固', hint: '周期平均得分率 <60% 且平均残差 <−0.5×SD_r，趋势无回升（Δ≤0 或 R_post≤R_pre+2%），连续 ≥2 个周期命中' },
-    lowUp:   { label: '低位回升', cls: 'wtag-up',   watch: false, advice: '干预见效：保持当前节奏，每周滚动复测确认稳定', hint: '原处低位（上一周期持续低位，或本周期前半段低位），Δ ≥ +Δ_th 且后半段 ≥2 场高于波动带上限 U（正向关注）' },
-    up:      { label: '明显进步', cls: 'wtag-up',   watch: false, advice: '正向激励：可适度提高任务挑战度', hint: '中 / 高位（平均残差 ≥ −0.5×SD_r 或年级分位 ≥40%），Δ ≥ +Δ_th 且 ≥2 场确认（正向关注）' },
-    flat:    { label: '平稳',     cls: '',          watch: false, advice: '按既有教学节奏推进', hint: '以上均不满足且有效场次足够——常规观察' }
+    pending: { label: '待观察',   cls: 'wtag-pend', watch: false, advice: '样本不足不判趋势：补足有效场次（≥4 场且前/后半段各 ≥2 场）后再评估', hint: '有效作答不足 4 次，或成绩起伏过大，数据太少不判趋势' },
+    cliff:   { label: '断崖下跌', cls: 'wtag-down', watch: true,  advice: '紧急排查近期诱因（状态 / 难度跳变 / 知识断层），优先个别辅导', hint: '后一半平均得分率比前一半低 8 个百分点以上，且至少 2 次明显低于平时水平' },
+    low:     { label: '持续低位', cls: 'wtag-low',  watch: true,  advice: '系统性补基础：先做前置诊断，再安排同点巩固', hint: '近一个月平均得分率不到 60%，长期低于班级平均，连续两个周期没有起色' },
+    lowUp:   { label: '低位回升', cls: 'wtag-up',   watch: false, advice: '干预见效：保持当前节奏，每周滚动复测确认稳定', hint: '原来长期低位，后一半比前一半高 8 个百分点以上，且至少 2 次超过平时水平' },
+    up:      { label: '明显进步', cls: 'wtag-up',   watch: false, advice: '正向激励：可适度提高任务挑战度', hint: '原来中等以上，后一半比前一半高 8 个百分点以上，且有 2 次以上持续确认' },
+    flat:    { label: '平稳',     cls: '',          watch: false, advice: '按既有教学节奏推进', hint: '成绩没有明显上涨或下跌' }
 };
 
 // 演示数据植入模式：让 17 人演示班覆盖 V2.0 各状态分支（状态仍由算法真实算出，非硬编码名单）
@@ -2230,27 +2231,24 @@ function stSimStatus(s) {
         key, label: def.label, cls: def.cls, watch: def.watch, advice: def.advice, hint: def.hint, reason: ''
     };
 
-    // 判定依据（教师可复核口径 + 模拟数字；title 单行展示）
-    const sign = rec.delta >= 0 ? '+' : '';
-    const lvName = { low: '低位', mid: '中等', high: '高位' }[rec.level];
+    // 悬停说明（面向教师的一句话结论）：只保留最关键的对比数字（前后半段差多少、几次低于/高于平时水平），
+    // 不再展示 Δ_th / SD_r / MAD / R_pre 等判定口径；完整算法口径见 PRD XK-10，不占用教师阅读成本
     if (none) {
-        rec.reason = `周期内均未提交（有效场次 0 场 <${R.minTasks} 场）样本不足 → 待观察；未知 ≠ 未掌握，不判状态，补充作答证据后再评估（原型为模拟数据，真实口径见 PRD XK-10）`;
+        rec.reason = '本周期一次都没交，暂时无法判断，需要先补交作业。';
     } else if (key === 'pending') {
-        rec.reason = (plantWhy === 'band'
-            ? `波动带不可用（历史残差 <${R.bandWinMin} 场且无班级残差标准差替代）→ 待观察：不判趋势，补充数据后再评估`
-            : `有效场次 ${validN} 场（<${R.minTasks} 场）样本不足 → 待观察：不判趋势，补充数据后再评估`) +
-            '（原型为模拟数据，真实口径见 PRD XK-10）';
+        rec.reason = plantWhy === 'band'
+            ? `近 ${validN} 次成绩忽高忽低，看不出稳定水平，先继续观察。`
+            : `本周期只交了 ${validN} 次，次数太少，暂时无法判断趋势。`;
+    } else if (key === 'cliff') {
+        rec.reason = `近 ${validN} 次任务里，后一半平均得分率比前一半低 ${Math.abs(rec.delta)} 个百分点，其中 ${nLow} 次明显低于平时水平，属于明显下滑。`;
+    } else if (key === 'low') {
+        rec.reason = `近一个月平均得分率只有 ${avgRate}%，比班级平均低 ${Math.abs(avgR)} 个百分点，且一直没有回升。`;
+    } else if (key === 'lowUp') {
+        rec.reason = `原来一直在低位，后一半平均得分率比前一半高 ${rec.delta} 个百分点，其中 ${nHigh} 次超过平时水平，正在回升。`;
+    } else if (key === 'up') {
+        rec.reason = `后一半平均得分率比前一半高 ${rec.delta} 个百分点，其中 ${nHigh} 次超过平时水平，属于明显进步。`;
     } else {
-        const modeTxt = key === 'cliff'
-            ? `Δ=${sign}${rec.delta}% ≤ −${R.deltaTh}%，且后半段 ${nLow} 场低于波动带下限 ${bandL}% 确认`
-            : key === 'low'
-                ? `avg_p ${avgRate}% <${R.lowP}% 且 avg_r ${avgR}% <−${R.lowRSDK}×SD_r，趋势无回升（Δ=${sign}${rec.delta}% 且 R_post ${rPost}% ≤ R_pre ${rPre}%+${R.reboundEps}%），连续 ≥${R.lowPeriods} 周期命中`
-                : key === 'lowUp'
-                    ? `原处低位（R_pre=${rPre}%），Δ=${sign}${rec.delta}% ≥ +${R.deltaTh}%，且后半段 ${nHigh} 场高于波动带上限 ${bandU}%（干预见效）`
-                    : key === 'up'
-                        ? `中/高位（avg_r ${avgR}% ≥ −${R.lowRSDK}×SD_r），Δ=${sign}${rec.delta}% ≥ +${R.deltaTh}%，且后半段 ${nHigh} 场高于波动带上限 ${bandU}%`
-                        : `Δ=${sign}${rec.delta}% 未达 ±${R.deltaTh}% 阈值，无持续异动`;
-        rec.reason = `水平 ${lvName}（avg_p ${avgRate}% · avg_r ${avgR}%）· 有效 ${validN} 场 · R_pre ${rPre}% → R_post ${rPost}% · 波动带 [${bandL}, ${bandU}]%（${bandSrc === 'approx' ? '班级残差标准差近似' : 'MAD 历史窗口'}）· 后半段突破场次：低于下限 ${nLow} / 高于上限 ${nHigh} · ${modeTxt}。建议：${def.advice}（原型为模拟数据，真实口径见 PRD XK-10）`;
+        rec.reason = '成绩没有明显上涨或下跌，保持常规观察。';
     }
     return rec;
 }
@@ -2336,7 +2334,7 @@ function renderPeriodKpis() {
     const gradeAvg = Math.round(periodTasks.reduce((a, t) => a + t.gradeRate, 0) / s.total * 10) / 10;
 
     // 任务提交为演示口径；需关注学生与状态引擎 ST_STATUS_LIST 同源（学生学情「需关注」筛选同口径）
-    const submitDemo = { total: 288, done: 276, missing: 12, late: 8 };
+    const submitDemo = { total: 288, done: 276, missing: 12 };
     const focusDemo = {
         total: WATCH_FOCUS_ID_SET.size,
         cliff: WATCH_GROUPS[0].students.length,     // 断崖下跌
@@ -2374,8 +2372,8 @@ function renderPeriodKpis() {
         },
         {
             label: '提交率', ic: 'fa-inbox', value: 95.8, unit: '%', tone: '',
-            tip: '周期内任务实交人次 ÷ 应交人次（含迟交）',
-            sub: `应交 <b>${submitDemo.total}</b> 人次 · 已交 <b>${submitDemo.done}</b> · 未交 <b>${submitDemo.missing}</b> · 迟交 <b>${submitDemo.late}</b>`
+            tip: '周期内任务实交人次 ÷ 应交人次（无迟交单列口径）',
+            sub: `应交 <b>${submitDemo.total}</b> 人次 · 已交 <b>${submitDemo.done}</b> · 未交 <b>${submitDemo.missing}</b>`
         },
         {
             label: '需关注学生', ic: 'fa-exclamation-triangle', value: focusDemo.total, unit: '人', tone: 'tone-bad', watch: true,
@@ -4174,6 +4172,7 @@ function renderModalList() {
     renderSourceColumn(ModalData.assignments, El.modalAssignList, El.checkAllAssignments, El.assignEmpty);
     renderSourceColumn(ModalData.exams, El.modalExamList, El.checkAllExams, El.examEmpty);
     updateSourceCounts();
+    syncScopeEcho();   // 勾选变化即时同步弹窗底栏与外部胶囊的已选份数
 }
 
 function renderSourceColumn(list, container, checkAll, emptyEl) {
@@ -4191,7 +4190,7 @@ function renderSourceColumn(list, container, checkAll, emptyEl) {
         <label class="check-item">
             <input type="checkbox" class="modal-item-checkbox" data-id="${item.id}" ${item.checked ? 'checked' : ''}>
             <i class="fas fa-folder"></i>
-            <span>${escapeHTML(item.name)}</span>
+            <span title="${escapeHTML(item.name)}">${escapeHTML(item.name)}</span>
             ${item.date ? `<span class="item-date">${item.date}</span>` : ''}
         </label>
     `).join('');
@@ -4214,9 +4213,42 @@ function updateSourceCounts() {
     if (elE) elE.innerText = `(${eChecked}/${ModalData.exams.length})`;
 }
 
-function updateFilterCount() {
+// 时间范围回显文案：按当前激活档位与对应日期控件生成（弹窗内设定 → 外部胶囊 / 弹窗底栏同源回显）
+function timeScopeText() {
+    const active = document.querySelector('#timeSegment .segment-btn.active');
+    const seg = active ? active.textContent.trim() : '月';
+    const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+    if (seg === '学年') return val('yearPickSelect') || '—';
+    if (seg === '月') {
+        const m = val('monthPickInput');
+        if (!m) return '—';
+        const parts = m.split('-');
+        return `${parts[0]}年${Number(parts[1])}月`;
+    }
+    if (seg === '周') {
+        const w = val('weekPickInput');
+        const hint = document.getElementById('weekPickHint');
+        const range = hint && hint.innerText && hint.innerText !== '--' ? `（${hint.innerText}）` : '';
+        return w ? `${w}${range}` : '—';
+    }
+    const s = val('customDateStart'), e = val('customDateEnd');
+    return s && e ? `${s} ~ ${e}` : '—';
+}
+
+// 回显同步：筛选栏胶囊（时间范围 · 已选 N 份）+ 弹窗底栏当前范围，两处同读一份口径
+function syncScopeEcho() {
     const total = ModalData.assignments.filter(a => a.checked).length + ModalData.exams.filter(e => e.checked).length;
-    El.filterCount.innerHTML = `<i class="fas fa-file-signature" style="margin-right: 8px;"></i> 已选：${total} 份`;
+    const range = timeScopeText();
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    set('filterRangeText', range);
+    set('filterCountText', `已选 ${total} 份`);
+    set('modalRangeEcho', range);
+    set('modalCountEcho', `已选 ${total} 份`);
+    if (El.filterCount) El.filterCount.title = `统计范围 ${range} · 已选 ${total} 份（点击设置时间范围与学情来源）`;
+}
+
+function updateFilterCount() {
+    syncScopeEcho();
 }
 
 /* ---------------- 筛选栏：年级/班级二级菜单 ---------------- */
@@ -4695,6 +4727,7 @@ function applySubjectView(subject) {
 function bindEvents() {
     // 筛选栏 → 学情来源弹窗
     El.filterCount.onclick = () => {
+        syncScopeEcho();
         El.filterModal.classList.add('show');
         renderModalList();
     };
@@ -4727,6 +4760,7 @@ function bindEvents() {
     const btnReselect = document.getElementById('btnReselectTasks');
     if (btnReselect) {
         btnReselect.onclick = () => {
+            syncScopeEcho();
             El.filterModal.classList.add('show');
             renderModalList();
         };
@@ -4770,9 +4804,6 @@ function bindEvents() {
             const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
             hint.innerText = `${fmt(monday)} ~ ${fmt(sunday)}`;
         };
-        const weekInput = document.getElementById('weekPickInput');
-        if (weekInput) weekInput.onchange = updateWeekHint;
-
         const pickers = {
             '学年': document.getElementById('yearRangePicker'),
             '月': document.getElementById('monthPicker'),
@@ -4791,17 +4822,23 @@ function bindEvents() {
                 timeBtns.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 showPicker(btn.textContent.trim());
+                syncScopeEcho();      // 档位变化即时回显时间范围（弹窗内设定，外部胶囊同步）
                 refreshDashboard();   // 档位切换可能改变环比基准（自定义→等长前置窗口）→ 重算周期模块
             };
         });
         // 自定义区间 / 月 / 周 / 学年 picker 变更：环比窗口随日期变化 → 重算（无环比数据时全链路隐藏环比）
         ['customDateStart', 'customDateEnd', 'monthPickInput', 'weekPickInput', 'yearPickSelect'].forEach(id => {
             const el = document.getElementById(id);
-            if (el) el.onchange = () => refreshDashboard();
+            if (el) el.onchange = () => {
+                if (id === 'weekPickInput') updateWeekHint();   // 周档内改周号时同步起止日期提示（原先只在切到周档时更新）
+                syncScopeEcho();
+                refreshDashboard();
+            };
         });
-        // 初始档位（默认"月"）同步显示对应日期控件
+        // 初始档位（默认"月"）同步显示对应日期控件，并把时间范围回显到胶囊与弹窗底栏
         const initBtn = timeSegment.querySelector('.segment-btn.active');
         if (initBtn) showPicker(initBtn.textContent.trim());
+        syncScopeEcho();
     }
 
     // 学年下拉：只切换查询学年。班级范围恒取当前学年任教班级，不做年级-班级联动、不在页面呈现历史学年的年级班级
@@ -5301,10 +5338,8 @@ init();
             const avgCls = p.avgRate < 60 ? ' stu-num-danger' : '';
             const st = ST_STATUS_BY_ID[s.id];
             const watchTag = (st && st.key !== 'flat')
-                ? '<span class="stu-watch-tag ' + st.cls + '" title="' + stEsc(st.reason) + '">' + st.label +
-                    '<span class="stu-watch-tip"><b class="stu-watch-tip-title">' + st.label + ' · 判定口径</b>' +
-                    '<span class="stu-watch-tip-rule">' + stEsc(st.hint || '') + '</span>' +
-                    '<span>' + stEsc(st.reason) + '</span></span></span>'
+                ? '<span class="stu-watch-tag ' + st.cls + '">' + st.label +
+                    '<span class="stu-watch-tip">' + stEsc(st.reason) + '</span></span>'
                 : '';
             return '<tr>' +
                 '<td class="stu-col-star"><i class="' + (s.starred ? 'fas' : 'far') + ' fa-star stu-star-btn' + (s.starred ? ' starred' : '') + '" data-star="' + s.id + '" title="标记学生"></i></td>' +
@@ -5416,21 +5451,17 @@ init();
         stRenderKpTabStatus();
     }
 
-    // 状态徽章（仅知识点分析页签激活时显示于个人周期学情概览标题后）：数据与学情页列表徽章同源 ST_STATUS_BY_ID；
-    // 口径标注 = 知识点分析页签独立筛选（学科 + 时间范围）；切页签/切学生经 stRenderStudentHeader、筛选变化经 stKpRenderAll 刷新
+    // 状态徽章（仅知识点分析页签激活时显示于个人周期学情概览标题后）：数据、文案与学情页列表徽章同源 ST_STATUS_BY_ID，
+    // 悬停为同一句话结论（不再叠印统计范围与判定口径）；切页签/切学生经 stRenderStudentHeader、筛选变化经 stKpRenderAll 刷新
     function stRenderKpTabStatus() {
         const slot = st$('stKpTabStatus');
         if (!slot) return;
         if (stState.tab !== 'knowledge') { slot.innerHTML = ''; return; }
         const s = stCurrentStudent();
         const st = ST_STATUS_BY_ID[s.id];
-        const scope = '统计范围：学科 ' + stKpState.time.subject + ' · ' + stKpTimeRange().join(' ~ ');
         slot.innerHTML = (st && st.key !== 'flat')
-            ? '<span class="stu-watch-tag ' + st.cls + '" title="' + stEsc(st.reason) + '">' + st.label +
-                '<span class="stu-watch-tip"><b class="stu-watch-tip-title">' + st.label + ' · 判定口径</b>' +
-                '<span class="stu-watch-tip-rule">' + stEsc(st.hint || '') + '</span>' +
-                '<span>' + stEsc(st.reason) + '</span>' +
-                '<span>' + stEsc(scope) + '</span></span></span>'
+            ? '<span class="stu-watch-tag ' + st.cls + '">' + st.label +
+                '<span class="stu-watch-tip">' + stEsc(st.reason) + '</span></span>'
             : '';
     }
 
@@ -5746,10 +5777,38 @@ init();
             .map(x => ({ type: x.task.type, name: x.task.name, subject: x.task.subject, date: x.task.date, mine: x.rates.mine, cls: x.rates.cls }));
     }
 
-    // 已选份数渲染（点击入口打开学情来源弹窗 stKpFilterModalOverlay；口径 = stKpTaskList 学科+时间+勾选三重过滤的任务数）
+    // 时间范围回显文案（随当前档位与对应日期控件生成，格式与班级侧 timeScopeText 对齐）
+    function stKpTimeScopeText() {
+        const t = stKpState.time;
+        if (t.mode === 'year') return t.year || '—';
+        if (t.mode === 'month') {
+            const p = (t.month || '').split('-');
+            return p.length === 2 ? Number(p[0]) + '年' + Number(p[1]) + '月' : '—';
+        }
+        if (t.mode === 'week') {
+            const r = stKpWeekDates(t.week);
+            return t.week + (r ? '（' + r[0].slice(5) + ' ~ ' + r[1].slice(5) + '）' : '');   // 短格式对齐班级侧 weekPickHint
+        }
+        return t.customFrom && t.customTo ? t.customFrom + ' ~ ' + t.customTo : '—';
+    }
+
+    // 双处同源回显：筛选条胶囊 + 弹窗底栏（份数 = 池内已勾选任务数，与 stKpTaskList 的学科+时间+勾选三重过滤等价）
+    function stKSyncScopeEcho() {
+        const total = stKpModalPool().filter(stKpTaskOn).length;
+        const range = stKpTimeScopeText();
+        const count = '已选 ' + total + ' 份';
+        const set = (id, txt) => { const el = st$(id); if (el) el.textContent = txt; };
+        set('stKpRangeText', range);
+        set('stKpFilterCountText', count);
+        set('stKpModalRangeEcho', range);
+        set('stKpModalCountEcho', count);
+        const btn = st$('stKpFilterCount');
+        if (btn) btn.title = '统计范围 ' + range + ' · ' + count + '（点击设置时间范围与学情来源）';
+    }
+
+    // 已选份数回显（点击胶囊打开「学情来源与统计范围」弹窗；口径 = 当前学科 + 时间范围内且未取消勾选的任务数）
     function stKpRenderTasks() {
-        const list = stKpTaskList(stCurrentStudent());
-        st$('stKpFilterCount').innerHTML = '<i class="fas fa-file-signature" style="margin-right: 8px;"></i> 已选：' + list.length + ' 份';
+        stKSyncScopeEcho();
     }
 
     /* ---- 个人周期学情概览（参考班级周期学情概览：KPI + 周期结论；无独立趋势图，得分趋势并入学情来源弹窗） ---- */
@@ -5915,6 +5974,7 @@ init();
         stKpModalColumn(exams, 'stKpModalExamList', 'stKpCheckAllExams', 'stKpExamEmpty');
         st$('stKpLabelAssignCount').innerText = '(' + assigns.filter(stKpTaskOn).length + '/' + assigns.length + ')';
         st$('stKpLabelExamCount').innerText = '(' + exams.filter(stKpTaskOn).length + '/' + exams.length + ')';
+        stKSyncScopeEcho();   // 勾选/全选/时间变更任一入口都会落到本函数，回显统一在此收口
     }
 
     // 个人周期得分趋势（原学情来源弹窗趋势图迁入概览）：x = 当前学科+时间范围已勾选任务（stKpTaskList，日期升序）；
@@ -5992,6 +6052,12 @@ init();
         Object.keys(map).forEach(k => { st$(map[k]).style.display = k === mode ? 'flex' : 'none'; });
         if (mode === 'week') stKpUpdateWeekHint();
         if (mode === 'year') stKpState.time.year = st$('stKpYearSelect').value;
+    }
+
+    // 时间筛选变更统一出口：重渲染概览派生模块（内含胶囊回显），弹窗打开时同步刷新任务池列表与底栏回显
+    function stKpTimeChanged() {
+        stKpRenderAll();
+        if (st$('stKpFilterModalOverlay').classList.contains('show')) stKpRenderFilterModal();
     }
 
     // 学生个人树：克隆班级树，按学号种子重算个人掌握度（确定性，刷新不变）
@@ -8092,34 +8158,38 @@ init();
             stKpState.time.mode = btn.dataset.tmode;
             st$('stKpTimeSegment').querySelectorAll('.segment-btn').forEach(b => b.classList.toggle('active', b === btn));
             stKpShowTimePicker(btn.dataset.tmode);
-            stKpRenderAll();
+            stKpTimeChanged();
         });
         st$('stKpMonthInput').addEventListener('change', function () {
             if (this.value) stKpState.time.month = this.value;
-            stKpRenderAll();
+            stKpTimeChanged();
         });
         st$('stKpWeekInput').addEventListener('change', function () {
             if (this.value) stKpState.time.week = this.value;
             stKpUpdateWeekHint();
-            stKpRenderAll();
+            stKpTimeChanged();
         });
         st$('stKpYearSelect').addEventListener('change', function () {
             stKpState.time.year = this.value;
-            stKpRenderAll();
+            stKpTimeChanged();
         });
         st$('stKpCustomFrom').addEventListener('change', function () {
             if (this.value) stKpState.time.customFrom = this.value;
-            stKpRenderAll();
+            stKpTimeChanged();
         });
         st$('stKpCustomTo').addEventListener('change', function () {
             if (this.value) stKpState.time.customTo = this.value;
-            stKpRenderAll();
+            stKpTimeChanged();
         });
 
-        // 学情来源弹窗（交互同学科学情 filterModalOverlay）：点击「已选：N 份」打开，双栏勾选 + 栏头全选，确定后按勾选任务重算已选份数与证据量因子 nTasks
-        st$('stKpFilterCount').addEventListener('click', () => {
+        // 学情来源与统计范围弹窗（交互同学科学情 filterModalOverlay）：点胶囊打开，时间范围 + 双栏勾选同屏一次设定，确定后按勾选任务重算已选份数与证据量因子 nTasks
+        const stKpOpenFilterModal = () => {
             st$('stKpFilterModalOverlay').classList.add('show');
             stKpRenderFilterModal();
+        };
+        st$('stKpFilterCount').addEventListener('click', stKpOpenFilterModal);
+        st$('stKpFilterCount').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); stKpOpenFilterModal(); }
         });
         const stKpCloseFilterModal = () => st$('stKpFilterModalOverlay').classList.remove('show');
         st$('stKpFilterModalClose').addEventListener('click', stKpCloseFilterModal);
@@ -8361,9 +8431,9 @@ init();
                 '| 学年 | 默认当前学年（演示 2025-2026）；下拉只列学年（含 2024-2025、2023-2024），不展示各学年所带年级班级；切换后按所选学年回查该班学生群体的作业与考试数据，年级班级选中保持不变，全量重算 |',
                 '| 班级 | 默认当前学年任教班级（演示高二 1 班）；列表随所选年级的任教权限生成；选「全部班级」时隐藏「班级平均得分率」卡（无单一班级可算均值） |',
                 '| 学科 | 范围为教务权限内学科，恒 ≥1 个：单学科固定不可切，多学科按列表切换，默认选中第一个；演示按双学科（数学、语文）配置，语文无知识体系 → 切语文学科进入 L2-a 缺省页（XK-13），切回数学恢复原页签与图表 |',
-                '| 时间 | 学年 / 月（默认）/ 周 / 自定义四档，档位切换对应日期控件显隐；月、周、自定义可跨学年选择（范围取教务权限数据并集） |',
+                '| 时间 | 学年 / 月（默认）/ 周 / 自定义四档，档位切换对应日期控件显隐；月、周、自定义可跨学年选择（范围取教务权限数据并集）；档位与日期控件收在「学情来源与统计范围」弹窗顶部的时间条内，筛选栏只回显「时间范围 · 已选 N 份」胶囊，不再直放时间控件 |',
                 '| 环比 | 学年、月、周档取上一周期；自定义档取起始日期前等长窗口（起始减 len 天 ~ 起始前 1 天）；窗口内无任务 → 全链路隐藏环比（KPI 徽章、摘要徽章、结论文案） |',
-                '| 学情来源 | 「已选：N 份」打开勾选弹窗（XK-12.3） |',
+                '| 学情来源 | 筛选栏胶囊点开弹窗（XK-12.3）：顶部设统计时间范围、下方勾选作业 / 考试，一次设定；选择即时生效，取消不回滚 |',
                 '| 掌握程度 | 「设置掌握程度」打开弹窗（XK-12.1）；档位全校共用并同步学生追踪；学科组长及以上可写，学科教师 / 班主任为只读查看（悬停提示联系学科组长） |',
                 '',
                 '> 已知限制：学科切换不重算演示数据。'
@@ -8388,7 +8458,7 @@ init();
                 '| 稳定度 | 100 − 各次得分率的总体标准差，越高越稳 |',
                 '| 知识点达标率 | 全维度末级节点中掌握度达标的节点数 ÷ 末级节点总数；阈值随掌握档位联动；徽章为较上一周期的百分点差；点击下钻明细模块 |',
                 '| 顽固薄弱知识点 | 全维度末级节点中同一节点 ≥3 次不同任务失分率 ≥40%；徽章「±N 个 · 已改善 N · 新增 N」（净变化 = 新增 − 改善）；点击下钻热力演进 |',
-                '| 提交率 | 实交人次 ÷ 应交人次（含迟交） |',
+                '| 提交率 | 实交人次 ÷ 应交人次（不设迟交单列，迟交计入已交） |',
                 '| 需关注学生 | 需关注 = 断崖下跌 ∪ 持续低位（与 XK-10 同一套判定）；副行分类计数；悬停出名单弹层，点击下钻学生学情筛选 |',
                 '',
                 '**周期结论**：由声明式规则表驱动，每条规则定义「出现条件 / 语义色 / 文案模板」，数字按当次统计实时计算。',
@@ -8765,7 +8835,7 @@ init();
             body: [
                 '- **设置掌握程度**：3 档 / 4 档单选；按角色控制写权限，展示最后保存留痕并模拟并发冲突；确认后班级与学生追踪全量联动。学科组长及以上可改档位（底部取消 / 确认）；学科教师与班主任为只读查看，档位单选与得分率区间置禁用态（灰底虚线 + 禁止光标），不渲染取消 / 确认按钮，仅右上角 × 关闭；弹窗内不设权限说明条。',
                 '- **设置权重（已移除）**：得分率统一由后台默认时间衰减模型聚合。',
-                '- **学情来源**：作业 / 考试双栏勾选，栏头全选 + 计数；学生追踪同款交互。',
+                '- **学情来源与统计范围**：弹窗顶部为统计时间条（学年 / 月 / 周 / 自定义档位 + 对应日期控件），下方作业 / 考试双栏勾选、栏头全选与计数；底栏左侧回显「当前范围 · 已选 N 份」，与筛选栏胶囊同源；学生追踪同款弹窗交互。',
                 '- **关联诊断与分组教学建议**：保留证据四态、前后序关系、学生分组、教学动作、关注范围、建议对象与判定依据；支持复制建议和导出 CSV。',
                 '- **题库知识图谱组件**：一期保留自研图谱组件，题库组件仅作全屏查看入口。',
                 '- **一期边界**：不包含题目生成、题量配置、题型配比、组卷、保存题库或布置新练习；效果验证只给教学建议，不生成复测题。',
@@ -8835,8 +8905,8 @@ init();
             id: 'ST-03', group: 'ST', title: '学科与时间筛选条',
             body: [
                 '- **学科下拉**：范围为教务权限内学科，默认选中第一个（演示为数学，其余学科走未覆盖空态）；切换后整页按新学科全量重算。',
-                '- **时间四档**：学年（默认当前学年，可切历史学年）/ 月（默认 2026-09）/ 周（默认 2026 年第 39 周，悬停显示起止）/ 自定义区间，显隐逻辑同学科学情筛选栏。',
-                '- **已选：N 份**：任务池先按学科、再按时间范围过滤，并剔除学情来源弹窗中取消勾选的任务（ST-14）。',
+                '- **时间与作业的合并入口**：筛选条只保留学科下拉 + 回显胶囊「时间范围 · 已选 N 份」；档位（学年/月/周/自定义）、日期控件与作业/考试勾选统一收在「学情来源与统计范围」弹窗内一次设定（同 XK-12.3 方案）。',
+                '- **回显口径**：时间文本按档位格式化为「2026年9月」/「2026-2027学年」/「2026-W39（09-21 ~ 09-27）」/「2026-09-01 ~ 2026-09-15」；份数 = 当前学科 + 时间范围内且未取消勾选的任务数，与弹窗底栏同源同步。',
                 '- 个人与班级得分率由种子稳定生成；已选任务份数作为证据量因子影响个人数据收敛程度（ST-05）。'
             ].join('\n')
         },
@@ -8966,10 +9036,11 @@ init();
         {
             id: 'ST-14', group: 'ST', title: '学情来源弹窗',
             body: [
-                '位置：「已选：N 份」入口打开的作业 / 考试双栏勾选弹窗（交互同学科学情 XK-12.3）。',
+                '位置：筛选条胶囊「时间范围 · 已选 N 份」打开的「学情来源与统计范围」弹窗（交互同学科学情 XK-12）。',
                 '',
-                '- **勾选交互**：双栏列表（可选范围 = 当前学科 + 当前时间范围内的任务，默认全选）+ 栏头全选与「已选 / 总数」计数 + 底部确定 / 取消；确定后重算已选份数与证据量因子，「取消」不回滚勾选变更（已知限制）。',
-                '- **变更记录**：原「选中任务得分趋势图」已迁移至个人周期学情概览（ST-13），本弹窗仅保留勾选交互。'
+                '- **统计时间范围**：弹窗顶部时间条承载档位与对应日期控件（由筛选条迁入）；选定即生效，切换后同步刷新弹窗内任务列表与个人概览。',
+                '- **勾选交互**：双栏列表（可选范围 = 当前学科 + 当前时间范围内的任务，默认全选）+ 栏头全选与「已选 / 总数」计数 + 底部确定 / 取消；底栏左侧回显「当前范围 · 已选 N 份」；「取消」不回滚勾选与时间变更（已知限制）。',
+                '- **变更记录**：原「选中任务得分趋势图」已迁移至个人周期学情概览（ST-13），本弹窗保留时间范围设置与勾选交互。'
             ].join('\n')
         }
     ];
