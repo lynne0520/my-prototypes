@@ -238,6 +238,216 @@ dialog.ppn-trash-dialog{position:fixed;top:12px;bottom:auto;margin:0;padding:0;w
 body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing iframe{pointer-events:none}
 @media(pointer:coarse){.page-nav-resizer{width:16px}}
 </style>
+        <style>.pu-dialog{--pu-bg:#fff;--pu-soft:#f5f6f8;--pu-text:#202329;--pu-muted:#667085;--pu-line:#d8dee3;box-sizing:border-box;width:min(920px,94vw);max-height:86vh;padding:0;border:1px solid var(--pu-line);border-radius:12px;background:var(--pu-bg);color:var(--pu-text);font:14px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;box-shadow:0 20px 70px #0004}
+.pu-dialog:not([open]){display:none}.pu-dialog::backdrop{background:#10182880}.pu-dialog-head{display:flex;gap:20px;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--pu-line)}.pu-dialog h2{font-size:19px;font-weight:650;margin:0}.pu-dialog-body{padding:16px 20px;overflow:auto;max-height:calc(86vh - 76px)}
+.pu-muted{color:var(--pu-muted,#667085);font-size:12px;margin:4px 0 12px}.pu-table-wrap{overflow:auto}.pu-table{width:100%;border-collapse:collapse;table-layout:fixed}.pu-table th,.pu-table td{padding:12px 10px;border-bottom:1px solid var(--pu-line);text-align:left;vertical-align:top;overflow-wrap:anywhere}.pu-table th{font-size:12px;background:var(--pu-soft);color:var(--pu-muted);font-weight:500}.pu-table th:nth-child(1){width:19%}.pu-table th:nth-child(2){width:13%}.pu-table th:nth-child(4){width:100px}.pu-table strong{font-weight:600}.pu-table textarea{box-sizing:border-box;width:100%;padding:7px 9px;resize:vertical;min-height:54px;border:1px solid var(--pu-line);border-radius:5px;font:inherit;line-height:1.6;background:var(--pu-bg);color:inherit}.pu-table details{margin-top:7px;font-size:12px}.pu-table summary{cursor:pointer;color:var(--pu-muted)}.pu-before,.pu-after{white-space:pre-wrap;margin:8px 0;padding:7px;background:var(--pu-soft);border-radius:4px}.pu-kind{font-size:12px}.pu-release-section+.pu-release-section{margin-top:24px;padding-top:16px;border-top:1px solid var(--pu-line)}
+.pu-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:5px 10px;border:1px solid #808790;border-radius:6px;font:inherit;font-size:12px;line-height:20px;white-space:nowrap;background:transparent;color:inherit;cursor:pointer}.pu-btn:hover{background:#80879015}.pu-btn:focus-visible,.pu-table textarea:focus-visible{outline:2px solid #2563eb;outline-offset:2px}.pu-btn.primary{background:#fff;color:#1744a8;border-color:#fff;font-weight:600}.pu-error{color:#e5484d}
+.pu-update-banner{display:flex;align-items:center;justify-content:space-between;gap:16px;flex:none;padding:12px 20px;background:#1d4ed8;color:#fff;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}.pu-update-banner[hidden],.pu-update-badge[hidden]{display:none}.pu-banner-detail{font-size:12px;opacity:.9;margin-top:2px}.pu-banner-actions{display:flex;gap:8px;flex:none}.pu-update-banner .pu-btn{border-color:#ffffff70;color:white}.pu-update-banner .pu-btn.primary{color:#1744a8;background:white}.pu-update-badge{background:#1d4ed8!important;color:white!important;border-color:#1d4ed8!important}.pu-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:2147483640;padding:10px 16px;border-radius:8px;background:#202329;color:#fff;font:13px/1.6 sans-serif;max-width:min(80vw,600px);box-shadow:0 8px 24px #0003}.pu-toast[hidden]{display:none}
+:root[data-ext-theme="dark"] .pu-dialog,:root[data-home-theme="dark"] .pu-dialog{--pu-bg:#15181d;--pu-soft:#20252c;--pu-text:#edf0f4;--pu-muted:#a3adba;--pu-line:#39414b;color-scheme:dark}
+@media(prefers-color-scheme:dark){:root:not([data-ext-theme="light"]):not([data-home-theme="light"]) .pu-dialog{--pu-bg:#15181d;--pu-soft:#20252c;--pu-text:#edf0f4;--pu-muted:#a3adba;--pu-line:#39414b;color-scheme:dark}}
+@media(max-width:700px){.pu-update-banner{align-items:flex-start;flex-direction:column;padding:12px}.pu-banner-actions{flex-wrap:wrap}.pu-btn{min-height:38px}.pu-dialog{width:96vw}.pu-dialog-body{padding:12px}.pu-table{min-width:620px}.pu-dialog-head{padding:12px}}
+</style>
+        <script>/* 发布说明、本地草稿与静态站更新检测。只读取同站点版本文件。 */
+(function(global){
+    'use strict';
+    const KINDS={text:'文案',annotation:'标注',document:'页面需求','annotation-position':'标注位置',page:'页面配置',
+        'page-added':'新增页面','page-removed':'删除页面','element-added':'新增内容','element-removed':'删除内容',
+        style:'样式',logic:'交互代码',asset:'图片 / 资源',resource:'公共资源',layout:'结构',runtime:'评审组件',publication:'发布版本'};
+    function validRelease(value) {
+        return !!value && value.schemaVersion===1 && /^rel-[a-f0-9]{16}$/.test(value.releaseId || '') &&
+            /^[a-f0-9]{64}$/.test(value.contentVersion || '') && Number.isSafeInteger(value.sequence) && value.sequence>0 &&
+            ['review','pure'].includes(value.mode);
+    }
+    function safeRelative(value) {
+        return typeof value==='string' && value.length<300 && !value.includes('\\') && !/[?#:%]/.test(value) &&
+            value.split('/').every(p=>p && p!=='.' && p!=='..');
+    }
+    function createWatcher(options) {
+        const current=options.current, fetcher=options.fetch || global.fetch.bind(global);
+        const visible=options.visible || (()=>!global.document?.hidden);
+        const schedule=options.setTimeout || global.setTimeout.bind(global), cancel=options.clearTimeout || global.clearTimeout.bind(global);
+        let timer=null, stopped=true, inFlight=null, delay=30000, seen=current?.sequence || 0;
+        const protocol=options.protocol || global.location?.protocol;
+        function next(){ cancel(timer); if(!stopped && visible()) timer=schedule(check,delay); }
+        function check(){
+            if(stopped || !visible() || !validRelease(current) || !['http:','https:'].includes(protocol)) return Promise.resolve();
+            if(inFlight) return inFlight;
+            cancel(timer);
+            const abort=global.AbortController ? new global.AbortController():null;
+            const timeout=abort && schedule(()=>abort.abort(),5000);
+            inFlight=(async()=>{
+                try {
+                    const url=new URL('prototype-release.json',options.baseUrl || global.location.href);
+                    url.searchParams.set('_check',String(Date.now()));
+                    const response=await fetcher(url.href,{cache:'no-store',credentials:'omit',signal:abort?.signal});
+                    if(!response.ok) throw Error('版本暂不可读');
+                    const latest=await response.json();
+                    if(!validRelease(latest) || (current.projectId && latest.projectId!==current.projectId)) return;
+                    delay=30000;
+                    if(latest.sequence>seen){
+                        seen=latest.sequence;
+                        if(latest.contentVersion!==current.contentVersion) options.onUpdate(latest);
+                    }
+                } catch(_){ delay=Math.min(delay*2,300000); }
+                finally { if(timeout)cancel(timeout); inFlight=null;next(); }
+            })();
+            return inFlight;
+        }
+        const resume=()=>{if(visible())check();else cancel(timer);};
+        return {start(){if(!stopped)return;stopped=false;global.addEventListener?.('focus',resume);global.document?.addEventListener('visibilitychange',resume);check();},
+            check,stop(){stopped=true;cancel(timer);global.removeEventListener?.('focus',resume);global.document?.removeEventListener('visibilitychange',resume);}};
+    }
+    function node(tag,text,className){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(className)n.className=className;return n;}
+    function notify(text){
+        let n=document.querySelector('.pu-toast');if(!n){n=node('div',undefined,'pu-toast');n.setAttribute('role','status');document.body.append(n);}
+        n.textContent=text;n.hidden=false;clearTimeout(n._timer);n._timer=setTimeout(()=>n.hidden=true,4500);
+    }
+    function targetHash(target){return new URLSearchParams({p:target.pageId || '',s:target.stateId || 'default',changeTarget:JSON.stringify(target)}).toString();}
+    function readTarget(hash){try{const raw=new URLSearchParams(hash.slice(1)).get('changeTarget');if(!raw || raw.length>6000)return null;const t=JSON.parse(raw);
+        if(!t || typeof t.pageId!=='string' || t.pageId.length>256 || typeof t.stateId!=='string' || t.stateId.length>256)return null;
+        const out={pageId:t.pageId,stateId:t.stateId};for(const k of ['noteId','documentId'])if(typeof t[k]==='string' && t[k].length<256)out[k]=t[k];
+        if(t.anchor && typeof t.anchor==='object'){out.anchor={};for(const k of ['selector','protoId','tag','text','parentText','textRule'])if(typeof t.anchor[k]==='string' && t.anchor[k].length<3000)out.anchor[k]=t.anchor[k];}
+        return out;
+    }catch(_){return null;}}
+    let currentDialog=null;
+    const previewCache=new Map();
+    function previewLocal(projectId,force=false){
+        const hit=previewCache.get(projectId);if(!force && hit && Date.now()-hit.time<5000)return hit.promise;
+        const promise=fetch('/api/ext/release-preview?projectId='+encodeURIComponent(projectId)).then(r=>r.json());
+        previewCache.set(projectId,{promise,time:Date.now()});return promise;
+    }
+    async function summarizeLocal(button,projectId,force=false){
+        if(!button)return;button.dataset.project=projectId;button.textContent='更新说明 · 正在对比…';
+        try{const result=await previewLocal(projectId,force);if(button.dataset.project!==projectId)return;
+            const s=result.release?.summary;button.textContent=result.ok?`更新说明 · ${s?.pages || 0} 页 / ${s?.changes || 0} 项`:'更新说明 · 点击重试';
+        }catch(_){if(button.dataset.project===projectId)button.textContent='更新说明 · 点击重试';}
+    }
+    function dialog(title){
+        currentDialog?.close();currentDialog?.remove();
+        const d=node('dialog',undefined,'pu-dialog');currentDialog=d;
+        const head=node('div',undefined,'pu-dialog-head');const heading=node('h2',title);heading.id='pu-title';d.setAttribute('aria-labelledby','pu-title');head.append(heading);
+        const close=node('button','关闭','pu-btn');close.type='button';close.onclick=()=>d.close();head.append(close);
+        const body=node('div',undefined,'pu-dialog-body');d.append(head,body);document.body.append(d);
+        d.addEventListener('close',()=>{d._flush?.();d.remove();if(currentDialog===d)currentDialog=null;},{once:true});
+        d.showModal();return {d,body};
+    }
+    function showItems(host,payload,options={}){
+        host.replaceChildren();
+        const items=Array.isArray(payload?.items)?payload.items:[];
+        const status=node('p',undefined,'pu-muted');host.append(status);
+        status.textContent=payload?.baselineStatus==='unavailable'?'首次建立版本基线，历史差异暂不可完整比较':
+            payload?.baselineStatus==='initial'?'首次发布摘要':items.length?`${new Set(items.map(i=>i.target?.pageId)).size} 个页面 · ${items.length} 项更新`:'与上次版本相比没有内容变化';
+        if(payload?.publishedAt)host.append(node('p',payload.publishedAt,'pu-muted'));
+        if(!items.length)return;
+        const wrap=node('div',undefined,'pu-table-wrap'), table=node('table',undefined,'pu-table');
+        const tr=node('tr');for(const label of ['页面 / 状态','类型','更新内容','操作'])tr.append(node('th',label));
+        const thead=node('thead');thead.append(tr);table.append(thead);
+        const tbody=node('tbody');table.append(tbody);wrap.append(table);host.append(wrap);
+        for(const item of items){
+            const row=node('tr'), page=node('td'), kind=node('td'), description=node('td'), action=node('td');
+            page.append(node('strong',item.pageTitle || '公共资源'),node('div',item.stateTitle || '默认','pu-muted'));
+            if(item.affectedPages?.length>1)page.append(node('small',(item.affectedPageTitles || item.affectedPages).join('、'),'pu-muted'));
+            kind.append(node('span',KINDS[item.kind] || '内容','pu-kind'));
+            if(options.edit){
+                const input=node('textarea');input.value=item.description || '';input.rows=2;input.maxLength=1000;
+                input.setAttribute('aria-label','修改更新说明：'+(item.pageTitle || '公共资源'));
+                input.oninput=()=>{item.description=input.value;options.onEdit?.(items);};description.append(input);
+            }else description.append(node('div',item.description || '内容有更新'));
+            if(item.before || item.after){
+                const details=node('details');details.append(node('summary',item.target?.deleted?'查看删除内容':'前后内容'));
+                if(item.before)details.append(node('p','原：'+item.before,'pu-before'));
+                if(item.after)details.append(node('p','新：'+item.after,'pu-after'));description.append(details);
+            }
+            const button=node('button',item.target?.deleted?'查看详情':options.refresh?'刷新并定位':'定位','pu-btn');button.type='button';
+            button.onclick=()=>{
+                if(item.target?.deleted){description.querySelector('details')?.setAttribute('open','');return;}
+                if(!item.target?.pageId){notify('此项为公共更新，请查看涉及页面');return;}
+                options.close?.();Promise.resolve(options.onLocate?.(item.target)).catch(e=>notify(e.message || '定位失败'));
+            };
+            action.append(button);row.append(page,kind,description,action);tbody.append(row);
+        }
+    }
+    async function openLocal({projectId,onLocate}){
+        const {d,body}=dialog('更新说明');body.append(node('p','正在对比上次发布…','pu-muted'));
+        let result,saveTimer=null,pending=null,saving=false;
+        const status=node('p','修改说明自动保存','pu-muted');
+        async function save(){
+            clearTimeout(saveTimer);if(saving || !pending)return;
+            saving=true;const descriptions=pending;pending=null;
+            try{
+                const response=await fetch('/api/ext/release-notes',{method:'POST',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({projectId,branch:result.target.branch,sourceVersion:result.sourceVersion,descriptions})});
+                const data=await response.json();if(!data.ok)throw Error(data.error || '说明保存失败');status.textContent='说明已保存';
+            }catch(e){status.textContent=e.message;notify(e.message);}finally{saving=false;if(pending)save();}
+        }
+        d._flush=()=>{clearTimeout(saveTimer);save();};
+        try{
+            result=await previewLocal(projectId,true);
+            if(!result.ok)throw Error(result.error || '无法生成更新说明');if(!d.open)return;
+            const content=node('div');showItems(content,result.changes,{edit:true,close:()=>d.close(),onLocate:target=>{
+                if(onLocate)return onLocate(target);
+                const url=new URL('/src/viewer.html',location.href);url.searchParams.set('ext',projectId);url.searchParams.set('page',target.pageId);url.searchParams.set('state',target.stateId || 'default');url.searchParams.set('mode','annotate');url.hash=targetHash(target);global.open(url.href,'_blank','noopener');
+            },onEdit:items=>{pending=Object.fromEntries(items.map(i=>[i.id,i.description]));status.textContent='正在保存…';clearTimeout(saveTimer);saveTimer=setTimeout(save,600);}});
+            body.replaceChildren(content,status);
+        }catch(e){body.replaceChildren(node('p',e.message,'pu-error'));}
+    }
+    function mountPublished({data,onLocate}){
+        const header=document.querySelector('header.topbar');if(!header)return;
+        let latest=null;
+        const banner=node('section',undefined,'pu-update-banner');banner.hidden=true;banner.setAttribute('aria-label','页面更新通知');banner.setAttribute('role','status');
+        const label=node('div'),title=node('strong','页面有更新，请刷新查看最新版本。'),detail=node('div',undefined,'pu-banner-detail');label.append(title,detail);
+        const controls=node('div',undefined,'pu-banner-actions');
+        const refresh=node('button','刷新页面','pu-btn primary'),view=node('button','查看更新','pu-btn'),later=node('button','稍后','pu-btn');
+        controls.append(refresh,view,later);banner.append(label,controls);header.after(banner);
+        const badge=node('button','有更新','pu-btn pu-update-badge');badge.hidden=true;badge.onclick=()=>{badge.hidden=true;banner.hidden=false;};header.append(badge);
+        function refreshTo(target){const url=new URL(location.href);url.searchParams.set('v',latest.contentVersion);if(target)url.hash=targetHash(target);location.replace(url.href);}
+        refresh.onclick=()=>refreshTo();later.onclick=()=>{banner.hidden=true;badge.hidden=false;};
+        async function show(latestOnly=false){
+            const {d,body}=dialog(latestOnly?'最新更新说明':'更新说明');
+            if(!latestOnly){showItems(body,data.changeLog || {items:[]},{close:()=>d.close(),onLocate});}
+            else body.append(node('p','正在读取更新说明…','pu-muted'));
+            let release=latestOnly?latest:data.release;
+            if(!validRelease(release))return;
+            if(release.mode==='pure'){body.replaceChildren(node('p','最新发布已切换为纯净版，请刷新后查看原型。'));return;}
+            if(!latestOnly && ['http:','https:'].includes(location.protocol)){
+                try{
+                    const response=await fetch(new URL('prototype-release.json',location.href),{cache:'no-store',credentials:'omit'});
+                    const remote=await response.json();
+                    if(validRelease(remote) && remote.projectId===data.release.projectId && Array.isArray(remote.history))
+                        release={...release,history:remote.history.filter(h=>h.sequence<=data.release.sequence)};
+                }catch(_){/* 离线时保留随包携带的当前更新说明。 */}
+            }
+            const history=(Array.isArray(release.history)?release.history:[]).filter(h=>!latestOnly || h.sequence>data.release.sequence);
+            const paths=[...history.map(h=>h.changesUrl),release.changesUrl].filter((v,i,a)=>v && a.indexOf(v)===i && safeRelative(v));
+            if(!latestOnly){
+                if(!paths.length)return;
+                const more=node('button','查看保留的历史更新','pu-btn');body.append(more);more.onclick=()=>load();
+            }else await load();
+            async function load(){
+                const output=node('div');let count=0;
+                if(latestOnly && history.length && Math.min(...history.map(h=>h.sequence))>data.release.sequence+1)
+                    output.append(node('p','当前页面落后较多，以下仅包含保留范围内的更新；更早变化已归档。','pu-muted'));
+                for(const path of paths){
+                    try{
+                        const response=await fetch(new URL(path,location.href),{cache:'no-store',credentials:'omit'});if(!response.ok)continue;
+                        const payload=await response.json();if(payload.schemaVersion!==1 || !Array.isArray(payload.items) || path!=='prototype-changes/'+payload.releaseId+'.json')continue;
+                        const section=node('section',undefined,'pu-release-section');showItems(section,payload,{refresh:latestOnly,close:()=>d.close(),onLocate:latestOnly?refreshTo:onLocate});output.append(section);count++;
+                    }catch(_){/* 部分历史可能已归档 */}
+                }
+                if(!d.open)return;
+                if(count)body.replaceChildren(output);else if(latestOnly)body.replaceChildren(node('p','更新说明暂不可读，请稍后重试；可先刷新查看最新页面。'));
+            }
+        }
+        const notes=node('button','更新说明','pu-btn');notes.onclick=()=>show();header.append(notes);view.onclick=()=>show(true);
+        if(validRelease(data.release)){
+            const watcher=createWatcher({current:data.release,onUpdate:value=>{latest=value;const s=value.summary || {};detail.textContent=`${value.publishedAt || ''} · 涉及 ${s.pages || 0} 个页面、${s.changes || 0} 项变化`;banner.hidden=false;badge.hidden=true;}});
+            watcher.start();global.addEventListener('pagehide',()=>watcher.stop(),{once:true});
+        }
+        return {notify};
+    }
+    global.PublicationUpdates={createWatcher,validRelease,safeRelative,openLocal,summarizeLocal,mountPublished,notify,readTarget,targetHash};
+})(typeof window!=='undefined'?window:globalThis);
+</script>
         <script>(function () {
     'use strict';
     const svg = (path) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">' + path + '</svg>';
@@ -815,7 +1025,7 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
             </aside>
         </main>
         <noscript>请开启 JavaScript 查看评审内容（页面树、PRD 与标注气泡均依赖脚本渲染）。</noscript>
-        <script type="application/json" id="review-data">{"name": "学科学情一期", "projectId": "p-093f22b1379b28ea", "revision": 0, "publishedAt": "2026-11-04T01:35:02.144777+00:00", "pages": [{"id": "home", "title": "学科学情分析系统 · 一期", "file": "index.html", "states": [{"id": "default", "title": "默认页面", "kind": "default"}]}], "clients": [], "defaultPage": "", "documents": [], "annotations": [], "prototypeVersions": {"index.html": "3935801fa7639284f8af"}}</script>
+        <script type="application/json" id="review-data">{"name": "学科学情一期", "projectId": "p-093f22b1379b28ea", "revision": 0, "publishedAt": "2026-11-04 10:49:53", "pages": [{"id": "home", "title": "学科学情分析系统 · 一期", "file": "index.html", "states": [{"id": "default", "title": "默认页面", "kind": "default"}]}], "clients": [], "defaultPage": "", "documents": [], "annotations": [], "release": {"schemaVersion": 1, "projectId": "p-093f22b1379b28ea", "releaseId": "rel-27662c0ae6f2421c", "sequence": 1, "contentVersion": "8c852e610304fb891ac64f87b265366479b581bf7051acdc1a98149c4f17e90a", "publishedAt": "2026-11-04 10:49:53", "mode": "review", "baseReleaseId": "", "summary": {"pages": 1, "changes": 16}, "changesUrl": "prototype-changes/rel-27662c0ae6f2421c.json", "snapshotUrl": "prototype-changes/rel-27662c0ae6f2421c.snapshot.json", "prototypeBase": "prototype-versions/8c852e610304fb891ac64f87/", "baselineStatus": "previous"}, "changeLog": {"schemaVersion": 1, "releaseId": "rel-27662c0ae6f2421c", "sequence": 1, "publishedAt": "2026-11-04 10:49:53", "contentVersion": "8c852e610304fb891ac64f87b265366479b581bf7051acdc1a98149c4f17e90a", "baselineStatus": "previous", "items": [{"kind": "text", "description": "文案：“状态判定说明（V2.0）” → “状态判定说明（V3.0）”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1)", "tag": "span", "text": "状态判定说明（V3.0）"}}, "before": "状态判定说明（V2.0）", "after": "状态判定说明（V3.0）", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-52a56b782c6572364317"}, {"kind": "text", "description": "文案：“口径（教师语言）：先看「这个学生比班级平均高/低多少」，抵消试卷难度；再把最近一个周期分成前后两半对比，平均得分率差 8 个百分点以上、且后…” → “口径（教师语言）：先看「这个学生比班级平均高/低多少」，抵消试卷难度；再看最近两周跟平时比差多少——差距 10 个百分点以上、且最近连续 2…”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(2)", "tag": "span"}}, "before": "口径（教师语言）：先看「这个学生比班级平均高/低多少」，抵消试卷难度；再把最近一个周期分成前后两半对比，平均得分率差 8 个百分点以上、且后半段至少 2 次持续才算趋势；进步和退步用同一把尺子。完整规则见 PRD XK-10。", "after": "口径（教师语言）：先看「这个学生比班级平均高/低多少」，抵消试卷难度；再看最近两周跟平时比差多少——差距 10 个百分点以上、且最近连续 2 次同向，才算形成趋势。越早的成绩权重越低（30 天前的那次只算一半）。位置（比班级高还是低）和趋势（比以前好还是差）分开看，不合成一个结论。完整规则见 PRD XK-10。", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-d651f0bf95df33782820"}, {"kind": "text", "description": "文案：“断崖下跌” → “缺交预警”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(1)", "tag": "span", "text": "缺交预警"}}, "before": "断崖下跌", "after": "缺交预警", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-df8be00c44c7eade75a9"}, {"kind": "text", "description": "文案：“后一半平均得分率比前一半低 8 个百分点以上，且后半段至少 2 次明显低于自己平时水平（需优先跟进）” → “连续 2 次没交作业或考试缺考——先联系学生 / 家长确认原因，再判断学业状态（与「数据不足」是两回事）”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(2)", "tag": "span", "text": "连续 2 次没交作业或考试缺考——先联系学生 / 家长确认原因，再判断学业状态（与「数据不足」是两回事）"}}, "before": "后一半平均得分率比前一半低 8 个百分点以上，且后半段至少 2 次明显低于自己平时水平（需优先跟进）", "after": "连续 2 次没交作业或考试缺考——先联系学生 / 家长确认原因，再判断学业状态（与「数据不足」是两回事）", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-3f69bb36e7dbcf991a81"}, {"kind": "text", "description": "文案：“持续低位” → “下滑预警”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > span:nth-of-type(1)", "tag": "span", "text": "下滑预警"}}, "before": "持续低位", "after": "下滑预警", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-fb9fd78b1552da016903"}, {"kind": "text", "description": "文案：“近一个月平均得分率不到 60%，长期低于班级平均，且连续两个周期没有起色” → “近两周比平时低 10 个百分点以上，且最近连续 2 次都在平时水平下方（需优先跟进）”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > span:nth-of-type(2)", "tag": "span", "text": "近两周比平时低 10 个百分点以上，且最近连续 2 次都在平时水平下方（需优先跟进）"}}, "before": "近一个月平均得分率不到 60%，长期低于班级平均，且连续两个周期没有起色", "after": "近两周比平时低 10 个百分点以上，且最近连续 2 次都在平时水平下方（需优先跟进）", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-fd0765fdc48f6c527ab5"}, {"kind": "text", "description": "文案：“低位回升” → “持续落后”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(3) > span:nth-of-type(1)", "tag": "span", "text": "持续落后"}}, "before": "低位回升", "after": "持续落后", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-e86ad9b0326481a24d8b"}, {"kind": "text", "description": "文案：“原来长期在低位，后一半平均得分率比前一半高 8 个百分点以上，且至少 2 次超过平时水平（正向关注）” → “平时就比班级平均低 5 个百分点以上，但趋势平稳——属于长期性差距，宜系统性补基础（需关注）”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(3) > span:nth-of-type(2)", "tag": "span", "text": "平时就比班级平均低 5 个百分点以上，但趋势平稳——属于长期性差距，宜系统性补基础（需关注）"}}, "before": "原来长期在低位，后一半平均得分率比前一半高 8 个百分点以上，且至少 2 次超过平时水平（正向关注）", "after": "平时就比班级平均低 5 个百分点以上，但趋势平稳——属于长期性差距，宜系统性补基础（需关注）", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-e0e08b112e48377f5b8d"}, {"kind": "text", "description": "文案：“明显进步” → “进步”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(4) > span:nth-of-type(1)", "tag": "span", "text": "进步"}}, "before": "明显进步", "after": "进步", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-1dce212f91b3db0b22fe"}, {"kind": "text", "description": "文案：“原来中等以上，后一半平均得分率比前一半高 8 个百分点以上，且有 2 次以上持续确认（正向关注）” → “近两周比平时高 10 个百分点以上，且最近连续 2 次都在平时水平上方（正向关注）”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(4) > span:nth-of-type(2)", "tag": "span", "text": "近两周比平时高 10 个百分点以上，且最近连续 2 次都在平时水平上方（正向关注）"}}, "before": "原来中等以上，后一半平均得分率比前一半高 8 个百分点以上，且有 2 次以上持续确认（正向关注）", "after": "近两周比平时高 10 个百分点以上，且最近连续 2 次都在平时水平上方（正向关注）", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-c828407da27469744d83"}, {"kind": "text", "description": "文案：“待观察” → “位置回升”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(5) > span:nth-of-type(1)", "tag": "span", "text": "位置回升"}}, "before": "待观察", "after": "位置回升", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-3a3e6872cc608442de53"}, {"kind": "text", "description": "文案：“有效作答不足 4 次，或成绩起伏过大——数据太少，暂不判断趋势，先补充数据” → “原来比班级平均低 5 个百分点以上，现在已经回到班内中位——趋势不急，但位置追上来了（正向关注）”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(5) > span:nth-of-type(2)", "tag": "span", "text": "原来比班级平均低 5 个百分点以上，现在已经回到班内中位——趋势不急，但位置追上来了（正向关注）"}}, "before": "有效作答不足 4 次，或成绩起伏过大——数据太少，暂不判断趋势，先补充数据", "after": "原来比班级平均低 5 个百分点以上，现在已经回到班内中位——趋势不急，但位置追上来了（正向关注）", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-7b66ad6b8852506be389"}, {"kind": "text", "description": "文案：“平稳” → “单场异常”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(6) > span:nth-of-type(1)", "tag": "span", "text": "单场异常"}}, "before": "平稳", "after": "单场异常", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-f82c4f89977e66b80d82"}, {"kind": "text", "description": "文案：“没有明显上涨或下跌，按常规节奏观察（不显示徽章）” → “最近一次比平时低 20 个百分点以上——先核实是否缺考、白卷或录入有误，不进预警名单（不计入需关注）”", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default", "anchor": {"selector": "[id=\"studentsTabPanel\"] > div:nth-of-type(1) > section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(6) > span:nth-of-type(2)", "tag": "span", "text": "最近一次比平时低 20 个百分点以上——先核实是否缺考、白卷或录入有误，不进预警名单（不计入需关注）"}}, "before": "没有明显上涨或下跌，按常规节奏观察（不显示徽章）", "after": "最近一次比平时低 20 个百分点以上——先核实是否缺考、白卷或录入有误，不进预警名单（不计入需关注）", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-caa081b91b7ea9e27ff7"}, {"kind": "logic", "description": "交互资源更新：js/app.js", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-85d00b484d1fd4d6f2b5"}, {"kind": "style", "description": "样式资源更新：styles/app.css", "pageTitle": "学科学情分析系统 · 一期", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home"], "affectedPageTitles": ["学科学情分析系统 · 一期"], "id": "change-0e5d919d591315f54cea"}]}, "prototypeBase": "prototype-versions/8c852e610304fb891ac64f87/", "prototypeVersions": {"index.html": "4cafcf5854ec17dc9dcb"}}</script>
         <script>
             'use strict';
             const $ = (id) => document.getElementById(id);
@@ -835,7 +1045,8 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
                         const size = /(?:^|\s)proto-width=(\d{1,4})$/.exec(title);
                         const width = size && +size[1] >= 48 && +size[1] <= 4096 ? ` width="${+size[1]}"` : '';
                         if (width) title = title.slice(0, size.index).trim();
-                        return hold(`<img src="${esc(new URL('proto/' + path, location.href).href)}" alt="${alt}"${width}${title ? ` title="${title}"` : ''} loading="lazy">`);
+                        const base=/^(?:proto\/|prototype-versions\/[a-f0-9]{24}\/)$/.test(data?.prototypeBase || '') ? data.prototypeBase : 'proto/';
+                        return hold(`<img src="${esc(new URL(base + path, location.href).href)}" alt="${alt}"${width}${title ? ` title="${title}"` : ''} loading="lazy">`);
                     })
                     // 文字颜色：与工作台 safeHTML 同口径，只放行 <span style="color:…"> 这一种内联 HTML（色值限十六进制 / 颜色名）
                     .replace(/&lt;span style=&quot;color:(#[0-9a-fA-F]{3,8}|[a-zA-Z]+)&quot;&gt;/g, (m, c) => `<span style="color:${c.toLowerCase()}">`)
@@ -921,6 +1132,8 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
             let frameReady = false;     // 当前 iframe 页已握手（收到 ready 且已下发 init）
             let projectNavigation = null;
             let selectedNoteId = null;
+            let pendingPublicationTarget=PublicationUpdates.readTarget(location.hash);
+            let publicationRequest=0;
 
             const safePath = (path) => {
                 const parts = String(path || '').replace(/\\/g, '/').split('/');
@@ -929,7 +1142,8 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
             };
             function prototypeUrl(page) {
                 const file = String(page.file || '').replace(/\\/g, '/');
-                const path = 'proto/' + safePath(file);
+                const base=/^(?:proto\/|prototype-versions\/[a-f0-9]{24}\/)$/.test(data.prototypeBase || '') ? data.prototypeBase : 'proto/';
+                const path = base + safePath(file);
                 const version = data.prototypeVersions?.[file];
                 return typeof version === 'string' && /^[a-f0-9]{20}$/.test(version) ? path + '?v=' + version : path;
             }
@@ -969,6 +1183,7 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
 
             // ---------- 页面 / 状态切换 ----------
             function selectPage(page, stateId) {
+                if(pendingPublicationTarget?.pageId!==page.id)pendingPublicationTarget=null;
                 const samePage = current.page?.id === page.id && loadedFile === page.file;
                 if (current.page?.id !== page.id || current.stateId !== stateId) selectedNoteId = null;
                 current = { page, stateId };
@@ -979,6 +1194,7 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
                 renderAside();
                 if (samePage && frameReady) {
                     post({ type: 'enterState', stateId });
+                    flushPublicationTarget();
                 } else {
                     pendingState = stateId;
                     loadedFile = page.file;
@@ -1027,6 +1243,7 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
                 renderAside();
                 post({ type: 'init', notes: pageNotes(), asideOpen: prdAsideOpen(), enterState, selectedNoteId,
                     hintScopes: (current.page?.states || []).map(state => ({id: state.id, interactionHints: state.interactionHints})) });
+                flushPublicationTarget();
             }
             window.addEventListener('message', (e) => {
                 if (e.source === frame.contentWindow && e.data?.__protoScreenshot === 1 && e.data.type === 'navigate' && current.page?.kind === 'screenshot') {
@@ -1041,7 +1258,22 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
                 if (m.type === 'sync') onPinSync(m.map || {}, m.state || 'default', m.stale || []);
                 else if (m.type === 'focus') onPinFocus(m.noteId);
                 else if (m.type === 'selection') selectReviewNote(m.noteId);
+                else if (m.type === 'changeLocated' && m.requestId===publicationRequest && !m.cancelled) PublicationUpdates.notify(m.message || (m.ok?'已定位更新位置':'目标暂不可定位'));
             });
+
+            function flushPublicationTarget(){
+                if(!pendingPublicationTarget || !frameReady)return;
+                const target=pendingPublicationTarget;pendingPublicationTarget=null;
+                if(target.documentId){document.querySelector('aside')?.scrollTo({top:0,behavior:'smooth'});PublicationUpdates.notify('已打开对应页面需求');return;}
+                if(target.noteId)onPinFocus(target.noteId);
+                post({type:'locateChange',target,requestId:++publicationRequest});
+            }
+            function locatePublicationTarget(target){
+                const page=data.pages.find(p=>p.id===target.pageId);
+                if(!page){PublicationUpdates.notify('该页面已删除，请查看变更详情');return;}
+                const state=page.states?.some(s=>s.id===target.stateId)?target.stateId:page.states?.[0]?.id || 'default';
+                pendingPublicationTarget={...target,stateId:state};selectPage(page,state);
+            }
 
             // ---------- 气泡层回调 ----------
             function onPinSync(map, state, stale) {
@@ -1150,12 +1382,13 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
             } else {
                 $('project').textContent = data.name || '原型项目';
                 document.title = `${data.name || '原型项目'} · 原型评审`;
-                $('generated').textContent = data.publishedAt ? '发布于 ' + String(data.publishedAt).slice(0, 16).replace('T', ' ') : '';
+                $('generated').textContent = data.publishedAt ? '发布于 ' + String(data.publishedAt).slice(0, 19).replace('T', ' ') : '';
                 buildTree();
                 const params = new URLSearchParams(location.hash.slice(1));
-                const page = data.pages.find((p) => p.id === params.get('p')) || ProtoProjectNavigation.defaultPage(data);
+                const page = data.pages.find((p) => p.id === (pendingPublicationTarget?.pageId || params.get('p'))) || ProtoProjectNavigation.defaultPage(data);
                 const stateId = page.states?.some((s) => s.id === params.get('s')) ? params.get('s') : (page.states?.[0]?.id || 'default');
                 selectPage(page, stateId);
+                PublicationUpdates.mountPublished({data,onLocate:locatePublicationTarget});
             }
             const pageNavSizer = ProtoSidebarResize.attach($('page-nav-resizer'), {
                 storageKey: 'prototype-page-nav-width', isOpen: () => !$('layout').classList.contains('left-closed'),
