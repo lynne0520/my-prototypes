@@ -450,26 +450,441 @@ const causeMatrix = [
     [37, 19, 12, 14, 12, 6]
 ];
 
-// 考核项 × 任务 失分率矩阵（null = 该场未考查，与「无失分」区分）
-const heatData = {
-    kp: [
-        { name: '指数与对数', values: [52, 58, null, 58, 52, 55] },
-        { name: '单调性', values: [42, null, 52, 55, null, 48] },
-        { name: '函数基础', values: [45, null, 38, 45, null, 36] },
-        { name: '函数的概念', values: [null, null, 36, 38, null, 34] },
-        { name: '常用逻辑用语', values: [28, null, null, 30, null, 26] },
-        { name: '三角函数', values: [20, 24, null, 22, null, 18] },
-        { name: '集合运算', values: [8, 10, null, 12, null, 10] }
+/* ================= 末级知识点图谱 · 题目挂接 · 周期派生引擎 =================
+   数据基座：《维度标签数据-高中数学.xlsx》「同步知识点」表。每条末级知识点记录三项元数据：
+   ① 目录 id（表内原始 id，可与教研标签体系回查）、② 末级知识点名称（表内目录名）、
+   ③ kp 归属（该末级知识点挂在 kpTree 的哪个末级节点下，即页面「考核项」）。
+   题目按「一题多标签」组织：每道题可同时挂接多个末级知识点与多项能力素养（题库第 3/4 字段），
+   于是节点得分率、达标率、顽固薄弱、提交率、环比全部由作答数据聚合派生（见 buildPeriodModel），
+   页面不再出现硬编码的结果数字。链路：题目失分率 → 末级知识点 → 考核项（kpTree 末级节点）→ 父节点回算。
+   达标线取「掌握」档下限（3 档 / 4 档均为 80%），见 MASTERY_PRESETS。 */
+
+// 末级知识点：[xlsx 目录 id, 末级知识点, 归属 kpTree 末级节点, 模块]
+const KP_ATOM_ROWS = [
+    /* —— 集合与常用逻辑用语 —— */
+    ['9902', '集合间的基本关系', '子集与真子集', '集合与逻辑'],
+    ['302548', '集合的子集、真子集个数', '子集与真子集', '集合与逻辑'],
+    ['302484', '并集的运算', '并集与交集', '集合与逻辑'],
+    ['302489', '交集的运算', '并集与交集', '集合与逻辑'],
+    ['302496', '并集交集的混合运算', '并集与交集', '集合与逻辑'],
+    ['302560', '集合的基本运算的新定义题', '并集与交集', '集合与逻辑'],
+    ['302504', '全集与补集', '补集', '集合与逻辑'],
+    ['302508', '交、并、补混合运算', '补集', '集合与逻辑'],
+    ['302513', '充分条件、必要条件的判断', '充分与必要条件', '集合与逻辑'],
+    ['302520', '利用充分、必要条件求参数范围', '充分与必要条件', '集合与逻辑'],
+    ['302526', '充要条件的相关证明', '充分与必要条件', '集合与逻辑'],
+    ['302528', '全称量词命题及真假判断', '全称与存在量词', '集合与逻辑'],
+    ['302533', '全称量词命题的否定', '全称与存在量词', '集合与逻辑'],
+    ['302536', '存在量词命题的否定', '全称与存在量词', '集合与逻辑'],
+    /* —— 函数的概念与性质 —— */
+    ['302698', '函数概念的理解', '对应关系与解析式', '函数基础'],
+    ['302745', '待定系数法求函数解析式', '对应关系与解析式', '函数基础'],
+    ['302749', '换元法求函数解析式', '对应关系与解析式', '函数基础'],
+    ['302714', '求具体函数的定义域', '定义域值域', '函数基础'],
+    ['302715', '求抽象函数的定义域', '定义域值域', '函数基础'],
+    ['302728', '观察法求函数的值域', '定义域值域', '函数基础'],
+    ['302731', '换元法求函数的值域', '定义域值域', '函数基础'],
+    ['302770', '分段函数求函数值', '分段函数', '函数基础'],
+    ['302772', '分段函数求参数值或范围', '分段函数', '函数基础'],
+    ['302787', '判断函数的单调性', '单调性', '函数基础'],
+    ['302790', '用定义判断及证明函数的单调性', '单调性', '函数基础'],
+    ['302797', '由解析式求函数的单调区间', '单调性', '函数基础'],
+    ['302801', '根据函数单调性比较大小', '单调性', '函数基础'],
+    ['302850', '利用定义判断(证明)函数的奇偶性', '奇偶性', '函数基础'],
+    ['302863', '利用奇偶性求函数值', '奇偶性', '函数基础'],
+    ['302858', '利用奇偶性求参数值', '奇偶性', '函数基础'],
+    ['302821', '利用函数的单调性求最值(值域)', '最值', '函数基础'],
+    ['302827', '换元法求函数的最值(值域)', '最值', '函数基础'],
+    ['302828', '分类讨论求函数的最值(值域)', '最值', '函数基础'],
+    /* —— 指数函数与对数函数 —— */
+    ['303017', '根式化简求值', '指数幂运算', '指数与对数'],
+    ['303023', '根式与分数指数幂的互化', '指数幂运算', '指数与对数'],
+    ['303024', '利用分数指数幂的运算性质化简求值', '指数幂运算', '指数与对数'],
+    ['303032', '指数函数的判断', '指数函数', '指数与对数'],
+    ['303040', '与指数函数有关的定义域问题', '指数函数', '指数与对数'],
+    ['303041', '与指数函数有关的值域问题', '指数函数', '指数与对数'],
+    ['303053', '指数函数的单调性', '指数函数', '指数与对数'],
+    ['303051', '指数函数的应用（比较大小）', '指数函数', '指数与对数'],
+    ['303075', '对数的运算', '对数运算法则', '指数与对数'],
+    ['303076', '对数运算性质的应用', '对数运算法则', '指数与对数'],
+    ['303071', '利用对数式性质求值', '对数运算法则', '指数与对数'],
+    ['303079', '利用换底公式计算求值', '换底公式', '指数与对数'],
+    ['303093', '求对数函数的定义域', '对数函数', '指数与对数'],
+    ['303105', '对数型函数单调性的判断', '对数函数', '指数与对数'],
+    ['303115', '与对数函数有关的奇偶性问题', '对数函数', '指数与对数'],
+    /* —— 三角函数 —— */
+    ['303236', '角度制化成弧度制', '角度与弧度互化', '三角函数'],
+    ['303237', '弧度制化成角度制', '角度与弧度互化', '三角函数'],
+    ['303219', '判断角在哪个象限', '象限角判断', '三角函数'],
+    ['303266', '已知函数值，求其他的三角函数值', '同角基本关系', '三角函数'],
+    ['303268', '利用同角三角函数的关系，化简三角函数式', '同角基本关系', '三角函数'],
+    ['303289', '利用诱导公式，求已知角的三角函数值', '诱导公式', '三角函数'],
+    ['303299', '利用诱导公式进行化简求值', '诱导公式', '三角函数'],
+    ['303405', '根据两角和的正弦公式求函数值', '和差角公式', '三角函数'],
+    ['303441', '二倍角的余弦公式', '二倍角公式', '三角函数'],
+    ['25917', '正弦函数的单调性及应用', '正弦函数图像与性质', '三角函数'],
+    ['26282', '求余弦（型）函数的周期', '余弦函数图像与性质', '三角函数'],
+    ['303381', '求正切(型)函数的单调区间', '正切函数图像与性质', '三角函数'],
+    ['303497', '当 ω=1 时，正弦型函数x轴平移问题', '图像变换', '三角函数']
+];
+
+// 周期题库：[满分, 预期失分率, 挂接末级知识点[], 挂接能力素养[]]；一组 = 一次任务，顺序与 periodTasks 一致
+// 预期失分率为虚拟作答数据的设计值，构建时按 δ 整体平移校准，使「整卷分值加权得分率 = 任务表得分率」
+const PERIOD_QUESTION_BANK = [
+    [   // 第一次月考 · 集合与逻辑 · 100 分 · 得分率 72.4
+        [5, 18, ['并集的运算'], ['演绎推理']],
+        [5, 22, ['交集的运算'], ['演绎推理']],
+        [5, 30, ['集合的子集、真子集个数'], ['归纳推理']],
+        [10, 25, ['全集与补集'], ['演绎推理']],
+        [10, 38, ['并集交集的混合运算'], ['整式加减', '演绎推理']],
+        [10, 32, ['交、并、补混合运算'], ['分式化简']],
+        [12, 34, ['充分条件、必要条件的判断'], ['归纳推理', '演绎推理']],
+        [13, 48, ['利用充分、必要条件求参数范围'], ['演绎推理']],
+        [15, 24, ['全称量词命题及真假判断'], ['归纳推理']],
+        [15, 35, ['全称量词命题的否定'], ['归纳推理', '演绎推理']]
     ],
-    ability: [
-        { name: '演绎推理', values: [null, null, 48, 55, 50, 52] },
-        { name: '逻辑推理', values: [null, 38, null, 52, 46, 48] },
-        { name: '归纳推理', values: [null, 32, null, 42, 38, 36] },
-        { name: '分式化简', values: [35, null, 40, 40, 38, 32] },
-        { name: '数学建模', values: [null, null, null, 35, 30, 38] },
-        { name: '数学运算', values: [28, 32, 26, 30, 28, 24] }
+    [   // 同步作业(三) · 函数基础 · 50 分 · 得分率 68.1
+        [5, 10, ['函数概念的理解'], ['整式加减']],
+        [5, 12, ['求具体函数的定义域'], ['分式化简']],
+        [4, 8, ['待定系数法求函数解析式'], ['整式加减']],
+        [5, 50, ['观察法求函数的值域'], ['估值计算']],
+        [6, 58, ['换元法求函数的值域'], ['分式化简', '估值计算']],
+        [7, 44, ['判断函数的单调性'], ['演绎推理']],
+        [7, 42, ['用定义判断及证明函数的单调性'], ['演绎推理']],
+        [5, 20, ['求抽象函数的定义域'], ['演绎推理']],
+        [6, 46, ['利用函数的单调性求最值(值域)'], ['估值计算', '演绎推理']]
+    ],
+    [   // 同步作业(五) · 指数与对数 · 50 分 · 得分率 74.6
+        [5, 10, ['根式化简求值'], ['分式化简']],
+        [5, 12, ['根式与分数指数幂的互化'], ['分式化简']],
+        [5, 14, ['利用分数指数幂的运算性质化简求值'], ['分式化简', '整式加减']],
+        [5, 16, ['对数的运算'], ['整式加减']],
+        [5, 18, ['指数函数的判断'], ['估值计算']],
+        [8, 40, ['指数函数的应用（比较大小）'], ['估值计算']],
+        [8, 46, ['与指数函数有关的值域问题'], ['估值计算']],
+        [9, 58, ['求对数函数的定义域'], ['分式化简', '演绎推理']]
+    ],
+    [   // 期中联考 · 函数基础 · 100 分 · 得分率 63.4
+        [5, 18, ['函数概念的理解'], ['整式加减']],
+        [4, 22, ['求具体函数的定义域'], ['分式化简']],
+        [13, 56, ['换元法求函数的值域'], ['分式化简', '估值计算']],
+        [12, 50, ['利用函数的单调性求最值(值域)'], ['估值计算', '演绎推理']],
+        [12, 50, ['用定义判断及证明函数的单调性'], ['演绎推理']],
+        [10, 48, ['由解析式求函数的单调区间'], ['演绎推理']],
+        [10, 50, ['利用定义判断(证明)函数的奇偶性'], ['演绎推理', '直观想象']],
+        [10, 54, ['对数型函数单调性的判断'], ['演绎推理', '直观想象']],
+        [12, 38, ['指数函数的单调性'], ['演绎推理']],
+        [12, 32, ['利用奇偶性求函数值'], ['整式加减', '演绎推理']]
+    ],
+    [   // 同步作业(七) · 指数与对数 · 50 分 · 得分率 71.3
+        [5, 12, ['指数函数的判断'], ['估值计算']],
+        [5, 14, ['与指数函数有关的定义域问题'], ['分式化简']],
+        [8, 46, ['与指数函数有关的值域问题'], ['估值计算']],
+        [8, 50, ['指数函数的应用（比较大小）'], ['估值计算', '演绎推理']],
+        [6, 16, ['对数的运算'], ['整式加减']],
+        [6, 18, ['利用对数式性质求值'], ['整式加减', '分式化简']],
+        [6, 20, ['求对数函数的定义域'], ['分式化简']],
+        [6, 52, ['对数型函数单调性的判断'], ['演绎推理']]
+    ],
+    [   // 期末模拟冲刺卷(一) · 综合测试 · 100 分 · 得分率 76.8
+        [5, 10, ['集合间的基本关系'], ['演绎推理']],
+        [5, 12, ['并集的运算'], ['演绎推理']],
+        [5, 14, ['交集的运算'], ['演绎推理']],
+        [8, 16, ['充分条件、必要条件的判断'], ['归纳推理', '演绎推理']],
+        [10, 48, ['判断函数的单调性'], ['演绎推理']],
+        [10, 30, ['利用定义判断(证明)函数的奇偶性'], ['演绎推理', '直观想象']],
+        [12, 22, ['指数函数的应用（比较大小）'], ['估值计算']],
+        [15, 24, ['对数的运算'], ['整式加减']],
+        [18, 20, ['正弦函数的单调性及应用'], ['直观想象']],
+        [12, 50, ['利用函数的单调性求最值(值域)'], ['估值计算', '演绎推理']]
     ]
+];
+
+// 上一周期题库（3 次任务）：仅用于达标率环比与顽固薄弱增减，不参与本周期任何统计
+// 设计约束：达标率 38.5%（5/13）低于本周期；无任何节点命中顽固（同一节点 ≥3 场 ≥40%），故「新增」非零、「已改善」为零
+const PREV_TASK_META = [
+    { name: '第一次月考(上周期)', date: '2025-09-12', classRate: 65 },
+    { name: '同步作业(一)', date: '2025-09-20', classRate: 66 },
+    { name: '九月月考', date: '2025-09-26', classRate: 70 }
+];
+const PREV_QUESTION_BANK = [
+    [   // 100 分 · 得分率 65
+        [5, 10, ['并集的运算'], ['演绎推理']],
+        [5, 16, ['集合间的基本关系'], ['演绎推理']],
+        [10, 48, ['全集与补集'], ['演绎推理']],
+        [10, 14, ['并集交集的混合运算'], ['整式加减']],
+        [12, 52, ['交、并、补混合运算'], ['分式化简']],
+        [13, 46, ['充分条件、必要条件的判断'], ['归纳推理']],
+        [15, 56, ['利用充分、必要条件求参数范围'], ['演绎推理']],
+        [15, 44, ['全称量词命题及真假判断'], ['归纳推理']],
+        [15, 17, ['全称量词命题的否定'], ['归纳推理']]
+    ],
+    [   // 50 分 · 得分率 66
+        [5, 12, ['函数概念的理解'], ['整式加减']],
+        [5, 40, ['求具体函数的定义域'], ['分式化简']],
+        [8, 44, ['求抽象函数的定义域'], ['演绎推理']],
+        [8, 42, ['观察法求函数的值域'], ['估值计算']],
+        [8, 32, ['判断函数的单调性'], ['演绎推理']],
+        [8, 26, ['利用定义判断(证明)函数的奇偶性'], ['演绎推理']],
+        [8, 26, ['利用奇偶性求函数值'], ['整式加减']]
+    ],
+    [   // 100 分 · 得分率 70
+        [5, 14, ['根式化简求值'], ['分式化简']],
+        [5, 26, ['指数函数的判断'], ['估值计算']],
+        [10, 30, ['指数函数的单调性'], ['演绎推理']],
+        [10, 16, ['对数的运算'], ['整式加减']],
+        [10, 18, ['对数运算性质的应用'], ['整式加减']],
+        [12, 34, ['求对数函数的定义域'], ['分式化简']],
+        [16, 40, ['对数型函数单调性的判断'], ['演绎推理']],
+        [16, 26, ['指数函数的应用（比较大小）'], ['估值计算']],
+        [16, 34, ['与指数函数有关的值域问题'], ['估值计算']]
+    ]
+];
+
+// 考核项 × 任务 失分率矩阵（null = 该场未考查，与「无失分」区分）；由 buildPeriodModel 从题库派生填充
+let heatData = { kp: [], ability: [] };
+
+const CLASS_SIZE = 48;   // 班级人数（每场任务应交人次 = 班级人数）
+const PERIOD_HALF_LIFE = 30;   // 半衰期（天）：周期知识点得分率的时间衰减参数
+
+const PERIOD_MODEL = {
+    built: false,
+    atoms: [],          // 末级知识点（含派生失分率 / 掌握度 / 顽强场次）
+    atomByName: {},
+    mSet: [],           // 本周期题目挂接集合（达标率分母）：kpTree 末级节点
+    ability: [],        // 能力维度考核项（由题目能力标签聚合派生）
+    tasks: [],          // 每场任务校准后的题目
+    submit: null,       // 提交率
+    prev: null,         // 上一周期对比
+    reach: null         // 达标分布
 };
+
+// 半衰权重 w = 0.5^(距锚点天数 / H)，锚点 = 周期内最后一次任务日期
+function periodWeight(dateStr, anchor) {
+    const days = Math.max(0, (anchor - new Date(dateStr + 'T00:00:00')) / 86400000);
+    return Math.pow(0.5, days / PERIOD_HALF_LIFE);
+}
+
+// 失分率校准：整体平移 δ，使「整卷分值加权得分率 = 任务表得分率」，避免页面出现两套整卷口径
+function calibrateLoss(bank, targetLoss) {
+    if (!bank || !bank.length) return [];
+    const wsum = bank.reduce((a, q) => a + q[0], 0) || 1;
+    const mean = bank.reduce((a, q) => a + q[0] * q[1], 0) / wsum;
+    const delta = targetLoss - mean;
+    return bank.map(q => ({
+        score: q[0],
+        loss: Math.round(Math.min(96, Math.max(2, q[1] + delta)) * 10) / 10,
+        atoms: q[2] || [],
+        abilities: q[3] || []
+    }));
+}
+
+// 掌握度 = 100 − Σ(w·失分率)/Σw；无有效场次数返回 null（不猜值）
+function masteryFrom(values, taskDates, anchor) {
+    let ws = 0, acc = 0, cnt = 0;
+    values.forEach((v, i) => {
+        if (v === null || v === undefined) return;
+        const w = periodWeight(taskDates[i], anchor);
+        ws += w; acc += w * (100 - v); cnt++;
+    });
+    return { mastery: ws ? Math.round(acc / ws * 10) / 10 : null, cnt };
+}
+
+// 叶子失分率：同一场挂接该节点的全部题目按分值加权
+function leafLossMatrix(tasks, atomByName) {
+    const out = {};
+    tasks.forEach((qs, ti) => {
+        const acc = {};
+        qs.forEach(q => {
+            (q.atoms || []).forEach(nm => {
+                const a = atomByName[nm];
+                if (!a) return;
+                const o = acc[a.kp] || (acc[a.kp] = { w: 0, s: 0 });
+                o.w += q.score; o.s += q.score * q.loss;
+            });
+        });
+        Object.keys(acc).forEach(kp => {
+            if (!out[kp]) out[kp] = new Array(tasks.length).fill(null);
+            out[kp][ti] = Math.round(acc[kp].s / acc[kp].w * 10) / 10;
+        });
+    });
+    return out;
+}
+
+// 能力失分率：同一场挂接该能力标签的全部题目按分值加权（能力素养题内独立标注）
+function abilityLossMatrix(tasks, names) {
+    const idx = {};
+    names.forEach((n, i) => (idx[n] = i));
+    const values = names.map(() => new Array(tasks.length).fill(null));
+    tasks.forEach((qs, ti) => {
+        const acc = {};
+        qs.forEach(q => {
+            (q.abilities || []).forEach(nm => {
+                if (idx[nm] === undefined) return;
+                const o = acc[nm] || (acc[nm] = { w: 0, s: 0 });
+                o.w += q.score; o.s += q.score * q.loss;
+            });
+        });
+        Object.keys(acc).forEach(nm => { values[idx[nm]][ti] = Math.round(acc[nm].s / acc[nm].w * 10) / 10; });
+    });
+    return values;
+}
+
+// 由一张「考核项 × 任务」矩阵得出考核项统计行
+function periodRowsOf(names, matrix, pathOf, taskDates, anchor) {
+    return names.map((nm, i) => {
+        const values = matrix[i] || matrix[nm];
+        const valid = values.filter(v => v !== null);
+        const m = masteryFrom(values, taskDates, anchor);
+        return {
+            name: nm,
+            values,
+            mastery: m.mastery,
+            nTask: m.cnt,
+            covered: m.cnt > 0,
+            avgLoss: valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length * 10) / 10 : null,
+            heavyCnt: values.filter(v => v !== null && v >= 40).length,
+            path: pathOf(nm)
+        };
+    });
+}
+
+// 周期派生模型：一次构建，全局复用（幂等）
+function buildPeriodModel() {
+    if (PERIOD_MODEL.built) return PERIOD_MODEL;
+    PERIOD_MODEL.built = true;
+
+    const dates = periodTasks.map(t => t.date);
+    const anchor = new Date(dates[dates.length - 1] + 'T00:00:00');
+    const tasks = periodTasks.map((t, i) => calibrateLoss(PERIOD_QUESTION_BANK[i] || [], Math.round((100 - t.classRate) * 10) / 10));
+    PERIOD_MODEL.tasks = tasks;
+
+    /* ① 末级知识点：题目挂接即证据；未挂接的本期无数据，不给掌握度 */
+    PERIOD_MODEL.atomByName = {};
+    PERIOD_MODEL.atoms = KP_ATOM_ROWS.map(r => {
+        const atom = { id: r[0], name: r[1], kp: r[2], module: r[3], values: new Array(tasks.length).fill(null) };
+        PERIOD_MODEL.atomByName[atom.name] = atom;
+        return atom;
+    });
+    tasks.forEach((qs, ti) => {
+        const acc = {};
+        qs.forEach(q => {
+            (q.atoms || []).forEach(nm => {
+                const a = PERIOD_MODEL.atomByName[nm];
+                if (!a) return;
+                const o = acc[nm] || (acc[nm] = { w: 0, s: 0, c: 0 });
+                o.w += q.score; o.s += q.score * q.loss; o.c++;
+            });
+        });
+        Object.keys(acc).forEach(nm => {
+            const a = PERIOD_MODEL.atomByName[nm];
+            a.values[ti] = Math.round(acc[nm].s / acc[nm].w * 10) / 10;
+            a.qCnt = (a.qCnt || 0) + acc[nm].c;
+        });
+    });
+    PERIOD_MODEL.atoms.forEach(a => {
+        const m = masteryFrom(a.values, dates, anchor);
+        const valid = a.values.filter(v => v !== null);
+        a.mastery = m.mastery;
+        a.nTask = m.cnt;
+        a.covered = m.cnt > 0;
+        a.qCnt = a.qCnt || 0;
+        a.avgLoss = valid.length ? Math.round(valid.reduce((x, y) => x + y, 0) / valid.length * 10) / 10 : null;
+        a.heavyCnt = a.values.filter(v => v !== null && v >= 40).length;
+        a.path = a.module + ' / ' + a.kp + ' / ' + a.name;
+    });
+
+    /* ② 考核项（kpTree 末级节点）= 达标率统计单元：失分率由所辖末级知识点按题次聚合 */
+    const kpLeaves = flattenTree(AppData.kpTree, true).filter(n => !n.children || !n.children.length);
+    const leafLoss = leafLossMatrix(tasks, PERIOD_MODEL.atomByName);
+    const kpModuleOf = nm => {
+        const a = PERIOD_MODEL.atoms.find(x => x.kp === nm && x.covered) || PERIOD_MODEL.atoms.find(x => x.kp === nm);
+        return a ? a.module : '';
+    };
+    const kpPathOf = nm => kpModuleOf(nm) + ' / ' + nm;
+    const kpNames = kpLeaves.map(n => n.name).filter(nm => leafLoss[nm]);
+    PERIOD_MODEL.mSet = periodRowsOf(kpNames, kpNames.map(nm => leafLoss[nm]), kpPathOf, dates, anchor);
+
+    /* ③ 把派生掌握度写回体系树：末级节点取派生值，父节点只由「有派生值的子节点」回算
+       （未覆盖子树保留静态基线，避免把「暂无证据」当成「已掌握/未掌握」） */
+    const derived = new Set();
+    PERIOD_MODEL.mSet.forEach(r => {
+        derived.add(r.name);
+        const node = kpLeaves.find(n => n.name === r.name);
+        if (node) { node.mastery = r.mastery; node.derived = true; node.nTask = r.nTask; }
+    });
+    const rollUp = (n) => {
+        if (!n.children || !n.children.length) return;
+        n.children.forEach(rollUp);
+        const kids = n.children.filter(c => derived.has(c.name));
+        if (!kids.length) return;
+        n.mastery = Math.round(kids.reduce((a, c) => a + c.mastery, 0) / kids.length * 10) / 10;
+        n.derived = true;
+        derived.add(n.name);
+    };
+    rollUp(AppData.kpTree);
+
+    /* ④ 能力维度：题目能力标签 → 能力叶子掌握度；父节点同样只由有值子节点回算 */
+    const abLeaves = flattenTree(AppData.abilityTree, true).filter(n => !n.children || !n.children.length);
+    const abNames = abLeaves.map(n => n.name);
+    const abMatrix = abilityLossMatrix(tasks, abNames);
+    PERIOD_MODEL.ability = periodRowsOf(abNames, abMatrix, nm => '高中数学核心素养 / ' + nm, dates, anchor)
+        .filter(r => r.covered);
+    const abDerived = new Set(PERIOD_MODEL.ability.map(r => r.name));
+    PERIOD_MODEL.ability.forEach(r => {
+        const node = abLeaves.find(n => n.name === r.name);
+        if (node) { node.mastery = r.mastery; node.derived = true; }
+    });
+    const abRollUp = (n) => {
+        if (!n.children || !n.children.length) return;
+        n.children.forEach(abRollUp);
+        const kids = n.children.filter(c => abDerived.has(c.name));
+        if (!kids.length) return;
+        n.mastery = Math.round(kids.reduce((a, c) => a + c.mastery, 0) / kids.length * 10) / 10;
+        n.derived = true;
+        abDerived.add(n.name);
+    };
+    abRollUp(AppData.abilityTree);
+
+    /* ⑤ 热力演进矩阵：考核项 = 本周期实际挂接到题目的节点（未考查项不进矩阵） */
+    heatData = {
+        kp: PERIOD_MODEL.mSet.map(r => ({ name: r.name, module: kpModuleOf(r.name), path: r.path, values: r.values })),
+        ability: PERIOD_MODEL.ability.map(r => ({ name: r.name, module: '高中数学核心素养', path: r.path, values: r.values }))
+    };
+
+    /* ⑥ 提交率：实交人次 ÷ 应交人次（应交 = 班级人数 × 任务数） */
+    const should = CLASS_SIZE * periodTasks.length;
+    const done = periodTasks.reduce((a, t) => a + (t.submitted || 0), 0);
+    PERIOD_MODEL.submit = { should, done, missing: should - done, rate: should ? Math.round(done / should * 1000) / 10 : 0 };
+
+    /* ⑦ 上一周期：同样由题库派生，供达标率环比与顽固薄弱增减使用 */
+    const pDates = PREV_TASK_META.map(t => t.date);
+    const pAnchor = new Date(pDates[pDates.length - 1] + 'T00:00:00');
+    const pTasks = PREV_TASK_META.map((t, i) => calibrateLoss(PREV_QUESTION_BANK[i] || [], Math.round((100 - t.classRate) * 10) / 10));
+    const pLoss = leafLossMatrix(pTasks, PERIOD_MODEL.atomByName);
+    const pNames = kpLeaves.map(n => n.name).filter(nm => pLoss[nm]);
+    const pRows = periodRowsOf(pNames, pNames.map(nm => pLoss[nm]), kpPathOf, pDates, pAnchor);
+    const line = reachLine();
+    const pStub = new Set(pRows.filter(r => r.heavyCnt >= 3).map(r => r.name));
+    const cStub = new Set(PERIOD_MODEL.mSet.filter(r => r.heavyCnt >= 3).map(r => r.name));
+    PERIOD_MODEL.prev = {
+        rows: pRows,
+        n: pRows.length,
+        good: pRows.filter(r => r.mastery >= line).length,
+        reach: pRows.length ? Math.round(pRows.filter(r => r.mastery >= line).length / pRows.length * 1000) / 10 : 0,
+        stubs: [...pStub],
+        improved: [...pStub].filter(nm => !cStub.has(nm)),   // 上周期顽固、本周期已脱离
+        added: [...cStub].filter(nm => !pStub.has(nm)),      // 本周期新增顽固
+        tasks: PREV_TASK_META.length
+    };
+    return PERIOD_MODEL;
+}
+
+// 懒构建：任何消费入口先调用，避免与后续 const 定义的初始化顺序冲突
+function ensurePeriodModel() {
+    if (!PERIOD_MODEL.built) buildPeriodModel();
+    return PERIOD_MODEL;
+}
 
 /* ---------------- 知识点关联图谱数据 ---------------- */
 
@@ -481,7 +896,7 @@ const KP_RELATION_DEFS = {
     requireAbility: { name: '依赖能力', short: '依赖', color: '#d946ef', lineType: 'dotted', width: 1.2, directed: true },
     questionType: { name: '考查题型', short: '题型', color: '#10b981', lineType: 'dotted', width: 1.1, directed: true },
     method: { name: '常用方法', short: '方法', color: '#f97316', lineType: 'dashed', width: 1.2, directed: true },
-    errorPoint: { name: '题型易错点', short: '易错', color: '#ef4444', lineType: 'dashed', width: 1.2, directed: true },
+    errorPoint: { name: '易错点', short: '易错', color: '#ef4444', lineType: 'dashed', width: 1.2, directed: true },
     structure: { name: '树状结构', short: '结构', color: '#cbd5e1', lineType: 'solid', width: 1, directed: false }
 };
 
@@ -504,7 +919,7 @@ const KG_CANVAS_RELATIONS = ['prerequisite', 'confusable'];
 // 知识点颜色统一由掌握情况决定（statusOf → masteryTierHex；暂无作答证据恒灰），见 kpHexOf
 
 // 知识点关联数据：prerequisite 前置 / confusable 易混淆 / examAbility 考查能力 /
-// requireAbility 依赖能力 / questionType 考查题型 / methods 常用方法 / errorPoints 题型易错点
+// requireAbility 依赖能力 / questionType 考查题型 / methods 常用方法 / errorPoints 易错点
 // 后续知识由前置关系自动反向推导，不重复维护
 const kpRelations = {
     /* —— 集合与逻辑 —— */
@@ -916,6 +1331,11 @@ function masteryOf(node) {
 // 未掌握阈值 = 最低档位的上界（如 3 档时为 60）
 function unmasteredThreshold() {
     return masteryLevels[masteryLevels.length - 1].max;
+}
+// 达标线 =「掌握」档下限：3 档 80、4 档 80（4 档索引 0 是「优秀」90，不作达标线）
+function reachLine() {
+    const hold = masteryLevels.find(l => l.name === '掌握');
+    return hold ? hold.min : masteryLevels[0].min;
 }
 // 档位索引 → 色值：图谱节点 / 目录色点 / 诊断关系行 / 图例共用同一套掌握度配色（绿 → 黄 → 红）
 function masteryTierHex(i, total) {
@@ -1606,7 +2026,7 @@ function kgRenderDetail(name) {
         { key: 'requireAbility', title: '依赖能力', color: KP_RELATION_DEFS.requireAbility.color, tag: '能力' },
         { key: 'questionType', title: '考查题型', color: KP_RELATION_DEFS.questionType.color, tag: '题型' },
         { key: 'methods', title: '常用方法', color: KP_RELATION_DEFS.method.color, tag: '方法' },
-        { key: 'errorPoints', title: '题型易错点', color: KP_RELATION_DEFS.errorPoint.color, tag: '易错点' }
+        { key: 'errorPoints', title: '易错点', color: KP_RELATION_DEFS.errorPoint.color, tag: '易错点' }
     ];
 
     const relRow = (target, tag, dotColor, count, kMastery, brokenRow) => `
@@ -1914,6 +2334,7 @@ function currentPrevBase() {
 
 // 周期指标计算：加权均值、稳定度、环比、趋势判定、顽固薄弱
 function calcPeriodStats() {
+    ensurePeriodModel();
     const rates = periodTasks.map(t => t.classRate);
     const n = rates.length;
     const mean = rates.reduce((a, b) => a + b, 0) / n;
@@ -1942,7 +2363,7 @@ function calcPeriodStats() {
     const heatRows = heatData[currentDimension].map(r => {
         const valid = r.values.filter(v => v !== null);
         const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : 0;
-        return { name: r.name, avg, heavyCnt: r.values.filter(v => v !== null && v >= 40).length };
+        return { name: r.name, avg, values: r.values, path: r.path, heavyCnt: r.values.filter(v => v !== null && v >= 40).length };
     });
     const stubSorted = heatRows.filter(r => r.heavyCnt >= 3).sort((a, b) => b.avg - a.avg);
 
@@ -1954,24 +2375,18 @@ function calcPeriodStats() {
     };
 }
 
-// 周期概览统计口径：作业/考试整体视角，取全部维度（kp + ability）体系树的末级（叶子）节点，
-// 不随「知识点/能力」维度切换；与 calcPeriodStats.stubSorted（当前维度混合层级，供知识点分析页签消费）区分
+// 周期概览达标准率分母 = 题目挂接集合（mSet）：本周期被题目挂接的 kpTree 末级节点 + 被题目挂接的能力末级节点，
+// 不随「知识点/能力」维度切换。集合外节点本期无作答证据，不进入分母（挂接即证据，不存在「无证据节点」类别）；
+// 与 calcPeriodStats.stubSorted（当前维度混合层级，供知识点分析页签消费）区分
 function periodLeafNodes() {
-    return flattenTree(AppData.kpTree, true).concat(flattenTree(AppData.abilityTree, true))
-        .filter(n => !n.children || !n.children.length);
+    const m = ensurePeriodModel();
+    return m.mSet.concat(m.ability);
 }
 
-// 全维度末级顽固薄弱：heatData 两维度行先按末级节点名过滤，再按 ≥3 场失分率 ≥40% 判定，按场均失分率降序
+// 全维度末级顽固薄弱：mSet + 能力考核项中满足「同一节点 ≥3 场失分率 ≥40%」者，按累计失分率降序
 function periodLeafStubs() {
-    const leafNames = {};
-    periodLeafNodes().forEach(n => { leafNames[n.name] = true; });
-    return heatData.kp.concat(heatData.ability)
-        .filter(r => leafNames[r.name])
-        .map(r => {
-            const valid = r.values.filter(v => v !== null);
-            const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : 0;
-            return { name: r.name, avg, heavyCnt: r.values.filter(v => v !== null && v >= 40).length };
-        })
+    return periodLeafNodes()
+        .map(r => ({ name: r.name, avg: r.avgLoss, heavyCnt: r.heavyCnt, values: r.values, path: r.path }))
         .filter(r => r.heavyCnt >= 3)
         .sort((a, b) => b.avg - a.avg);
 }
@@ -2087,19 +2502,21 @@ function renderPeriodInsights() {
     El.periodInsightList.innerHTML = items.map(it =>
         `<div class="insight-item ${it.cls}"><div>${it.html}</div></div>`).join('');
 
+    // 区间说明按当前时间档位实时生成（与筛选栏胶囊同源），不写死「近一月」：档位切到周时文案必须同步
     El.periodStatHint.innerText =
-        `统计区间：近一月 · 纳入 ${s.total} 次任务（作业 ${s.assignCnt} · 考试 ${s.examCnt}）· 对比基准：上一周期 ${prevPeriodRate}%`;
+        `统计区间：${timeScopeText()} · 纳入 ${s.total} 次任务（作业 ${s.assignCnt} · 考试 ${s.examCnt}）· 对比基准：上一周期 ${prevPeriodRate}%`;
 }
 
-/* ---------------- 学生阶段性学情状态判定（V2.0 方案；完整判定规则见 PRD XK-10） ----------------
-   原型阶段说明：暂无真实数据接入，本页状态与判定数字（前后半段差值 / 低于·高于平时水平次数 /
-   有效场次 / 平均得分率 / 与班级平均差）均为「模拟数据」，由 stSimStatus 按学号稳定生成，
-   仅用于演示 UI 与状态联动（KPI 卡 / 需关注弹层 / 列表徽章 同源）。
-   判定算法（留一法残差 / MAD 个人波动带 / 低位双条件 / 持续性确认 / 阈值分学科校准）不在原型内实时执行，
-   完整规则以 PRD 抽屉 XK-10「学生状态判定规则（V2.0）」为准，待真实数据接入后据此实现。
-   状态名沿用教学语言：待观察 / 断崖下跌 / 持续低位 / 低位回升 / 明显进步 / 平稳（V2.0 新增「待观察」，
-   样本不足不归入平稳）；徽章悬停只给一句话结论（前后半段差多少 + 几次超出平时水平），
-   不向教师展示 Δ_th / SD_r / MAD 等口径；完整口径集中在学生列表标题旁小问号的「状态判定说明」浮层。 */
+/* ---------------- 学生阶段性学情状态判定（V3.0：得分率主轴 + 双轴标签；完整规则见 PRD XK-10） ----------------
+   原型阶段说明：暂无真实数据接入。任务序列（日期 / 满分 / 班级平均得分率）与个人逐次得分率由学号稳定生成，
+   但 L（长期基线）/ S（近期水平）/ Δ（变化量）与状态判定按 V3.0 口径「真实计算」，结果自洽、可手算复核。
+   V3.0 相对 V2.0 的六处改动：
+   ① 核心序列改为差值 d = 学生得分率 − 班级得分率（剥离试卷难度；取消留一法——它只是 n/(n−1) 常数缩放）；
+   ② 趋势用半衰期加权（H=30 天）替代前后半段硬切分，按次刷新，无窗口边界效应；
+   ③ 波动带改为固定常数 B（取消个人 MAD 估计——同一学生换窗口带宽抖动可达 40%）；
+   ④ 位置（相对班级）与趋势（相对自我）拆成两个独立维度，不再合成复合标签；
+   ⑤ 缺交 / 单场异常升级为独立硬标记，不再归入「数据不足」；
+   ⑥ 参数由 9 个压缩到 4 个（B / k / m / H），教师无需统计学背景即可复核。 */
 
 // 学生名册（按截图学号降序，刘鸿锦(40313) 为默认选中）；置于顶层供状态引擎与周期概览 KPI 卡共用
 const ST_STUDENTS = [
@@ -2128,141 +2545,240 @@ function stSeed(seed) {
     return x - Math.floor(x);
 }
 
-// 判定规则参数（V2.0 口径常量，与 PRD XK-10 规则一一对应；原型仅用于生成模拟判定数字，不据此实时计算）
+// V3.0 判定参数：只有 4 个，每个都能用一句话向教师解释
 const ST_STATUS_RULES = {
-    deltaTh: 8,            // Δ 阈值（%）：默认 8；真实口径 Δ_th = max(8, sdDeltaK × SD_Δ)，分学科分年级校准
-    sdDeltaK: 0.8,         // Δ_th 校准系数：0.8 × 同年级同学科历史 Δ 的标准差
-    bandK: 1.5,            // 个人波动带 = 历史残差 median ± bandK × σ（σ = madK × MAD）
-    madK: 1.4826,          // MAD → σ 转换系数（正态一致性常数）
-    bandWinMax: 8,         // 波动带历史窗口上限 K（5~8 场）
-    bandWinMin: 3,         // 波动带历史残差最少场次：不足用班级残差标准差替代，标「波动带近似」
-    bandMin: 6,            // 波动带半宽下限（%）：防样本少 / 波动小导致带过窄而噪声误触发
-    confirmBreaks: 2,      // 后半段异动场次下限（持续性确认，进步/退步对称）
-    minTasks: 4,           // 周期最少有效场次 n ≥ 4
-    minHalf: 2,            // 前 / 后半段各 ≥ 2 场（floor(n/2) 分段）
-    lowP: 60,              // 低位水平线（%）：avg_p < 60 且 avg_r < −lowRSDK × SD_r 双条件
-    lowRSDK: 0.5,          // 低位残差系数：avg_r < −0.5 × SD_r
-    midHighPct: 40,        // 中 / 高位年级分位线（%）：年级分位 ≥ 40%
-    reboundEps: 2,         // 趋势无回升判定（%）：Δ ≤ 0 或 R_post ≤ R_pre + 2
-    lowPeriods: 2          // 持续低位连续命中周期数：≥ 2（周期不重叠）
+    B: 10,   // 波动带（百分点）：偏离平时水平 ≥10 个百分点算异常
+    k: 2,    // 确认次数：近期连续 2 次越限才从「单次波动」升级为「预警」
+    m: 2,    // 缺交阈值：连续 2 次未交（缺考）触发缺交预警
+    H: 30    // 半衰期（天）：30 天前那次成绩的权重是最新那次的一半
 };
 
-// 状态定义（V2.0 六状态，按判定优先级排序；watch=true 计入「需关注」；hint=教师语言的一句话判定口径，供图例与浮层复用）
+// 派生量：全部由 B / H 推出，不占参数额度（位置分界 ±B/2、异常界 2B、近期窗 H/2、基线窗 4H、粗颗粒满分 200/B）
+const ST_STATUS_DERIVED = {
+    posEdge: ST_STATUS_RULES.B / 2,
+    anomalyEdge: ST_STATUS_RULES.B * 2,
+    nearDays: ST_STATUS_RULES.H / 2,
+    baseDays: ST_STATUS_RULES.H * 4,
+    coarseFull: 200 / ST_STATUS_RULES.B
+};
+
+// 模拟任务序列（班级口径，全班共用）：days = 距最新一次任务的天数
+// 口径说明：原型以最新任务日为基准日（真实接入后基准 = 当天）；学案 / 通用题卡 / 听写卡不纳入
+const ST_TASKS = [
+    { name: '阅读理解限时练', type: '作业', date: '2026-09-29', days: 0,  full: 40,  classRate: 76.5 },
+    { name: '语法填空专项',   type: '作业', date: '2026-09-22', days: 7,  full: 30,  classRate: 71.2 },
+    { name: '完形填空课时练', type: '作业', date: '2026-09-15', days: 14, full: 50,  classRate: 74.0 },
+    { name: '书面表达',       type: '作业', date: '2026-09-08', days: 21, full: 15,  classRate: 68.8 },
+    { name: '第一单元检测',   type: '考试', date: '2026-09-01', days: 28, full: 100, classRate: 72.6 },
+    { name: '词汇与语法周测', type: '考试', date: '2026-08-25', days: 35, full: 60,  classRate: 70.5 }
+];
+
+// 状态定义（V3.0：趋势 4 态 + 位置 3 档 + 硬标记 3 类，组合成 8 种徽章显示态；按显示优先级排序）
+// watch=true 计入「需关注」；hint = 教师语言的一句话判定口径（供图例浮层复用）；advice = 对应教学动作
 const ST_STATUS_DEFS = {
-    pending: { label: '待观察',   cls: 'wtag-pend', watch: false, advice: '样本不足不判趋势：补足有效场次（≥4 场且前/后半段各 ≥2 场）后再评估', hint: '有效作答不足 4 次，或成绩起伏过大，数据太少不判趋势' },
-    cliff:   { label: '断崖下跌', cls: 'wtag-down', watch: true,  advice: '紧急排查近期诱因（状态 / 难度跳变 / 知识断层），优先个别辅导', hint: '后一半平均得分率比前一半低 8 个百分点以上，且至少 2 次明显低于平时水平' },
-    low:     { label: '持续低位', cls: 'wtag-low',  watch: true,  advice: '系统性补基础：先做前置诊断，再安排同点巩固', hint: '近一个月平均得分率不到 60%，长期低于班级平均，连续两个周期没有起色' },
-    lowUp:   { label: '低位回升', cls: 'wtag-up',   watch: false, advice: '干预见效：保持当前节奏，每周滚动复测确认稳定', hint: '原来长期低位，后一半比前一半高 8 个百分点以上，且至少 2 次超过平时水平' },
-    up:      { label: '明显进步', cls: 'wtag-up',   watch: false, advice: '正向激励：可适度提高任务挑战度', hint: '原来中等以上，后一半比前一半高 8 个百分点以上，且有 2 次以上持续确认' },
-    flat:    { label: '平稳',     cls: '',          watch: false, advice: '按既有教学节奏推进', hint: '成绩没有明显上涨或下跌' }
+    absent:  { label: '缺交预警',   cls: 'wtag-absent',  watch: true,  advice: '先联系学生 / 家长确认原因，再判断学业状态', hint: '连续 2 次没交作业或考试缺考（与「数据不足」是两回事）' },
+    anomaly: { label: '单场异常',   cls: 'wtag-anomaly', watch: false, advice: '先核实是否缺考、白卷或录入有误，再下结论', hint: '最近一次比平时低 20 个百分点以上，超出正常波动范围' },
+    pending: { label: '数据积累中', cls: 'wtag-pend',    watch: false, advice: '满 2 次有效任务后再判断趋势', hint: '近两周有效任务不足 2 次，暂不判断趋势' },
+    down:    { label: '下滑预警',   cls: 'wtag-down',    watch: true,  advice: '查看失分任务，生成前序补偿练习，安排个别辅导', hint: '近两周比平时低 10 个百分点以上，且连续 2 次都在平时水平下方' },
+    up:      { label: '进步',       cls: 'wtag-up',      watch: false, advice: '适度提高任务挑战度，保持当前节奏', hint: '近两周比平时高 10 个百分点以上，且连续 2 次都在平时水平上方' },
+    rise:    { label: '位置回升',   cls: 'wtag-up',      watch: false, advice: '保持节奏，滚动复测确认稳定', hint: '原来比班级平均低 5 个百分点以上，现在已经回到班内中位' },
+    lag:     { label: '持续落后',   cls: 'wtag-low',     watch: true,  advice: '系统性补基础：先做前置诊断，再安排同点巩固', hint: '平时就比班级平均低 5 个百分点以上，且趋势平稳' },
+    wave:    { label: '单次波动',   cls: 'wtag-wave',    watch: false, advice: '不进预警名单，下一次任务继续观察', hint: '只有 1 次偏离平时水平，还没形成趋势' },
+    flat:    { label: '平稳',       cls: '',             watch: false, advice: '按既有教学节奏推进', hint: '没有明显上涨或下跌' }
 };
 
-// 演示数据植入模式：让 17 人演示班覆盖 V2.0 各状态分支（状态仍由算法真实算出，非硬编码名单）
+// 演示植入：只决定「生成哪一条模拟序列」，状态仍由 V3.0 规则真实算出（不是硬编码状态名单）
+// bias0 = 最早一次与班级平均的差（百分点），bias1 = 最近一次与班级平均的差
 const ST_STATUS_PLANT = {
-    40320: { mode: 'cliff',   base: 78 },   // 孙壮峰：中高位 → 后半段系统性下滑
-    40316: { mode: 'cliff',   base: 72 },   // 马天翼
-    40315: { mode: 'low',     base: 52 },   // 吕馨凝：长期低位
-    40305: { mode: 'low',     base: 48 },   // 杜新泽
-    40313: { mode: 'lowUp',   base: 49 },   // 刘鸿锦：低位回升（默认选中学生，演示正向反馈）
-    40319: { mode: 'up',      base: 68 },   // 史津谊：明显进步
-    40311: { mode: 'up',      base: 66 },   // 李世贤
-    40306: { mode: 'pending', base: 51, why: 'n' },    // 甘子玉：有效场次不足（待观察）
-    40307: { mode: 'pending', base: 55, why: 'band' }  // 韩冰月：波动带不可用（待观察）
+    40320: { mode: 'down',    bias0: 10,  bias1: -12 },  // 孙壮峰：从高 10 个百分点滑到低 12（下滑预警）
+    40316: { mode: 'down',    bias0: 9,   bias1: -12 },  // 马天翼
+    40315: { mode: 'lag',     bias0: -9,  bias1: -10 },  // 吕馨凝：长期落后
+    40305: { mode: 'lag',     bias0: -11, bias1: -8 },   // 杜新泽
+    40313: { mode: 'lagUp',   bias0: -14, bias1: 4 },    // 刘鸿锦：落后 → 赶上（默认选中学生，演示正向关注）
+    40319: { mode: 'up',      bias0: -12, bias1: 12 },   // 史津谊：明显进步
+    40311: { mode: 'up',      bias0: -11, bias1: 9 },    // 李世贤
+    40317: { mode: 'rise',    bias0: -9,  bias1: 1 },    // 马馨然：位置回升（趋势平稳，但位置追上来了）
+    40306: { mode: 'thin',    bias0: 3,   bias1: 4 },    // 甘子玉：新转入，近两周仅 1 次有效任务（数据积累中）
+    40307: { mode: 'anomaly', bias0: 3,   bias1: 2 },    // 韩冰月：最近一次骤降（缺考 / 白卷 / 录入待核实）
+    40308: { mode: 'none' },                             // 韩秉正：本周期全部未交（未学习 + 缺交预警）
+    40314: { mode: 'absent',  bias0: -3,  bias1: -5 },   // 刘星宇：最近连续 2 次未交
+    40312: { mode: 'wave',    bias0: 1,   bias1: 0 }     // 李梓轩：单次波动
 };
 
-// 单生状态（模拟）：原型无真实数据接入，状态与展示用判定数字（Δ / 波动带 L·U / 突破场次 n_low·n_high /
-// 有效场次 / R_pre·R_post / avg_p·avg_r）按学号稳定模拟生成，仅用于演示 UI 与联动；
-// 真实计算口径（留一法残差 / MAD 波动带 / 低位双条件 / 持续性确认 / Δ_th 校准）见 PRD XK-10，此处不实时计算。
+// 单生状态（模拟输入 + 真实计算）：先按学号稳定生成 6 次任务的模拟序列，再按 V3.0 口径算出
+// L（长期基线差）/ S（近期水平差）/ Δ = S − L / 位置档 / 趋势态，最后按优先级决定徽章显示态。
+// 关键差别：不是「先定状态再造数字」，而是同一份序列既出状态又出数字，两者天然自洽、可手算复核。
 function stSimStatus(s) {
-    const R = ST_STATUS_RULES;
+    const R = ST_STATUS_RULES, D = ST_STATUS_DERIVED;
     const plant = ST_STATUS_PLANT[s.id] || null;
-    const assigned = 6;                                        // 纳入周期的任务场次（模拟）
-    const none = !plant && stSeed(s.id * 11 + 29) > 0.94;      // 个别学生全周期未提交（未学习）
-    const plantWhy = plant && plant.mode === 'pending' ? (plant.why || 'n') : null;
-    // 有效场次：未学习 0 / 待观察(why=n) 2 / 待观察(why=band) 4 / 其余 4~6 场
-    const missed = none ? assigned : plantWhy === 'n' ? 4 : plantWhy === 'band' ? 2 : Math.floor(stSeed(s.id * 3 + 11) * 3);
-    const validN = assigned - missed;
-    const submitRate = Math.round(validN / assigned * 10000) / 100;
-    const avgRate = none ? 0 : (plant ? plant.base : Math.round((42 + stSeed(s.id * 5 + 17) * 48) * 10) / 10);
-    const distLevel = none ? '未学习' : (avgRate >= 85 ? '优秀' : avgRate >= 70 ? '良好' : avgRate >= 60 ? '合格' : '待合格');
-    const level = avgRate < R.lowP ? 'low' : avgRate < 85 ? 'mid' : 'high';
+    const mode = plant ? plant.mode : 'auto';
+    const bias0 = plant && plant.bias0 !== undefined ? plant.bias0 : (stSeed(s.id * 5 + 17) - 0.5) * 8;
+    const bias1 = plant && plant.bias1 !== undefined ? plant.bias1 : bias0 + (stSeed(s.id * 7 + 3) - 0.5) * 5;
+    const noise = Math.max(2, Math.abs(bias1 - bias0) * 0.25);
 
-    // 状态判定（模拟 V2.0 优先级）：待观察 > 断崖下跌 > 持续低位 > 低位回升 > 明显进步 > 平稳
-    const key = (none || plantWhy) ? 'pending' : (plant ? plant.mode : 'flat');
-    const def = ST_STATUS_DEFS[key];
+    // 1) 逐次记录：相对位置由 bias0（最早）线性走到 bias1（最近），叠加按学号稳定的噪声
+    const records = ST_TASKS.map((t, i) => {
+        const prog = i / (ST_TASKS.length - 1);            // 0 = 最近一次，1 = 最早一次
+        let d = bias1 + (bias0 - bias1) * prog + (stSeed(s.id * 41 + i * 13) - 0.5) * 2 * noise;
+        let missed = false, noData = false;
+        if (mode === 'none') missed = true;
+        else if (mode === 'absent' && i <= 1) missed = true;                             // 最近连续 2 次未交
+        else if (mode === 'thin' && i >= 1) noData = true;                               // 转入前无数据（不是缺交）
+        else if (mode === 'wave' && i === 1) d = -(R.B + 3) - stSeed(s.id * 3) * 3;      // 仅此一次骤降
+        else if (mode === 'anomaly' && i === 0) d = -R.B * 2 - 6 - stSeed(s.id * 3) * 4;  // 最近一次骤降（待核实）
+        const rate0 = Math.min(100, Math.max(0, t.classRate + d));
+        const score = missed ? null : Math.round(rate0 / 100 * t.full * 2) / 2;          // 得分按 0.5 分取整
+        const pRate = missed ? null : Math.round(score / t.full * 1000) / 10;            // 回算得分率：与「得分 ÷ 满分」完全一致
+        return {
+            name: t.name, type: t.type, date: t.date, days: t.days, full: t.full,
+            classRate: t.classRate, classAvg: Math.round(t.classRate / 100 * t.full * 10) / 10,
+            score, rate: pRate,
+            d: missed ? null : Math.round((pRate - t.classRate) * 10) / 10,
+            coarse: t.full <= D.coarseFull, missed, noData,
+            w: Math.pow(2, -t.days / R.H),                                                // 半衰期权重（趋势用）
+            w2: Math.pow(2, -t.days / (R.H * 2))                                         // 位置档权重（2H，衰减小）
+        };
+    });
 
-    // 展示用判定数字（模拟，非真实计算）
-    const dir = key === 'cliff' ? -1 : (key === 'up' || key === 'lowUp') ? 1 : 0;   // 趋势方向
-    const delta = key === 'pending' ? 0
-        : dir === 0
-            ? Math.round((stSeed(s.id * 7 + 3) - 0.5) * 2 * (R.deltaTh - 1) * 10) / 10
-            : dir * Math.round((R.deltaTh + 1 + stSeed(s.id * 7 + 3) * 6) * 10) / 10;
-    // 前半段残差均值：低位类起于负区、断崖下跌起于正区、其余 ±3% 内
-    const rPre = key === 'pending' ? 0
-        : (key === 'low' || key === 'lowUp') ? -Math.round((2 + stSeed(s.id * 23 + 9) * 8) * 10) / 10
-        : key === 'cliff' ? Math.round((1 + stSeed(s.id * 23 + 9) * 4) * 10) / 10
-        : Math.round((stSeed(s.id * 23 + 9) - 0.5) * 6 * 10) / 10;
-    const rPost = key === 'pending' ? 0 : Math.round((rPre + delta) * 10) / 10;
-    // 平均残差（低位类 < −4% 满足 avg_r < −0.5×SD_r；明显进步为正）
-    const avgR = key === 'pending' ? 0
-        : (key === 'low' || key === 'lowUp') ? -Math.round((4 + stSeed(s.id * 29 + 13) * 8) * 10) / 10
-        : key === 'up' ? Math.round((2 + stSeed(s.id * 29 + 13) * 6) * 10) / 10
-        : key === 'cliff' ? Math.round((1 + stSeed(s.id * 29 + 13) * 4) * 10) / 10
-        : Math.round((stSeed(s.id * 29 + 13) - 0.5) * 8 * 10) / 10;
-    // 个人波动带（模拟）：半宽 = max(bandMin, 6~10%)，中心取 avgR；
-    // 待观察(why=band) = 历史残差 <3 场且无班级残差标准差替代 → 波动带不可用
-    const bandOK = plantWhy !== 'band';
-    const halfW = Math.round((R.bandMin + stSeed(s.id * 13 + 5) * 4) * 10) / 10;
-    const bandL = bandOK ? Math.round((avgR - halfW) * 10) / 10 : null;
-    const bandU = bandOK ? Math.round((avgR + halfW) * 10) / 10 : null;
-    // 波动带来源：低位类与部分平稳学生历史场次少 → 班级残差标准差替代（「波动带近似」）
-    const bandSrc = !bandOK ? 'none'
-        : ((key === 'low' || key === 'lowUp' || key === 'pending' || (key === 'flat' && stSeed(s.id * 31 + 3) < 0.3)) ? 'approx' : 'history');
-    // 突破场次：断崖下跌后半段 ≥2 场低于 L；低位回升 / 明显进步 ≥2 场高于 U；平稳 0~1 场
-    const nLow = key === 'cliff' ? R.confirmBreaks + Math.floor(stSeed(s.id * 19 + 1) * 2)
-        : (key === 'flat' && stSeed(s.id * 19 + 1) < 0.35) ? 1 : 0;
-    const nHigh = (key === 'up' || key === 'lowUp') ? R.confirmBreaks + Math.floor(stSeed(s.id * 19 + 1) * 2)
-        : (key === 'flat' && stSeed(s.id * 19 + 1) >= 0.35 && stSeed(s.id * 37 + 2) < 0.25) ? 1 : 0;
-
-    const rec = {
-        id: s.id, name: s.name, assigned, missed, submitRate, validN,
-        avgRate, distLevel, level,
-        delta, rPre, rPost, avgR, bandL, bandU, bandSrc, nLow, nHigh,
-        key, label: def.label, cls: def.cls, watch: def.watch, advice: def.advice, hint: def.hint, reason: ''
+    const valid = records.filter(r => !r.missed && !r.noData);
+    const missedN = records.filter(r => r.missed).length;
+    const wMean = (list, get) => {
+        const sw = list.reduce((a, r) => a + r.w, 0);
+        return sw ? list.reduce((a, r) => a + r.w * get(r), 0) / sw : null;
+    };
+    const wMeanP = list => {                        // 位置档专用：半衰期取 2H（衰减小，反映「平时在班里哪一档」）
+        const sw = list.reduce((a, r) => a + r.w2, 0);
+        return sw ? list.reduce((a, r) => a + r.w2 * r.d, 0) / sw : null;
     };
 
-    // 悬停说明（面向教师的一句话结论）：只保留最关键的对比数字（前后半段差多少、几次低于/高于平时水平），
-    // 不再展示 Δ_th / SD_r / MAD / R_pre 等判定口径；完整算法口径见 PRD XK-10，不占用教师阅读成本
-    if (none) {
-        rec.reason = '本周期一次都没交，暂时无法判断，需要先补交作业。';
-    } else if (key === 'pending') {
-        rec.reason = plantWhy === 'band'
-            ? `近 ${validN} 次成绩忽高忽低，看不出稳定水平，先继续观察。`
-            : `本周期只交了 ${validN} 次，次数太少，暂时无法判断趋势。`;
-    } else if (key === 'cliff') {
-        rec.reason = `近 ${validN} 次任务里，后一半平均得分率比前一半低 ${Math.abs(rec.delta)} 个百分点，其中 ${nLow} 次明显低于平时水平，属于明显下滑。`;
-    } else if (key === 'low') {
-        rec.reason = `近一个月平均得分率只有 ${avgRate}%，比班级平均低 ${Math.abs(avgR)} 个百分点，且一直没有回升。`;
-    } else if (key === 'lowUp') {
-        rec.reason = `原来一直在低位，后一半平均得分率比前一半高 ${rec.delta} 个百分点，其中 ${nHigh} 次超过平时水平，正在回升。`;
+    // 2) 单场骤降（偏离位置 ≥2B）先截尾：不参与任何基线计算，避免污染「平时水平」
+    const P0 = wMeanP(valid);
+    const extreme = P0 === null ? [] : valid.filter(r => r.d <= P0 - D.anomalyEdge);
+    const clean = valid.filter(r => extreme.indexOf(r) < 0);
+
+    // 3) 三个量：P = 全期位置（2H 弱衰减）、L = 近期窗口之前的平时水平、S = 近期水平（H/2 窗口）
+    //    Δ = S − L：前后两段互不重叠——若近期值同时进入基线，会把差值压平（这就是 V2.0 前后半段对比的连续化）
+    const P = wMeanP(clean);
+    const nearList = valid.filter(r => r.days <= D.nearDays);
+    const baseList = clean.filter(r => r.days > D.nearDays);
+    const S = wMean(nearList.filter(r => extreme.indexOf(r) < 0), r => r.d);
+    const L = wMean(baseList, r => r.d);
+    const delta = (S === null || L === null) ? null : Math.round((S - L) * 10) / 10;
+
+    // 4) 位置档（相对班级，与趋势解耦）：用 P 与 ±B/2 分界；位置回升 = 最早几次落后、而现在回到班内中位
+    const earlyAvg = valid.length >= R.k ? wMean(valid.slice(-R.k), r => r.d) : null;
+    const pos = P === null ? 'sync' : (P <= -D.posEdge ? 'lag' : (P >= D.posEdge ? 'lead' : 'sync'));
+    const posUp = earlyAvg !== null && P !== null && earlyAvg <= -D.posEdge && P > -D.posEdge;
+
+    // 5) 趋势判定：Δ 越 B 且最近 k 次同侧 → 趋势态；近期只有 1 次越限 → 单次波动
+    const recentValid = valid.slice(0, R.k);
+    const allBelow = recentValid.length >= R.k && recentValid.every(r => r.d < L);
+    const allAbove = recentValid.length >= R.k && recentValid.every(r => r.d > L);
+    let trend = 'flat';
+    if (delta !== null && L !== null) {
+        if (delta <= -R.B && allBelow) trend = 'down';
+        else if (delta >= R.B && allAbove) trend = 'up';
+        else if (nearList.filter(r => Math.abs(r.d - L) >= R.B).length === 1) trend = 'wave';
+    }
+
+    // 6) 一级指标：平均得分率（半衰期加权，绝对水平）；全未交 = 0（未学习），与位置轴（相对班级）互为补充
+    const avgRate = Math.round((wMean(valid, r => r.rate) || 0) * 10) / 10;
+    const allMissed = missedN === records.length;
+    const distLevel = allMissed ? '未学习' : (avgRate >= 85 ? '优秀' : avgRate >= 70 ? '良好' : avgRate >= 60 ? '合格' : '待合格');
+    const level = avgRate < 60 ? 'low' : avgRate < 85 ? 'mid' : 'high';
+
+    // 7) 硬标记与显示态优先级：缺交 > 单场异常 > 数据积累中 > 下滑 > 进步 > 位置回升 > 持续落后 > 单次波动 > 平稳
+    let consecutiveMiss = 0;
+    for (const r of records) { if (r.missed) consecutiveMiss++; else break; }
+    const isAbsent = consecutiveMiss >= R.m;
+    // 单场异常：最新一次跌破 2B，且「这一次相对上一次」本身就是陡降（也 ≥2B）
+    // 不用「上一次是否低于平时水平」作区分：渐进下滑的倒数第二次往往就只低一点点，判据会随噪声翻转（实测只差 0.1 个百分点）
+    const prevD = records[1] && records[1].d !== null ? records[1].d : null;
+    const isAnomaly = !isAbsent && records[0].d !== null && L !== null
+        && records[0].d <= L - D.anomalyEdge
+        && (prevD === null || prevD - records[0].d >= D.anomalyEdge);
+    const isThin = !isAbsent && !isAnomaly && (nearList.length < R.k || L === null);
+    const key = isAbsent ? 'absent'
+        : isAnomaly ? 'anomaly'
+            : isThin ? 'pending'
+                : trend === 'down' ? 'down'
+                    : trend === 'up' ? 'up'
+                        : posUp ? 'rise'
+                            : pos === 'lag' ? 'lag'
+                                : trend === 'wave' ? 'wave'
+                                    : 'flat';
+    const def = ST_STATUS_DEFS[key];
+
+    const rec = {
+        id: s.id, name: s.name,
+        assigned: records.length, missed: missedN, consecutiveMiss,
+        submitRate: Math.round((records.length - missedN) / records.length * 10000) / 100,
+        validN: valid.length, nearN: nearList.length,
+        avgRate, distLevel, level,
+        L: L === null ? null : Math.round(L * 10) / 10,
+        S: S === null ? null : Math.round(S * 10) / 10,
+        P: P === null ? null : Math.round(P * 10) / 10,
+        delta, earlyAvg: earlyAvg === null ? null : Math.round(earlyAvg * 10) / 10,
+        pos, posUp, trend, key,
+        label: def.label, cls: def.cls, watch: def.watch, advice: def.advice, hint: def.hint,
+        tasks: records, reason: ''
+    };
+
+    // 8) 悬停说明（教师语言一句话）：只给关键的对比数字，不出现 B / k / L / Δ 等符号
+    const fmt = v => (v > 0 ? '+' : '') + v.toFixed(1);
+    const posTxt = pos === 'lag' ? '落后' : pos === 'lead' ? '领先' : '同步';
+    const lastR = records[0];
+    const devLast = lastR.d === null || L === null ? 0 : Math.abs(Math.round((lastR.d - L) * 10) / 10);
+    if (isAbsent) {
+        rec.reason = allMissed
+            ? `本周期 ${records.length} 次任务全部未交，先确认原因再判断学业状态。`
+            : `最近连续 ${consecutiveMiss} 次没交（${records.filter(r => r.missed).map(r => r.name).join('、')}），先确认原因再判断学业状态。`;
+    } else if (isAnomaly) {
+        rec.reason = `最近一次「${lastR.name}」比平时低 ${devLast} 个百分点，远超正常波动，建议先核实是否缺考、白卷或录入有误。`;
+    } else if (isThin) {
+        rec.reason = `近 ${D.nearDays} 天只有 ${nearList.length} 次有效任务，暂时不判断趋势。`;
+    } else if (key === 'down') {
+        rec.reason = `近两周与班级的平均差是 ${fmt(S)} 个百分点，平时是 ${fmt(L)} 个，低了 ${Math.abs(delta)} 个，且最近连续 ${R.k} 次都在平时水平之下（整体位置相对班级：${posTxt}）。`;
     } else if (key === 'up') {
-        rec.reason = `后一半平均得分率比前一半高 ${rec.delta} 个百分点，其中 ${nHigh} 次超过平时水平，属于明显进步。`;
+        rec.reason = `近两周与班级的平均差是 ${fmt(S)} 个百分点，平时是 ${fmt(L)} 个，高了 ${Math.abs(delta)} 个，且最近连续 ${R.k} 次都在平时水平之上（整体位置相对班级：${posTxt}）。`;
+    } else if (key === 'lag') {
+        rec.reason = `平时就比班级平均低 ${Math.abs(rec.L)} 个百分点，近两周没有明显变化。`;
+    } else if (key === 'wave') {
+        const wv = nearList.reduce((a, r) => (Math.abs(r.d - L) > Math.abs(a.d - L) ? r : a), nearList[0]);
+        rec.reason = `「${wv.name}」比平时${wv.d > L ? '高' : '低'} ${Math.abs(Math.round((wv.d - L) * 10) / 10)} 个百分点，但只有这 1 次，还没形成趋势。`;
+    } else if (key === 'rise') {
+        rec.reason = `原来比班级平均低 ${Math.abs(rec.earlyAvg)} 个百分点，现在回到 ${fmt(rec.P)}，已经追上班级中位。`;
     } else {
-        rec.reason = '成绩没有明显上涨或下跌，保持常规观察。';
+        rec.reason = `与班级平均的差稳定在 ${fmt(rec.P)} 个百分点左右，没有明显起伏。`;
     }
     return rec;
 }
 
-// 全部学生状态（模拟数据，一次性生成并缓存）：周期概览 KPI 卡 / 需关注弹层 / 学生学情筛选 / 列表徽章 同源
+// 全部学生状态（模拟输入 + 真实计算，一次性生成并缓存）：周期概览 KPI 卡 / 需关注弹层 / 学生学情筛选 / 列表徽章 同源
 const ST_STATUS_LIST = ST_STUDENTS.map(s => stSimStatus(s));
 const ST_STATUS_BY_ID = {};
 ST_STATUS_LIST.forEach(r => { ST_STATUS_BY_ID[r.id] = r; });
-// 需关注 = 断崖下跌 ∪ 持续低位；正向关注 = 低位回升 ∪ 明显进步（不计入需关注）；待观察不计入任何关注名单
-const WATCH_FOCUS_ID_SET = new Set(ST_STATUS_LIST.filter(r => r.watch).map(r => r.id));
-const WATCH_GROUPS = ['cliff', 'low', 'lowUp', 'up', 'pending'].map(k => ({
-    key: k, label: ST_STATUS_DEFS[k].label, watch: ST_STATUS_DEFS[k].watch,
-    note: k === 'pending' ? '数据不足 · 不计入需关注' : (ST_STATUS_DEFS[k].watch ? '' : '正向关注 · 不计入需关注'),
-    advice: ST_STATUS_DEFS[k].advice, students: ST_STATUS_LIST.filter(r => r.key === k)
+
+// 名单口径：需关注 = 缺交预警 ∪ 下滑预警 ∪ 持续落后；正向关注 = 进步 ∪ 位置回升（不计入需关注）；
+// 单场异常进「待核实」组，数据积累中与单次波动不进任何关注名单
+const WATCH_KEYS = ['absent', 'down', 'lag'];
+const WATCH_FOCUS_ID_SET = new Set(ST_STATUS_LIST.filter(r => WATCH_KEYS.indexOf(r.key) >= 0).map(r => r.id));
+const POSITIVE_ID_SET = new Set(ST_STATUS_LIST.filter(r => r.key === 'up' || r.posUp).map(r => r.id));
+const stCountByKey = k => ST_STATUS_LIST.filter(r => r.key === k).length;
+
+// 弹层分组：与名单口径一一对应，组内逐人给出判定依据（非硬编码名单）
+const WATCH_GROUPS = [
+    { key: 'absent', note: '', list: ST_STATUS_LIST.filter(r => r.key === 'absent') },
+    { key: 'down', note: '', list: ST_STATUS_LIST.filter(r => r.key === 'down') },
+    { key: 'lag', note: '', list: ST_STATUS_LIST.filter(r => r.key === 'lag') },
+    { key: 'anomaly', note: '待核实 · 不计入需关注', list: ST_STATUS_LIST.filter(r => r.key === 'anomaly') },
+    { key: 'pending', note: '数据积累中 · 不计入需关注', list: ST_STATUS_LIST.filter(r => r.key === 'pending') },
+    { key: 'up', note: '正向关注 · 不计入需关注', list: ST_STATUS_LIST.filter(r => r.key === 'up' || r.posUp) }
+].map(g => ({
+    key: g.key, note: g.note,
+    // 正向组同时包含「进步」与「位置回升」两类学生，组标题不能用单一状态名，否则会出现「标题写进步、名单里却是位置回升」的误读
+    label: g.key === 'up' ? ST_STATUS_DEFS.up.label + ' / ' + ST_STATUS_DEFS.rise.label : ST_STATUS_DEFS[g.key].label,
+    watch: ST_STATUS_DEFS[g.key].watch, advice: ST_STATUS_DEFS[g.key].advice, students: g.list
 }));
 
 // 「需关注学生」卡 hover 弹层：按状态分组 + 逐人判定依据（与算法同源，非硬编码名单）
@@ -2314,35 +2830,44 @@ function placeWatchPop(card, pop) {
     pop.style.maxHeight = avail < h ? Math.max(140, avail) + 'px' : '';
 }
 
-// 周期指标卡（迁移自校级学情报告平台 · 周期指标：六项指标与口径保持一致；
-// 达标率 / 顽固薄弱两卡为作业·考试整体口径：全维度末级节点，见 periodLeafNodes/periodLeafStubs）
+// 周期指标卡：六项指标全部实时计算——分母 / 分子均来自题目挂接集合与作答数据，无硬编码结果
 function renderPeriodKpis() {
     const el = El.periodKpiGrid;
     if (!el) return;
+    const m = ensurePeriodModel();
     const s = calcPeriodStats();
-    // 周期概览口径：作业/考试整体视角，统计全部维度（kp+ability）末级节点，不随维度切换
     const leafStubs = periodLeafStubs();
 
-    // 达标分布（达标 ≥80% / 薄弱 / 未掌握，未掌握阈值随档位配置联动；全维度末级节点）
+    // 达标分布（分母 = 题目挂接集合 mSet；达标线 =「掌握」档下限，未掌握线 = 最低档上界，随档位配置联动）
+    // 三类一律正算，禁用「总数 − 达标 − 薄弱」反算：反算会把无值节点静默算进「未掌握」
     const nodes = periodLeafNodes();
-    const goodCnt = nodes.filter(n => masteryOf(n) >= 80).length;
-    const weakCnt = nodes.filter(n => masteryOf(n) >= unmasteredThreshold() && masteryOf(n) < 80).length;
-    const poorCnt = nodes.length - goodCnt - weakCnt;
+    const goodLine = reachLine();
+    const lowLine = unmasteredThreshold();
+    const goodCnt = nodes.filter(n => n.mastery >= goodLine).length;
+    const weakCnt = nodes.filter(n => n.mastery >= lowLine && n.mastery < goodLine).length;
+    const poorCnt = nodes.filter(n => n.mastery < lowLine).length;
     const reachRate = nodes.length ? Math.round(goodCnt / nodes.length * 1000) / 10 : 0;
+    // 上周期达标率按当前档位重算（档位切到 4 档时达标线仍为 80，不能用手写常量）
+    const prevGood = m.prev.rows.filter(r => r.mastery >= goodLine).length;
+    const prevReach = m.prev.rows.length ? Math.round(prevGood / m.prev.rows.length * 1000) / 10 : 0;
+    const reachDelta = Math.round((reachRate - prevReach) * 10) / 10;
+    const stubDelta = leafStubs.length - m.prev.stubs.length;
 
     // 年级均（与本页期间得分率同口径：各次得分率算术平均）
     const gradeAvg = Math.round(periodTasks.reduce((a, t) => a + t.gradeRate, 0) / s.total * 10) / 10;
 
-    // 任务提交为演示口径；需关注学生与状态引擎 ST_STATUS_LIST 同源（学生学情「需关注」筛选同口径）
-    const submitDemo = { total: 288, done: 276, missing: 12 };
+    // 提交率由任务清单的实交人次求和得出（应交 = 班级人数 × 任务数）
+    const submit = m.submit;
+    // 需关注学生与状态引擎 ST_STATUS_LIST 同源（学生学情「需关注」筛选同口径）
+    // 计数一律走 stCountByKey，不按 WATCH_GROUPS 下标取值：分组顺序调整后下标会静默错位且不报错
     const focusDemo = {
-        total: WATCH_FOCUS_ID_SET.size,
-        cliff: WATCH_GROUPS[0].students.length,     // 断崖下跌
-        low: WATCH_GROUPS[1].students.length,       // 持续低位
-        lowUp: WATCH_GROUPS[2].students.length,     // 低位回升（正向，不计入需关注）
-        up: WATCH_GROUPS[3].students.length,        // 明显进步（正向，不计入需关注）
-        pending: WATCH_GROUPS[4].students.length,   // 待观察（样本不足，不计入需关注）
-        followRate: 72
+        total: WATCH_FOCUS_ID_SET.size,             // 需关注 = 缺交预警 ∪ 下滑预警 ∪ 持续落后
+        absent: stCountByKey('absent'),             // 缺交预警（需关注）
+        down: stCountByKey('down'),                 // 下滑预警（需关注）
+        lag: stCountByKey('lag'),                   // 持续落后（需关注）
+        anomaly: stCountByKey('anomaly'),           // 单场异常（待核实，不计入需关注）
+        pending: stCountByKey('pending'),           // 数据积累中（不计入需关注）
+        positive: POSITIVE_ID_SET.size              // 正向关注 = 进步 ∪ 位置回升（不计入需关注）
     };
 
     const cards = [
@@ -2360,25 +2885,25 @@ function renderPeriodKpis() {
         },
         {
             label: '知识点达标率', ic: 'fa-compass', value: reachRate, unit: '%', tone: '', goto: 'analysis',
-            delta: s.dRate !== null ? '+5%' : null, deltaCls: 'up',
-            deltaTip: '相较于年级知识点达标率的差值百分点（本班 − 年级）',
-            tip: '全部维度（知识点+能力）末级节点中，达标（掌握度 ≥80%）节点数 ÷ 已覆盖末级节点总数；按作业/考试整体统计，不随维度切换',
-            sub: `末级节点 <b>${nodes.length}</b> 个 · 达标 <b>${goodCnt}</b> · 薄弱 <b>${weakCnt}</b> · 未掌握 <b>${poorCnt}</b><span class="pk-goto-cta"><i class="fas fa-arrow-right"></i> 查看明细</span>`
+            delta: (reachDelta > 0 ? '+' : '') + reachDelta + '%', deltaCls: reachDelta >= 0 ? 'up' : 'down',
+            deltaTip: `与上一周期（挂接 ${m.prev.n} 个节点 · 达标率 ${prevReach}%）的差值百分点`,
+            tip: `题目挂接集合（mSet，${nodes.length} 个末级节点）中掌握度 ≥${goodLine}% 的节点数 ÷ 挂接节点总数；按作业/考试整体统计，不随维度切换`,
+            sub: `挂接末级节点 <b>${nodes.length}</b> 个 · 达标 <b>${goodCnt}</b> · 薄弱 <b>${weakCnt}</b> · 未掌握 <b>${poorCnt}</b><span class="pk-goto-cta"><i class="fas fa-arrow-right"></i> 查看明细</span>`
         },
         {
             label: '顽固薄弱知识点', ic: 'fa-cubes', value: leafStubs.length, unit: '个', tone: 'tone-bad', goto: 'analysis-heat',
-            tip: '全部维度（知识点+能力）末级节点中，同一节点在 ≥3 次不同任务失分率 ≥40%；按作业/考试整体统计，不随维度切换',
-            sub: `较上周期 <b>+1</b> 个 · 已改善 2 个 · 新增 3 个<span class="pk-goto-cta"><i class="fas fa-arrow-right"></i> 查看顽固项</span>`
+            tip: '题目挂接集合内，同一节点在 ≥3 次不同任务失分率 ≥40%（含能力维度）；按作业/考试整体统计，不随维度切换',
+            sub: `较上周期 <b>${stubDelta > 0 ? '+' : ''}${stubDelta}</b> 个 · 已改善 ${m.prev.improved.length} 个 · 新增 ${m.prev.added.length} 个<span class="pk-goto-cta"><i class="fas fa-arrow-right"></i> 查看顽固项</span>`
         },
         {
-            label: '提交率', ic: 'fa-inbox', value: 95.8, unit: '%', tone: '',
-            tip: '周期内任务实交人次 ÷ 应交人次（无迟交单列口径）',
-            sub: `应交 <b>${submitDemo.total}</b> 人次 · 已交 <b>${submitDemo.done}</b> · 未交 <b>${submitDemo.missing}</b>`
+            label: '提交率', ic: 'fa-inbox', value: submit.rate, unit: '%', tone: '',
+            tip: '周期内任务实交人次 ÷ 应交人次（应交 = 班级人数 × 任务数；无迟交单列口径）',
+            sub: `应交 <b>${submit.should}</b> 人次 · 已交 <b>${submit.done}</b> · 未交 <b>${submit.missing}</b>`
         },
         {
             label: '需关注学生', ic: 'fa-exclamation-triangle', value: focusDemo.total, unit: '人', tone: 'tone-bad', watch: true,
-            tip: '本周期成绩断崖下跌或持续低位的学生合计；低位回升、明显进步、数据不足者不计入。',
-            sub: `断崖下跌 <b>${focusDemo.cliff}</b> · 持续低位 <b>${focusDemo.low}</b> · 低位回升 <b>${focusDemo.lowUp}</b> · 明显进步 <b>${focusDemo.up}</b> · 待观察 <b>${focusDemo.pending}</b><br>已跟进 <b>${focusDemo.followRate}%</b><span class="pk-watch-cta"><i class="fas fa-users"></i> 查看名单</span>`
+            tip: '本周期「缺交预警 + 下滑预警 + 持续落后」的学生合计；正向关注（进步 / 位置回升）、单场异常（待核实）、数据积累中均不计入。',
+            sub: `缺交预警 <b>${focusDemo.absent}</b> · 下滑预警 <b>${focusDemo.down}</b> · 持续落后 <b>${focusDemo.lag}</b><br>正向关注 <b>${focusDemo.positive}</b> · 待核实 <b>${focusDemo.anomaly}</b> · 数据积累中 <b>${focusDemo.pending}</b><span class="pk-watch-cta"><i class="fas fa-users"></i> 查看名单</span>`
         }
     ];
 
@@ -2461,7 +2986,7 @@ function renderPeriodTaskTable() {
     const diff = Math.round((s.pRate - gradeAvg) * 10) / 10;
     const scoreSum = periodTasks.reduce((a, t) => a + (t.score || 0), 0);
     const submitSum = periodTasks.reduce((a, t) => a + (t.submitted || 0), 0);
-    const shouldSum = 48 * s.total;          // 每次任务 48 人应交（与顶部提交率演示口径一致）
+    const shouldSum = CLASS_SIZE * s.total;   // 每次任务全员应交（应交人次 = 班级人数 × 任务数，与提交率卡同口径）
     const leafStubs = periodLeafStubs();   // 合计行薄弱项与周期概览同口径：全维度末级节点
     const worstKp = leafStubs.length ? leafStubs[0].name : '—';
 
@@ -2485,7 +3010,7 @@ function renderPeriodTaskTable() {
             `<td class="task-name" title="${escapeHTML(t.full)}">${escapeHTML(t.name)}</td>` +
             `<td><span class="badge ${t.type === 'exam' ? 'badge-danger' : 'badge-primary'}">${t.type === 'exam' ? '考试' : '作业'}</span></td>` +
             `<td>${t.score ?? '—'}</td>` +
-            `<td>${t.submitted ?? '—'}/48</td>` +
+            `<td>${t.submitted ?? '—'}/${CLASS_SIZE}</td>` +
             `<td class="rate-cell">${t.classRate}</td>` +
             `<td class="rate-cell muted">${t.gradeRate}</td>` +
             `<td class="rate-cell ${d >= 0 ? 'td-up' : 'td-down'}">${d > 0 ? '+' : ''}${d}%</td>` +
@@ -2647,9 +3172,10 @@ function renderHeatView() {
     // 渲染层过滤：目录中关闭的一级节点对应考核项不展示（未命中索引的行默认保留）
     const shown = dirStateOf();
     const heatRows = heatData[currentDimension].filter(r => {
-        const mod = currentDimension === 'kp'
-            ? (kgIndex.byName[r.name] && kgIndex.byName[r.name].module)
-            : ablIndex.byName[r.name];
+        // 行数据自带 module（由题库派生时写入），优先取之；缺失时回退图谱索引
+        const mod = r.module != null
+            ? r.module
+            : (currentDimension === 'kp' ? (kgIndex.byName[r.name] && kgIndex.byName[r.name].module) : ablIndex.byName[r.name]);
         return mod == null || shown[mod] !== false;
     });
     const rows = heatRows.map(r => {
@@ -2693,7 +3219,8 @@ function renderHeatView() {
     });
     html += '</tbody></table></div>';
 
-    html += '<div class="heat-legend"><span>失分率：</span>' +
+    html += '<div class="heat-legend"><span>失分率（固定五档）：</span>' +
+        '<span><i class="sw h0"></i>0% 无失分</span>' +
         '<span><i class="sw h1"></i>&lt;20% 轻度</span>' +
         '<span><i class="sw h2"></i>20~40% 中度</span>' +
         '<span><i class="sw h3"></i>40~60% 较重</span>' +
@@ -3002,7 +3529,7 @@ function renderKgStubList() {
     }
     box.innerHTML = stub.map((k, i) => {
         const info = kgIndex.byName[k.name];
-        const chap = info ? info.path : '—';
+        const chap = k.path || (info ? info.path : '—');
         const lvCls = i === 0 ? 'lv1' : i === 1 ? 'lv2' : i === 2 ? 'lv3' : 'lv';
         const recent = k.values ? k.values.filter(v => v !== null).slice(-1)[0] : null;
         return `<div class="kg-stub-item" data-stub="${escapeHTML(k.name)}" title="点击在热力演进视图中定位该考核项">
@@ -3188,22 +3715,28 @@ const KG_ACH_RISE_PP = 8;   // 明显进步判定：首末有效场次得分率�
 function renderKgAch() {
     const sumEl = document.getElementById('kgAchSummary');
     if (!sumEl) return;
-    const line = masteryLevels[0].min;            // 达标线（默认 3 档 = 80）
+    const m = ensurePeriodModel();   // 达标线与正向变化均依赖派生后的 heatData / 树掌握度
+    const line = reachLine();            // 达标线（3 档 / 4 档均为 80）
     const skilledLine = Math.max(90, line);       // 熟练线（默认 90）
-    const nodes = flattenTree(currentTree(), true);
-    const good = nodes.filter(n => masteryOf(n) >= line).sort((a, b) => masteryOf(b) - masteryOf(a));
+    // 统计单元 = 题目挂接的末级节点（kp 维度取 mSet、能力维度取 ability），与顶部达标率卡严格同口径；
+    // 不能拿「全树 derived 节点」当单元：父层是子节点均值、会以层级数量重复命中，未覆盖子树仍带静态基线值
+    // （那是演示值不是证据，计入会把「未考查」当成「已达标」，铁律二：未知 ≠ 0）
+    const leafRows = currentDimension === 'kp' ? m.mSet : m.ability;
+    const leafNames = new Set(leafRows.map(r => r.name));
+    const evid = flattenTree(currentTree(), true).filter(n => leafNames.has(n.name));
+    const good = evid.filter(n => masteryOf(n) >= line).sort((a, b) => masteryOf(b) - masteryOf(a));
     const skilled = good.filter(n => masteryOf(n) >= skilledLine);
     const passed = good.filter(n => masteryOf(n) < skilledLine);
 
-    // 标签徽标 = 已达标节点数（树口径全量，与顶部达标率卡同口径）
+    // 标签徽标 = 已达标节点数（当前维度挂接单元口径，与顶部达标率卡分子同源）
     const cntEl = document.getElementById('kgAchCount');
     if (cntEl) cntEl.innerText = good.length;
 
     const noteEl = document.getElementById('kgAchNote');
-    if (noteEl) noteEl.innerText = `达标线 ≥${line}%（随「设置掌握程度」档位联动）· 统计为全量${dimensionLabel()}，不受左侧目录筛选影响`;
+    if (noteEl) noteEl.innerText = `达标线 ≥${line}%（随「设置掌握程度」档位联动）· 统计范围 = 本周期题目挂接的${dimensionLabel()} ${evid.length} 个（与顶部达标率卡同一批挂接单元，此处只取当前维度），不受左侧目录筛选影响`;
     sumEl.innerHTML = [
         `<b>${good.length}</b> 个已达标`,
-        `占全部 ${nodes.length} 个的 <b>${nodes.length ? Math.round(good.length / nodes.length * 100) : 0}%</b>`,
+        `占挂接 ${evid.length} 个的 <b>${evid.length ? Math.round(good.length / evid.length * 100) : 0}%</b>`,
         `其中熟练掌握 <b>${skilled.length}</b> 个`
     ].map(t => `<span>${t}</span>`).join('<span class="kg-diag-ov-sep">·</span>');
 
@@ -3212,12 +3745,13 @@ function renderKgAch() {
     const trendCntEl = document.getElementById('kgAchTrendCnt');
     const stable = [], newly = [], rising = [];
     (heatData[currentDimension] || []).forEach(r => {
-        const valid = (r.values || []).filter(v => v !== null && v !== undefined).map(v => 100 - v);
+        const valid = (r.values || []).filter(v => v !== null && v !== undefined).map(v => Math.round((100 - v) * 10) / 10);
         if (!valid.length) return;
         const item = { name: r.name, first: valid[0], last: valid[valid.length - 1] };
+        item.delta = Math.round((item.last - item.first) * 10) / 10;
         if (valid.every(v => v >= line)) stable.push(item);
         else if (item.last >= line) newly.push(item);
-        else if (item.last - item.first >= KG_ACH_RISE_PP) rising.push(item);
+        else if (item.delta >= KG_ACH_RISE_PP) rising.push(item);
     });
     const trendTotal = stable.length + newly.length + rising.length;
     if (trendCntEl) trendCntEl.innerText = trendTotal ? `${trendTotal} 项` : '';
@@ -3225,7 +3759,7 @@ function renderKgAch() {
         const trendRow = (it, badge, cls) => `<div class="kg-ach-trend-item" data-kp="${escapeHTML(it.name)}" role="button" tabindex="0" title="查看「${escapeHTML(it.name)}」详情">
             <span class="kg-ach-badge ${cls}">${badge}</span>
             <b>${escapeHTML(it.name)}</b>
-            <span class="kg-ach-track">首场 ${it.first}% <i class="fas fa-arrow-right"></i> 末场 ${it.last}%${it.last > it.first ? `（+${it.last - it.first}%）` : ''}</span>
+            <span class="kg-ach-track">首场 ${it.first}% <i class="fas fa-arrow-right"></i> 末场 ${it.last}%${it.delta > 0 ? `（+${it.delta}%）` : ''}</span>
             <i class="fas fa-chevron-right"></i>
         </div>`;
         trendEl.innerHTML = trendTotal
@@ -3830,7 +4364,7 @@ function drillSectionsOf(name) {
 // 布置名单：仅名单学生 → chips；全班关注 → 统一文案（概念辨析无学生粒度名单，固定全班）
 function drillRosterHtml(sec, scope) {
     if (!sec.students) return '<div class="drill-roster all"><i class="fas fa-users"></i> 全班关注</div>';
-    if (scope === 'class') return '<div class="drill-roster all"><i class="fas fa-users"></i> 全班关注（名单学生重点跟进）</div>';
+    if (scope === 'class') return '<div class="drill-roster all"><i class="fas fa-users"></i> 全班关注（名单学生重点讲解）</div>';
     return `<div class="drill-roster">${sec.students.map(s => `<span class="rd-chip">${escapeHTML(s)}</span>`).join('')}</div>`;
 }
 
@@ -4009,7 +4543,7 @@ function copyDrillAdvice(btn) {
         const md = DRILL_PURPOSE_META[sec.key];
         const scope = drillState.scopes[sec.key] || sec.scope || 'list';
         const roster = sec.students
-            ? (scope === 'list' ? `名单 ${sec.students.length} 人：${sec.students.join('、')}` : '全班关注（名单学生重点跟进）')
+            ? (scope === 'list' ? `名单 ${sec.students.length} 人：${sec.students.join('、')}` : '全班关注（名单学生重点讲解）')
             : '全班关注';
         const focus = sec.scopeKps && sec.scopeKps.length ? sec.scopeKps.join('、') : '按课堂诊断结果确定';
         lines.push(`· ${md.label}｜关注范围：${focus}｜${roster}`);
@@ -5234,14 +5768,11 @@ init();
     const stStuState = { level: 'all', search: '', page: 1 };
     let stuDistChart = null;
 
-    // 学生作业画像：提交口径基于学号稳定伪随机；平均得分率 / 学情分布与状态判定同源（取自状态引擎模拟结果）
+    // 学生作业画像：提交口径与状态判定同源（直接取状态引擎的 assigned / missed / submitRate / avgRate）
+    // 不再用独立伪随机生成「未提交次数」：与缺交预警、未学习两个口径互相矛盾（之前 未学习 学生提交率仍有 75%）
     function stProfile(s) {
         const st = ST_STATUS_BY_ID[s.id];
-        const assigned = 24;                                   // 统计区间任务数（对齐筛选栏「已选：24 份」口径）
-        const none = st.distLevel === '未学习';                 // 全周期未提交（未学习），与状态引擎一致
-        const missed = none ? assigned : Math.floor(stSeed(s.id * 3 + 11) * 4);   // 0~3 次未提交
-        const submitRate = Math.round((assigned - missed) / assigned * 10000) / 100;
-        return { assigned, missed, submitRate, avgRate: st.avgRate, level: st.distLevel };
+        return { assigned: st.assigned, missed: st.missed, submitRate: st.submitRate, avgRate: st.avgRate, level: st.distLevel };
     }
 
     function stStuCounts() {
@@ -5267,10 +5798,10 @@ init();
     // 左侧等级筛选按钮（全部学生/优秀/良好/合格/待合格/未学习 + 人数；等级按钮附口径说明）
     function stRenderStuLevelBtns() {
         const counts = stStuCounts();
-        // 「需关注」与周期概览 KPI 卡名单同源（状态引擎 ST_STATUS_LIST：断崖下跌 / 持续低位）
+        // 「需关注」与周期概览 KPI 卡名单同源（状态引擎 WATCH_FOCUS_ID_SET：缺交预警 ∪ 下滑预警 ∪ 持续落后）
         const items = [
             { key: 'all', label: '全部学生', n: ST_STUDENTS.length },
-            { key: 'watch', label: '需关注', hint: '断崖下跌 / 持续低位', n: WATCH_FOCUS_ID_SET.size, watch: true }
+            { key: 'watch', label: '需关注', hint: '缺交 / 下滑 / 持续落后', n: WATCH_FOCUS_ID_SET.size, watch: true }
         ].concat(ST_STU_LEVELS.map(l => ({ key: l, label: l, hint: ST_STU_LEVEL_HINTS[l] || '', n: counts[l] || 0 })));
         st$('stuLevelBtns').innerHTML = items.map(it =>
             '<button type="button" class="stu-level-btn' + (it.watch ? ' stu-level-watch' : '') + (stStuState.level === it.key ? ' active' : '') + '" data-level="' + it.key + '">' +
@@ -5699,8 +6230,9 @@ init();
     /* ---------------- 知识点分析视图（学生追踪-【知识点分析】数据页签） ----------------
        分析范围：当前学生；结构与学科学情-知识点分析对齐（维度切换/摘要卡/章节目录/树状图/表格） */
 
+    // 默认时间档位 = 周（与学科学情顶部时间筛选一致）；week 默认取 2026-W38，该周内含 3 次数学任务，可支撑「≥3 次任务」类判定
     const stKpState = { dimension: 'kp', view: 'tree', tableMode: 0, chapters: true, modules: {}, abilityModules: null, diagTab: 'stub',
-    time: { mode: 'month', month: '2026-09', week: '2026-W39', year: '2026-2027学年', customFrom: '2026-09-01', customTo: '2026-09-15', subject: '数学' } };
+    time: { mode: 'week', month: '2026-09', week: '2026-W38', year: '2026-2027学年', customFrom: '2026-09-01', customTo: '2026-09-15', subject: '数学' } };
     const stKpCache = { tree: null, byName: null };
     let stKpTreeChart = null;
     let stShowAllKp = false;   // 「查看全部知识点」范围开关（同步主模块 showAllKp；默认仅周期学情包含的模块，渲染层过滤，不动统计口径）
@@ -5870,14 +6402,18 @@ init();
         }
     ];
 
-    // 学情状态通俗解读（趋势图下方说明条）：六状态大白话映射，与学生学情页徽章同源（ST_STATUS_BY_ID）
+    // 学情状态通俗解读（趋势图下方说明条）：按状态 key 映射大白话，与学生学情页徽章同源（ST_STATUS_BY_ID）
+    // 按 key 而非文案取值：徽章文案允许调整，文案变了不应连累这张表默默失效（默认回退到 advice）
     const ST_STATUS_PLAIN = {
-        '待观察': '有效场次还不够，先按最近一次成绩看，多留意后续变化',
-        '断崖下跌': '最近明显掉队了，建议尽快找学生了解原因、及时干预',
-        '持续低位': '一直学得吃力，建议先补基础、适当降低任务难度',
-        '低位回升': '之前学得吃力、现在开始好转，保持当前节奏别放松',
-        '明显进步': '进步已经确认，可以适当提高任务挑战度',
-        '平稳': '成绩稳定但缺少变化，建议从顽固薄弱点找突破'
+        'absent': '连续没交作业或考试缺考，先确认是不是请假、生病或家里有事，再判断学业状态',
+        'anomaly': '最近一次掉得异常陡，先核实是否缺考、白卷或录入有误，先别急着下结论',
+        'pending': '有效任务还不够，先不判断趋势，下一次任务后再看',
+        'down': '最近明显掉队了，建议尽快找学生了解原因、及时干预',
+        'up': '进步已经确认，可以适当提高任务挑战度',
+        'rise': '之前学得吃力、现在开始好转，保持当前节奏别放松',
+        'lag': '一直学得吃力，建议先补基础、适当降低任务难度',
+        'wave': '只是偶尔一次考砸，先不进预警名单，下一次任务继续看',
+        'flat': '成绩稳定但缺少变化，建议从顽固薄弱点找突破'
     };
 
     // 个人周期概览渲染：KPI 卡（复用班级 period-kpi 样式）+ 周期结论（insight-list）
@@ -5911,12 +6447,12 @@ init();
 
         stKpRenderPeriodTrend();   // 该生周期得分趋势（口径与 KPI/结论同源；容器不可测量时由 stKpActivate 补渲染）
 
-        // 趋势图下方说明条：学情状态通俗解读（六状态大白话，与该生当前状态动态联动）
+        // 趋势图下方说明条：学情状态通俗解读（八种显示态大白话，与该生当前状态动态联动）
         const note = st$('stKpPeriodStatusNote');
         const plain = st$('stKpPeriodStatusPlain');
         if (s.statusRec) {
             note.classList.toggle('note-watch', !!s.statusRec.watch);
-            plain.innerHTML = `<span class="st-kp-status-plain-label">${stEsc(s.statusRec.label)}</span>${stEsc(ST_STATUS_PLAIN[s.statusRec.label] || s.statusRec.advice)}`;
+            plain.innerHTML = `<span class="st-kp-status-plain-label">${stEsc(s.statusRec.label)}</span>${stEsc(ST_STATUS_PLAIN[s.statusRec.key] || s.statusRec.advice)}`;
         } else {
             note.classList.remove('note-watch');
             plain.textContent = '当前筛选范围内暂无该生状态判定';
@@ -6043,7 +6579,8 @@ init();
     function stKpUpdateWeekHint() {
         const hint = st$('stKpWeekHint');
         const range = stKpWeekDates(stKpState.time.week);
-        hint.textContent = range ? range[0].slice(5).replace('-', '/') + ' ~ ' + range[1].slice(5).replace('-', '/') : '--';
+        // 周提示文本格式对齐学科学情周档（短横线，避免两处同义控件一边斜杠一边短横线）
+        hint.textContent = range ? range[0].slice(5) + ' ~ ' + range[1].slice(5) : '--';
     }
 
     // 时间筛选档位对应的日期控件显隐（同学科学情顶部 showPicker 逻辑）；切到学年档时同步下拉当前值防状态不一致
@@ -6166,6 +6703,8 @@ init();
             st$('stKpVal2').textContent = unmastered;
             st$('stKpBadge2').innerText = '得分率 < ' + unmasteredThreshold() + '%';   // 徽章随「设置掌握程度」档位联动（同学科学情 badgeMasteryThreshold）
             st$('stKpVal3').textContent = lostTotal;
+            // 卡4 = 节点掌握度均值（非任务得分率均值；任务口径得分率见 ST-13 卡1，两者不得同卡混称）
+            st$('stKpTitle4').textContent = label + '平均掌握度';
             st$('stKpVal4').textContent = avgM;
             b4.textContent = '与班级 ' + (delta > 0 ? '+' : '') + delta + '%';
             b4.className = 'badge ' + (delta >= 0 ? 'badge-success' : 'badge-danger');
@@ -6605,7 +7144,7 @@ init();
             '</div>').join('');
     }
 
-    /* ---- 个人题型易错点（同步学科学情 kgPitList：结构复用全局 pitfallHitData，命中次数按学号种子个人化派生） ---- */
+    /* ---- 个人易错点（同步学科学情 kgPitList：结构复用全局 pitfallHitData，命中次数按学号种子个人化派生） ---- */
     function stKpRenderPit() {
         const student = stCurrentStudent();
         const box = st$('stKpPitList');
@@ -7594,7 +8133,7 @@ init();
             { key: 'requireAbility', title: '依赖能力', color: KP_RELATION_DEFS.requireAbility.color, tag: '能力' },
             { key: 'questionType', title: '考查题型', color: KP_RELATION_DEFS.questionType.color, tag: '题型' },
             { key: 'methods', title: '常用方法', color: KP_RELATION_DEFS.method.color, tag: '方法' },
-            { key: 'errorPoints', title: '题型易错点', color: KP_RELATION_DEFS.errorPoint.color, tag: '易错点' }
+            { key: 'errorPoints', title: '易错点', color: KP_RELATION_DEFS.errorPoint.color, tag: '易错点' }
         ];
 
         const relRow = (target, tag, dotColor, count, kMastery, brokenRow) => `
@@ -8182,6 +8721,10 @@ init();
             stKpTimeChanged();
         });
 
+        // 初始档位与默认周号回显：不依赖 HTML 内联 style，state 与控件显隐 / 提示文本始终自洽
+        stKpState.time.week = st$('stKpWeekInput').value || stKpState.time.week;
+        stKpShowTimePicker(stKpState.time.mode);
+
         // 学情来源与统计范围弹窗（交互同学科学情 filterModalOverlay）：点胶囊打开，时间范围 + 双栏勾选同屏一次设定，确定后按勾选任务重算已选份数与证据量因子 nTasks
         const stKpOpenFilterModal = () => {
             st$('stKpFilterModalOverlay').classList.add('show');
@@ -8383,7 +8926,7 @@ init();
             stRenderStuLevelBtns();
             stRenderStuDist();
             stRenderStuTable();
-            stToast('已筛选「需关注」学生 ' + WATCH_FOCUS_ID_SET.size + ' 人（断崖下跌 / 持续低位）');
+            stToast('已筛选「需关注」学生 ' + WATCH_FOCUS_ID_SET.size + ' 人（缺交预警 / 下滑预警 / 持续落后）');
         }
     };
 
@@ -8403,7 +8946,8 @@ init();
 
     const PRD_GROUPS = [
         { key: 'XK', name: '一、学科学情' },
-        { key: 'ST', name: '二、学生追踪-知识点分析' }
+        { key: 'ST', name: '二、学生追踪-知识点分析' },
+        { key: 'CALC', name: '三、指标口径与计算公式' }
     ];
 
     // 导出 Markdown 文档的标题与文件名前缀：首行 = PRD_APP_NAME + 产品需求文档（PRD），文件 <PRD_EXPORT_NAME>-yyyyMMdd-HHmm.md
@@ -8431,12 +8975,13 @@ init();
                 '| 学年 | 默认当前学年（演示 2025-2026）；下拉只列学年（含 2024-2025、2023-2024），不展示各学年所带年级班级；切换后按所选学年回查该班学生群体的作业与考试数据，年级班级选中保持不变，全量重算 |',
                 '| 班级 | 默认当前学年任教班级（演示高二 1 班）；列表随所选年级的任教权限生成；选「全部班级」时隐藏「班级平均得分率」卡（无单一班级可算均值） |',
                 '| 学科 | 范围为教务权限内学科，恒 ≥1 个：单学科固定不可切，多学科按列表切换，默认选中第一个；演示按双学科（数学、语文）配置，语文无知识体系 → 切语文学科进入 L2-a 缺省页（XK-13），切回数学恢复原页签与图表 |',
-                '| 时间 | 学年 / 月（默认）/ 周 / 自定义四档，档位切换对应日期控件显隐；月、周、自定义可跨学年选择（范围取教务权限数据并集）；档位与日期控件收在「学情来源与统计范围」弹窗顶部的时间条内，筛选栏只回显「时间范围 · 已选 N 份」胶囊，不再直放时间控件 |',
+                '| 时间 | 学年 / 月 / 周（默认）/ 自定义四档，档位切换对应日期控件显隐；月、周、自定义可跨学年选择（范围取教务权限数据并集）；档位与日期控件收在「学情来源与统计范围」弹窗顶部的时间条内，筛选栏只回显「时间范围 · 已选 N 份」胶囊，不再直放时间控件；默认档位为「周」（默认周 2026-W38 = 09-14 ~ 09-20），学生追踪-知识点分析的时间筛选与本页同档同周，两处默认值不得各写一套 |',
                 '| 环比 | 学年、月、周档取上一周期；自定义档取起始日期前等长窗口（起始减 len 天 ~ 起始前 1 天）；窗口内无任务 → 全链路隐藏环比（KPI 徽章、摘要徽章、结论文案） |',
                 '| 学情来源 | 筛选栏胶囊点开弹窗（XK-12.3）：顶部设统计时间范围、下方勾选作业 / 考试，一次设定；选择即时生效，取消不回滚 |',
                 '| 掌握程度 | 「设置掌握程度」打开弹窗（XK-12.1）；档位全校共用并同步学生追踪；学科组长及以上可写，学科教师 / 班主任为只读查看（悬停提示联系学科组长） |',
                 '',
-                '> 已知限制：学科切换不重算演示数据。'
+                '> 已知限制：学科切换不重算演示数据。',
+                '> 已知限制：时间档位只改统计区间回显与环比基准（自定义档），不改演示周期任务集——周期模块恒为 6 场演示任务（2025-09-28 ~ 2025-12-11），与默认周 2026-W38 不同年，属原型演示数据的固有取舍；接入真实数据后按档位重取任务集。',
             ].join('\n')
         },
         {
@@ -8450,16 +8995,16 @@ init();
         {
             id: 'XK-04', group: 'XK', title: '周期学情概览',
             body: [
-                '位置：学情汇总页签。统计区间 = 近一月，展示纳入任务数（作业/考试分列）与对比基准（上一周期）。维度口径与维度切换解耦：达标率与顽固薄弱统计全部维度末级（叶子）节点并集，不随维度切换。',
+                '位置：学情汇总页签。统计区间 = 当前时间档位区间（默认周 2026-W38 = 09-14 ~ 09-20，与筛选栏胶囊同源），展示纳入任务数（作业/考试分列）与对比基准（上一周期）。维度口径与维度切换解耦：两卡都不随维度切换，但分母来源不同——达标率取本周期题目挂接集合（定义见 CALC-01 的 `mSet`），即题目上挂接的末级知识点，不是知识树的末级节点；顽固薄弱取全维度末级节点中满足「≥3 场失分率 ≥40%」者，无挂接节点不可能有 3 场失分记录，因而天然不在其中。两卡分母不同源，不得互相推导。',
                 '',
                 '| 卡 | 口径 |',
                 '| --- | --- |',
                 '| 平均得分率 | 各次任务班级得分率的算术平均（按任务次数，不按分值加权）；环比见 XK-02 |',
                 '| 稳定度 | 100 − 各次得分率的总体标准差，越高越稳 |',
-                '| 知识点达标率 | 全维度末级节点中掌握度达标的节点数 ÷ 末级节点总数；阈值随掌握档位联动；徽章为较上一周期的百分点差；点击下钻明细模块 |',
-                '| 顽固薄弱知识点 | 全维度末级节点中同一节点 ≥3 次不同任务失分率 ≥40%；徽章「±N 个 · 已改善 N · 新增 N」（净变化 = 新增 − 改善）；点击下钻热力演进 |',
-                '| 提交率 | 实交人次 ÷ 应交人次（不设迟交单列，迟交计入已交） |',
-                '| 需关注学生 | 需关注 = 断崖下跌 ∪ 持续低位（与 XK-10 同一套判定）；副行分类计数；悬停出名单弹层，点击下钻学生学情筛选 |',
+                '| 知识点达标率 | 本周期题目挂接集合（`mSet`）中掌握度 ≥ 达标线的节点数 ÷ 集合节点数（挂接集合 = 题目挂接的末级知识点 + 有派生值的能力末级节点；不是全树末级节点，集合内不设「无证据」节点、不做证据过滤）；达标 / 薄弱 / 未掌握三类一律正算、互不反算；阈值随掌握档位联动；徽章为较上一周期的百分点差；点击下钻明细模块 |',
+                '| 顽固薄弱知识点 | 挂接集合内同一节点 ≥3 次不同任务失分率 ≥40%（含能力末级节点）；徽章「±N 个 · 已改善 N · 新增 N」（净变化 = 新增 − 改善）；点击下钻热力演进 |',
+                '| 提交率 | 实交人次 ÷ 应交人次 × 100，应交人次 = 班级人数 × 任务数（不设迟交单列，迟交计入已交） |',
+                '| 需关注学生 | 需关注 = 缺交预警 ∪ 下滑预警 ∪ 持续落后（与 XK-10 同一套判定）；副行分类计数；悬停出名单弹层，点击下钻学生学情筛选 |',
                 '',
                 '**周期结论**：由声明式规则表驱动，每条规则定义「出现条件 / 语义色 / 文案模板」，数字按当次统计实时计算。',
                 '',
@@ -8507,7 +9052,7 @@ init();
                 '',
                 '| 项 | 规则 |',
                 '| --- | --- |',
-                '| 单元格 | 失分率五档着色：<20% 轻度 / 20~40% 中度 / 40~60% 较重 / 60~75% 严重 / ≥75% 极重；未考查场次显示「·」，不参与均值也不计入顽固，与「失分为 0」严格区分 |',
+                '| 单元格 | 失分率五档着色：<20% 轻度 / 20~40% 中度 / 40~60% 较重 / 60~75% 严重 / ≥75% 极重；五档固定，不随掌握档位的 3 档 / 4 档切换；0% 单独一档（与未考查区分；失分率与掌握度是两套口径，40% 分界是得分率 60% 未掌握线的镜像，属固定锚点） |',
                 '| 累计列 | 有效场次失分率的算术平均，不做时间衰减；得分率 = 100 − 失分率 |',
                 '| 顽固判定 | 失分率 ≥40% 的场次达到 3 次及以上（与摘要卡同名口径） |',
                 '| 行尾判定章 | 顽固 / 反复 / 偶发 / 恶化 / 回升 / 稳定六种；趋势按矩阵前后两半段均值差是否超过 5 个百分点判定，各带判定依据提示 |',
@@ -8538,11 +9083,11 @@ init();
                 '',
                 '**计算步骤**',
                 '',
-                '1. 单场得分率 = 该场该知识点得分 ÷ 该场该知识点分值 × 100，等价于 100 − 该场失分率；场次之间不再按分值加权（场次内部已按分值算比例）；',
+                '1. 单场知识点得分率（`qRate`）：作业、考试两类任务已分别实现计算，本 PRD 不展开算式；下游只消费其结果，场次之间不再按分值加权；',
                 '2. 距锚点天数 Δ = 周期结束日 − 该场任务日期（自然日，当日为 0 天）；',
                 '3. 单场权重 w = 0.5 的（Δ ÷ H）次幂，H 为半衰期，默认 30 天，属后台常量、前端不开放配置；',
                 '4. 周期得分率 = Σ（w × 单场得分率）÷ Σw，四舍五入保留 1 位小数；',
-                '5. 加权结果按掌握档位映射为掌握状态（3 档 80 / 60，4 档 90 / 80 / 60），达标线取最高档下限。',
+                '5. 加权结果按掌握档位映射为掌握状态（3 档 80 / 60，4 档 90 / 80 / 60）；达标线 = 「掌握」档下限，3 档与 4 档均为 80%——4 档的 90% 是「优秀」下限，不参与达标判定。',
                 '',
                 '**权重随距锚点时间的衰减（H = 30 天）**',
                 '',
@@ -8574,7 +9119,7 @@ init();
                 '| 情形 | 处理 |',
                 '| --- | --- |',
                 '| 周期内仅 1 场考查 | 直接取该场得分率（权重归一后为 1，与算术均值一致） |',
-                '| 0 场考查 | 标「未覆盖」，不计入达标率分母，不显示 0 与档位色（未知 ≠ 未掌握） |',
+                '| 0 场考查（未挂接） | 该节点不在挂接集合内，因而不进达标率分母；不显示 0 与档位色（未知 ≠ 未掌握） |',
                 '| 某场未考查该点 | 该场不参与，也不按 0 分计入（按 0 算会系统性压低得分率） |',
                 '| 分值缺失 / 满分为 0 | 剔除该场并计入数据异常，不改变分母 |',
                 '| 换周期或改时间档 | 全部场次按新锚点重算权重，不做增量复用 |',
@@ -8589,7 +9134,7 @@ init();
                 '| 摘要卡班级 / 年级平均得分率、周期 KPI 平均得分率、稳定度 | 按任务次数的算术平均（不按分值、不加权） |',
                 '| 热力演进单元格 | 单场失分率原值，不做聚合 |',
                 '| 热力演进累计列、顽固判定、最突出短板、结论里的累计失分率 | 有效场次的算术平均，与加权口径互不引用 |',
-                '| 达标率 | 分子为加权得分率达标的末级节点数，分母为有 ≥1 次考查的末级节点数 |',
+                '| 达标率 | 分子为加权得分率达标的末级节点数，分母为 `mSet`（本周期题目挂接的末级知识点，加上关联知识点至少 1 个被挂接的能力末级节点），不是知识树的末级节点 |',
                 '| 学生追踪个人树 | 个人加权得分率同公式，班级基准仍取班级加权值，差值 = 个人 − 班级 |',
                 '',
                 '**口径选择理由与调参**',
@@ -8612,9 +9157,9 @@ init();
                 '| 顽固薄弱 | 同一考核项 ≥3 次不同任务失分率 ≥40%；强度三档：≥5 次结构性 / 3~4 次疑似 / 1~2 次观察（观察项进折叠区，不进主清单）；病型五类：概念型 / 基础型 / 方法型 / 习惯型 / 孤立型 | 病型定动作：概念型成对辨析、基础型前序补偿、方法型方法专题、习惯型审题规范、孤立型补标注；建议专项课而非重复讲题 |',
                 '| 前序断层 | 目标掌握度低于未掌握阈值且前置链存在 <70% 节点；回溯三道闸：层数 ≤5、遇一级模块边界停止、环路节点跳过；近 5 层无 <70% 节点改判「本点自身问题」；无证据前置不参与根因比较；前置关系未建为第四态、不归因，待题库标注后自动升级 | 计数「有根因数 / 断层总数」（关系未建不计入分子）；直接讲薄弱点无效，须先补前序；点击进关联诊断抽屉 |',
                 '| 易混淆 | 数据源统一为题库易混淆关系，先做无序对归一（成对只算一次）；三级分级：双弱（两侧均低于阈值）= 概念未建立 / 单弱（一侧低一侧达标）= 方向性混淆 / 双强但同题失分 = 情境性混淆；相邻对同时命中输出混淆链（链长 ≤3）；命中人次 ≥5 才出卡 | 双弱讲新知、单弱课中辨析、双强换情境复测 |',
-                '| 题型易错点 | 阅卷标注 + 客观题规则匹配命中清单；点级（知识点 × 易错点）= 讲评落点；同一易错点在 ≥3 个知识点命中 = 跨点习惯性错误，升级为审题 / 书写规范项 | 可直接写进讲评稿；跨点项不再逐点重复 |',
+                '| 易错点 | 阅卷标注 + 客观题规则匹配命中清单；点级（知识点 × 易错点）= 讲评落点；同一易错点在 ≥3 个知识点命中 = 跨点习惯性错误，升级为审题 / 书写规范项 | 可直接写进讲评稿；跨点项不再逐点重复 |',
                 '| 前后序证据 | 周期内多任务汇总，四态映射证据等级：本期已考查 A/B（按场次）、仅有历史证据 C、暂无证据与未学 D；D 级禁止出结论（未知 ≠ 未掌握） | 点节点标签打开关联诊断抽屉 |',
-                '| 已达标 | 达标线取最高档下限（3 档 80% / 4 档 90%，随档位联动）；有效场次 ≥2 场方可判达标，仅 1 场标「待确认」；进步判定为首末有效场次提升 ≥8 个百分点 | 转「减量维持」，每周 1 次滚动复测 |',
+                '| 已达标 | 统计单元 = 题目挂接的末级节点（知识点取被挂接的考核项、能力取被挂接的能力项），按当前维度切片，与达标率卡同一批挂接单元；未被题目挂接的节点不计入分母，父层节点不单独参评；达标线 = 「掌握」档下限，3 档与 4 档均为 80%（4 档的 90% 是「优秀」下限，不作达标线；达标强度不随档位数变化）；有效场次 ≥2 场方可判达标，仅 1 场标「待确认」；进步判定为首末有效场次提升 ≥8 个百分点 | 转「减量维持」，每周 1 次滚动复测 |',
                 '',
                 '- **配色**：知识点名与关联标签一律按掌握度取色（顽固名单、易混淆「关联：X」、易错点「关联：X」，无证据恒灰），不再按模块色或关系类型取色；断层链节点保留根因红 / 薄弱黄 / 达标绿；「顽固 · N 次」「优先专项」等计数与动作徽章仍按语义色。',
                 '- **关系覆盖度**（内部指标）= 有作答证据且已建前置关系的知识点 ÷ 有作答证据知识点，能力维度不适用；仅用于断层卡第四态与教学建议降级判定。'
@@ -8792,32 +9337,67 @@ init();
             id: 'XK-10', group: 'XK', title: '学生学情',
             body: [
                 '- **左侧分布**：学情分布柱状图（五档 优秀 / 良好 / 合格 / 待合格 / 未学习，柱顶标人数，y 轴按人数自适应）+ 等级筛选按钮组（全部、需关注 + 五档，各带计数徽章）；「需关注」与周期概览 KPI 同源；姓名后显示状态徽章。',
-                '- **右侧列表**：姓名搜索 + 七列表格（星标 / 姓名 / 未提交次数 / 提交率 / 平均得分率 / 等级徽章 / 操作），10 条 / 页；标题旁问号悬停展开「状态判定说明（V2.0）」浮层。',
-                '- **等级口径**：≥85 优秀、≥70 良好、≥60 合格、否则待合格、全周期未提交 = 未学习；平均得分率、等级与状态判定同源；提交情况按学号稳定生成的演示数据。',
+                '- **右侧列表**：姓名搜索 + 七列表格（星标 / 姓名 / 未提交次数 / 提交率 / 平均得分率 / 等级徽章 / 操作），10 条 / 页；标题旁问号悬停展开「状态判定说明（V3.0）」浮层。',
+                '- **等级口径**：≥85 优秀、≥70 良好、≥60 合格、否则待合格、区间内 6 次任务全部未交 = 未学习；平均得分率、等级、未提交次数、提交率与状态判定全部同源（均取自状态引擎同一份任务记录，不再用第二套伪随机生成提交次数）。',
                 '- **跳转**：操作列「学情分析」→ 切学生追踪视图 + 知识点分析页签并选中该生。',
-                '- **徽章**：断崖下跌（红）/ 持续低位（橙）/ 低位回升（绿）/ 明显进步（绿）/ 待观察（灰）/ 平稳（不显示）；悬停显示判定口径与该生判定数字；需关注 = 断崖下跌 ∪ 持续低位，正向关注 = 低位回升 ∪ 明显进步（不计入需关注），待观察不计入任何名单。',
+                '- **徽章（9 种显示态）**：缺交预警（深红实底）/ 下滑预警（红）/ 持续落后（橙）/ 进步（绿）/ 位置回升（绿）/ 单场异常（灰底虚线）/ 数据积累中（灰底虚线）/ 单次波动（灰蓝）/ 平稳（不渲染）；悬停给一句话证据，带具体数字（如「近两周与班级的平均差是 −9.3 个百分点，平时是 +7.2 个，低了 16.5 个」）。',
+                '- **名单口径**：需关注 = 缺交预警 ∪ 下滑预警 ∪ 持续落后；正向关注 = 进步 ∪ 位置回升（不计入需关注）；单场异常（待核实）、数据积累中、单次波动不进任何名单。',
                 '',
-                '**状态判定 V2.0**（真实数据接入后的计算口径；原型阶段为按学号稳定生成的模拟数据，覆盖六种分支，不实时计算）',
+                '**状态判定 V3.0**（原型阶段暂无真实数据接入：任务序列与逐次得分率按学号稳定生成，但 L / S / Δ / 位置档 / 趋势态与最终徽章全部按下列口径真实计算，可手算复核——不是「先定状态再造数字」）',
+                '',
+                '**四个参数**（每个都能用一句话向教师解释，均可配置）',
+                '',
+                '| 参数 | 取值 | 含义 |',
+                '| --- | --- | --- |',
+                '| B 波动带 | 10 个百分点 | 偏离平时水平 ≥10 个百分点算异常 |',
+                '| k 确认次数 | 2 次 | 最近连续 2 次同向越限，才从「单次波动」升级为「预警」 |',
+                '| m 缺交阈值 | 2 次 | 连续 2 次未交 / 缺考触发缺交预警 |',
+                '| H 半衰期 | 30 天 | 30 天前那次成绩的权重是最新那次的一半 |',
+                '',
+                '派生量（不占参数额度）：位置分界 ±B/2 = ±5 个百分点；单场异常界 2B = 20 个百分点；近期窗 H/2 = 15 天；基线窗 4H = 120 天；粗颗粒任务满分上限 200/B = 20 分（满分 ≤20 分的任务只参与位置加权，不参与越限计数，避免 15 分书面表达的 1 分误差被放大成 6.7 个百分点）。',
+                '',
+                '**计算链路**',
                 '',
                 '| 项 | 口径 |',
                 '| --- | --- |',
-                '| 有效考试 | 正常参加 + 班级有效人数 ≥10 + 非补考 / 免考 / 作弊 |',
-                '| 周期 | 连续 4 次有效考试（或自然分段），前后半按时间对半分（前半取总场次一半向下取整）；n ≥4 且前后半各 ≥2，否则「待观察 / 数据不足」；周期不重叠 |',
-                '| 核心指标 | 个人得分率 = 个人得分 ÷ 满分；班级均值用留一法（剔除本人；有效人数 <10 时取年级同学科均值，仍不足标「均值不稳定」）；残差 = 个人得分率 − 留一法班级均值；趋势差 = 后半残差均值 − 前半残差均值 |',
-                '| 个人波动带 | 取前 5~8 场（至少 3 场）历史残差中位数为中心，以残差绝对偏差中位数换算标准差，中心 ∓1.5 倍标准差为下沿与上沿；历史不足 3 场用同次班级残差标准差并标「近似」，仍不可用判「待观察」 |',
-                '| 低位条件 | 平均得分率 <60% 且平均残差 < −0.5 倍班级残差标准差；中 / 高位为平均残差 ≥ −0.5 倍标准差或年级分位 ≥40% |',
-                '| 突破场次 | 低于下沿的场次数、高于上沿的场次数；显著变化阈值默认 8 个百分点，建议按学科年级校准（取默认值与班级趋势差标准差 0.8 倍中的较大者） |',
+                '| 纳入任务 | 作业 + 考试；排除学案、通用题卡、听写卡 |',
+                '| 核心序列 | d = 个人得分率 − 班级得分率（同一次任务同口径，剥离试卷难度）；不再用留一法（它只是 n/(n−1) 的常数缩放，不改变判定结果） |',
+                '| 时间权重 | w = 2^(−距今天数 / H)；位置权重 w2 = 2^(−距今天数 / 2H)（衰减更慢，反映「平时在班里哪一档」） |',
+                '| 单场异常截尾 | 偏离全期位置 ≥2B 的单场先从基线中剔除，避免一次极端值污染「平时水平」 |',
+                '| P 全期位置 | 用 w2 对剔除极值后的有效任务加权平均 d |',
+                '| S 近期水平 | 最近 15 天内、剔除极值后的有效任务，用 w 加权平均 d |',
+                '| L 平时水平 | 15 天以前（基线窗内）的有效任务，用 w 加权平均 d；与 S 不重叠（若近期值同时进入基线，Δ 会被压平 → 这是 V2.0 前后半硬切分的连续化改造要点） |',
+                '| Δ 变化量 | Δ = S − L |',
+                '| 位置档 | P ≤ −5 → 落后；P ≥ +5 → 领先；否则同步（与趋势相互独立，不合成复合标签） |',
+                '| 趋势态 | Δ ≤ −10 且最近连续 2 次均 < L → 下滑；Δ ≥ +10 且最近连续 2 次均 > L → 进步；近窗仅 1 次越限 → 单次波动；否则平稳 |',
+                '| 位置回升 | 最早 2 次有效任务平均落后（≤ −5），而 P 已回到 −5 以上 |',
+                '| 一级指标 | 半衰期加权平均得分率（绝对水平，与位置轴互补），驱动五档等级（≥85 / ≥70 / ≥60 / 待合格） |',
                 '',
-                '| 优先级 | 状态 | 判定条件 | 行动 |',
+                '**显示优先级**（命中即停）',
+                '',
+                '| 优先级 | 状态 | 判定条件 | 需关注 |',
                 '| --- | --- | --- | --- |',
-                '| 1 | 待观察 / 数据不足 | 有效场次 <4，或前后半 <2，或波动带不可用且无替代 | 不判趋势，补充数据 |',
-                '| 2 | 断崖下跌 | 趋势差 ≤ −阈值 且低于下沿 ≥2 场 | 优先跟进，需关注 |',
-                '| 3 | 持续低位 | 连续 ≥2 周期：平均得分率 <60% 且平均残差 < −0.5 倍标准差且趋势无回升 | 需关注 |',
-                '| 4 | 低位回升 | 原处低位且趋势差 ≥ +阈值 且高于上沿 ≥2 场 | 正向关注，不计入需关注 |',
-                '| 5 | 明显进步 | 中 / 高位且趋势差 ≥ +阈值 且高于上沿 ≥2 场 | 正向关注，不计入需关注 |',
-                '| 6 | 平稳 | 以上均不满足且有效场次足够 | 常规观察 |',
+                '| 1 | 缺交预警 | 最近连续 ≥2 次未交 / 缺考 | 是 |',
+                '| 2 | 单场异常 | 最近一次 d ≤ L − 20，且相对上一次的落差也 ≥20（排除渐进下滑） | 否（待核实） |',
+                '| 3 | 数据积累中 | 近 15 天有效任务 <2 次，或基线窗无数据 | 否 |',
+                '| 4 | 下滑预警 | 趋势态 = 下滑 | 是 |',
+                '| 5 | 进步 | 趋势态 = 进步 | 否（正向关注） |',
+                '| 6 | 位置回升 | 位置回升条件成立 | 否（正向关注） |',
+                '| 7 | 持续落后 | 位置档 = 落后 且趋势平稳 | 是 |',
+                '| 8 | 单次波动 | 趋势态 = 单次波动 | 否 |',
+                '| 9 | 平稳 | 以上均不满足 | 否 |',
                 '',
-                '> 需关注卡片与学生学情徽章调用同一套计算，徽章悬停展示证据数字；参数需回溯校准、分学科配置、人工复核并定期审计。'
+                '**数据可用性降级**（真实接入后）',
+                '',
+                '| 档位 | 条件 | 呈现 |',
+                '| --- | --- | --- |',
+                '| 完整 | 近 15 天 ≥2 次且基线窗 ≥2 次 | 全部判定照常 |',
+                '| 受限 | 近期够、基线不足 | 只判位置档与硬标记，趋势留空并标「数据积累中」 |',
+                '| 不足 | 近 15 天 <2 次 | 只给平均得分率与提交情况 |',
+                '',
+                '**同源约束**（五处必须读同一份状态表，不得各自计算）：周期概览「需关注学生」卡（数字 + 副行分类计数 + 悬停名单）、学生学情「需关注」筛选按钮与人数、学生列表徽章、学生追踪-知识点分析页标题徽章、学生追踪趋势图下方通俗解读条。',
+                '',
+                '> 参数仅 4 个且均为教学语义（波动带 / 确认次数 / 缺交次数 / 半衰期），教师可手算复核；徽章结论仅供辅助预警，缺交与单场异常必须先人工核实。知识点标注缺失不影响本模块判定——状态只依赖任务级得分率，不依赖知识点标注覆盖；标注覆盖率提升后，本模块不做二次改口径（避免历史徽章重新判一遍）。'
             ].join('\n')
         },
         {
@@ -8906,7 +9486,7 @@ init();
             body: [
                 '- **学科下拉**：范围为教务权限内学科，默认选中第一个（演示为数学，其余学科走未覆盖空态）；切换后整页按新学科全量重算。',
                 '- **时间与作业的合并入口**：筛选条只保留学科下拉 + 回显胶囊「时间范围 · 已选 N 份」；档位（学年/月/周/自定义）、日期控件与作业/考试勾选统一收在「学情来源与统计范围」弹窗内一次设定（同 XK-12.3 方案）。',
-                '- **回显口径**：时间文本按档位格式化为「2026年9月」/「2026-2027学年」/「2026-W39（09-21 ~ 09-27）」/「2026-09-01 ~ 2026-09-15」；份数 = 当前学科 + 时间范围内且未取消勾选的任务数，与弹窗底栏同源同步。',
+                '- **回显口径**：时间文本按档位格式化为「2026年9月」/「2026-2027学年」/「2026-W38（09-14 ~ 09-20）」/「2026-09-01 ~ 2026-09-15」；份数 = 当前学科 + 时间范围内且未取消勾选的任务数，与弹窗底栏同源同步。默认档位与学科学情顶部时间筛选一致（周，默认周 2026-W38），切换档位只改统计区间，不改知识体系与判定阈值。',
                 '- 个人与班级得分率由种子稳定生成；已选任务份数作为证据量因子影响个人数据收敛程度（ST-05）。'
             ].join('\n')
         },
@@ -8939,7 +9519,7 @@ init();
                 '- **查看全部知识点**（仅知识点维度）：默认只显示该生周期涉及的知识点模块（零覆盖一级模块整棵隐藏，模块内本期未检测节点隐藏，仅有历史证据与未学节点保留）；勾选后显示全部节点；无作答证据的节点恒灰并标「未检测」，不展示个人掌握度，表格与导出数值列置「—」，不参与断层着色与红边，图谱统计条追加「含未检测 N」；统计口径（摘要卡 / 诊断 / 建议）不随开关变化。',
                 '- **树状图（默认）**：按层级展开，节点按个人掌握档位着色；底部图例随档位配置生成（3 档 / 4 档档位名 + 区间 + 色块）+ 灰色「无作答证据 / 未覆盖」；容器隐藏（尺寸为 0）时跳过绘制，切到该视图再补渲染。',
                 '- **表格**：层级页签「全部 / 一级 / 二级 / 三级」；列：考核项、考察频次、个人得分率、班级得分率、与班级差值（按正负着色）、个人失分次数、掌握程度、操作（查看详情 → ST-11 弹窗）。',
-                '- **关联图谱**：工具栏同学科学情（深度默认三级、关系开关 3 项且只有文字与选中态、标签策略、仅看关联、力导向 / 放射布局）；画布只渲染知识点节点与知识点间边，四类关联节点池不上图；节点掌握度为个人值；前序断层节点红描边 + 红晕 + 加粗线宽（口径同 ST-07，按得分率升序最多取 5 个）；节点详情面板含个人 / 班级掌握度与差值、关联清单（考查能力 / 依赖能力 / 考查题型 / 常用方法 / 题型易错点分类）、根因链标签与前后序诊断；图例为两段式（节点掌握度色阶 / 画布可见关系线型）。',
+                '- **关联图谱**：工具栏同学科学情（深度默认三级、关系开关 3 项且只有文字与选中态、标签策略、仅看关联、力导向 / 放射布局）；画布只渲染知识点节点与知识点间边，四类关联节点池不上图；节点掌握度为个人值；前序断层节点红描边 + 红晕 + 加粗线宽（口径同 ST-07，按得分率升序最多取 5 个）；节点详情面板含个人 / 班级掌握度与差值、关联清单（考查能力 / 依赖能力 / 考查题型 / 常用方法 / 易错点分类）、根因链标签与前后序诊断；图例为两段式（节点掌握度色阶 / 画布可见关系线型）。',
                 '- **导出**：《学生姓名-知识点（或能力）个人分析.csv》，目录关闭模块同口径剔除；学科知识体系未覆盖时目录显示「未覆盖」（不显示 0/0），树图只保留单个置灰节点，表格显示缺省提示行，图谱区走 L2-a 占位，KPI 四卡置「—」，不得以 0 代替无数据（口径见 XK-13）。'
             ].join('\n')
         },
@@ -8953,9 +9533,9 @@ init();
                 '| 顽固薄弱 | 同一考核项在 ≥3 次不同任务中失分率 ≥40%（诊断区取二级及以下、掌握度低于未掌握阈值（默认 60%）的考核项，按得分率升序最多 5 项）；已选任务不足 3 份时判定为空，证据不足不下结论 |',
                 '| 前序断层 | 目标掌握度低于未掌握阈值且祖先链存在 <70% 节点 → 根因取最弱的一级前置；无前置关系记「前置关系未建·待标注」不归因；个人版三态（关系未建 / 根因在前序 / 前序已达标），无「前置暂无证据」态；计数为「有根因数 / 断层总数」 |',
                 '| 易混淆 | 学科级易混淆对 + 该生个人命中次数（与 ST-10 建议条数同源）；无演示数据的学科不渲染 |',
-                '| 题型易错点 | 该生个人易错点清单 |',
+                '| 易错点 | 该生个人易错点清单 |',
                 '| 前后序证据 | 该生周期内多任务汇总证据（原型模拟）；无作答证据 = 未知，不得标为未掌握；未学内容仅衔接，不布置加练 |',
-                '| 已达标 | 达标线取最高档下限（3 档 80% / 4 档 90%）；进步判定为首末有效场次提升 ≥8 个百分点；已达标转「减量维持」，每周 1 次滚动复测 |',
+                '| 已达标 | 达标线 = 「掌握」档下限，3 档与 4 档均为 80%（90% 为 4 档「优秀」下限，不作达标线）；进步判定为首末有效场次提升 ≥8 个百分点；已达标转「减量维持」，每周 1 次滚动复测 |',
                 '',
                 '- **配色**：顽固薄弱项名、易混淆与易错点「关联：X」中的知识点按个人掌握档位着色（个人树查不到取灰），计数徽章保持语义色。',
                 '- **规则同源**：证据等级 A/B/C/D、顽固强度三档与病型五类、断层三道闸（≤5 层 / 跨模块停 / 环保护）、易混淆三级分级与冲突消解顺序均与班级侧一致（细则见 XK-07A ~ XK-07C）。'
@@ -8984,7 +9564,7 @@ init();
             body: [
                 '把该生当前学科、当前周期的诊断结论汇总成可执行的教学动作；一期只给建议、指向与依据，不含题目内容、组卷或布置练习入口。',
                 '',
-                '**数据来源（与上方诊断模块同源，不独立计算）**：个人平均得分率与达标项取个人树当前维度末级节点掌握度；顽固薄弱取个人顽固列表（≥3 次考查中失分率 ≥40%），前序断层取个人断层归因，易混淆命中次数与诊断卡同一算法；达标线取掌握程度最高档下限（默认 80%）；统计范围跟随目录关闭状态与范围开关，与摘要卡、诊断卡逐项一致，不一致即缺陷。',
+                '**数据来源（与上方诊断模块同源，不独立计算）**：个人平均得分率与达标项取个人树当前维度末级节点掌握度；顽固薄弱取个人顽固列表（≥3 次考查中失分率 ≥40%），前序断层取个人断层归因，易混淆命中次数与诊断卡同一算法；达标线 = 「掌握」档下限（3 档与 4 档均为 80%）；统计范围跟随目录关闭状态与范围开关，与摘要卡、诊断卡逐项一致，不一致即缺陷。',
                 '',
                 '| 建议 | 触发条件 | 依据文案 | 按钮 |',
                 '| --- | --- | --- | --- |',
@@ -9011,7 +9591,7 @@ init();
             id: 'ST-12', group: 'ST', title: '状态徽章',
             body: [
                 '- **位置**：个人周期学情概览标题行内，排在概览徽章之前；仅在知识点分析页签激活时显示（口径只对应知识点分析的筛选范围）。',
-                '- **数据同源**：与学情页列表徽章同读一份状态表（V2.0 六状态）；平稳不渲染徽章，未学习判为待观察并使用待观察样式。',
+                '- **数据同源**：与学情页列表徽章同读一份状态表（V3.0 九显示态）；平稳不渲染徽章，未学习渲染为缺交预警（深红实底）。',
                 '- **口径标注**：悬停气泡含判定口径、判定理由与「统计范围：学科 X · 起 ~ 止」；切页签、切学生、改筛选时重新渲染。'
             ].join('\n')
         },
@@ -9027,9 +9607,9 @@ init();
                 '| 个人顽固薄弱 | 同诊断区口径（≥3 次失分率 ≥40%）；非数学学科显示「演示知识体系未覆盖」 |',
                 '| 高于班级场次 | 个人得分率高于班级的场次数 / 周期任务总数；副行：落后场次 + 作业与考试拆分 |',
                 '',
-                '- **趋势与状态结论化**：「周期进步」「状态判定」两张卡已并入周期结论——趋势条目承载末次减首次的进步幅度与趋势档位，状态条目承载 V2.0 六状态（附有效场次与平均得分率）。',
+                '- **趋势与状态结论化**：「周期进步」「状态判定」两张卡已并入周期结论——趋势条目承载末次减首次的进步幅度与趋势档位，状态条目承载 V3.0 九显示态（附有效场次与平均得分率）。',
                 '- **该生周期得分趋势**：横轴为已勾选任务（日期升序），个人得分率蓝实线（考试三角、作业圆点）+ 班级得分率灰虚线；无任务显示空态。',
-                '- **学情状态通俗解读条**：状态胶囊 + 大白话（与学情页徽章同源）；断崖下跌与持续低位为红色提醒态，其余蓝色；无判定显示「当前筛选范围内暂无该生状态判定」。',
+                '- **学情状态通俗解读条**：状态胶囊 + 大白话（与学情页徽章同源，按状态 key 取文案而非文案字面）；缺交预警 / 下滑预警 / 持续落后为红色提醒态，其余蓝色；无判定显示「当前筛选范围内暂无该生状态判定」。',
                 '- **个人周期结论**：与班级版同构的规则表驱动，5 条——趋势 / 稳定度 / 班级对比（落后清单逐条列「任务名（个人% vs 班级%）」）/ 顽固薄弱 / 状态建议；无任务时显示单条空态。'
             ].join('\n')
         },
@@ -9041,6 +9621,190 @@ init();
                 '- **统计时间范围**：弹窗顶部时间条承载档位与对应日期控件（由筛选条迁入）；选定即生效，切换后同步刷新弹窗内任务列表与个人概览。',
                 '- **勾选交互**：双栏列表（可选范围 = 当前学科 + 当前时间范围内的任务，默认全选）+ 栏头全选与「已选 / 总数」计数 + 底部确定 / 取消；底栏左侧回显「当前范围 · 已选 N 份」；「取消」不回滚勾选与时间变更（已知限制）。',
                 '- **变更记录**：原「选中任务得分趋势图」已迁移至个人周期学情概览（ST-13），本弹窗保留时间范围设置与勾选交互。'
+            ].join('\n')
+        },
+        {
+            id: 'CALC-01', group: 'CALC', title: '全局指标口径与计算公式',
+            body: [
+                '**为什么单独一章**：同一个量在多个页面被重复计算——平均得分率同时出现在周期概览、摘要卡与学生追踪；需关注人数同时驱动 KPI 卡与学情页筛选。口径一旦分叉，页面之间就会互相打脸，而且没人能判断哪个数是对的。本章是全站唯一的口径出处：页面上任何一个数字都必须能指回本章某一行；页面文案与本章冲突时，先改文案，再改计算。',
+                '',
+                '**三条铁律**',
+                '',
+                '| 铁律 | 内容 |',
+                '| --- | --- |',
+                '| 一 · 口径不互引 | 单次原值、算术平均、时间衰减加权是三类独立口径，各自只与同类比较；不得用 A 的分子配 B 的分母，也不得用 A 的结论解释 B 的数字 |',
+                '| 二 · 未知 ≠ 0 | 未考查、无作答证据、未学，不进分子也不进分母，页面显示「—」或「未覆盖」；按 0 计入会系统性压低所有均值与达标率 |',
+                '| 三 · 阈值单点 | 全部阈值只在 §3 定义一次；页面文案、悬停气泡、导出 CSV 不得出现第二套数字 |',
+                '',
+                '### 1 基础量（全部下游计算的原子输入）',
+                '',
+                '| 符号 | 名称 | 公式 | 说明 |',
+                '| --- | --- | --- | --- |',
+                '| `rate` | 单场得分率 | 该场该考核项得分 ÷ 该场该项满分 × 100 | 场次内已按分值算比例；场次之间不再按分值加权 |',
+                '| `loss` | 单场失分率 | 100 − `rate` | 热力单元格与顽固判定用它，不用得分率 |',
+                '| `qRate` | 单场知识点得分率 | 作业、考试已分别实现 | 两类任务均已分别实现计算，本 PRD 不展开算式；下游直接消费其结果 |',
+                '| `cRate` | 班级同场得分率 | 班级该项总得分 ÷ 班级该项总满分 × 100 | 必须与 `rate` 同场同口径，否则差值无意义 |',
+                '| `d` | 相对班级差 | `rate` − `cRate` | 状态判定核心序列；同场相减已剥离试卷难度 |',
+                '| `Δ` | 距锚点天数 | 锚点日 − 任务日期（自然日，当日为 0） | 两个锚点不可混用：知识点分析锚定周期结束日，状态判定锚定最新任务日 |',
+                '| `w` | 时间权重 | 0.5 的（`Δ` ÷ `H`）次幂，`H` = 30 天 | 30 天前的证据恰好半权 |',
+                '| `w2` | 位置权重 | 0.5 的（`Δ` ÷ 2`H`）次幂 | 衰减更慢，回答「平时在班里哪一档」 |',
+                '| `mastery` | 节点掌握度 | 同节点各场 `rate` 按 `w` 加权平均，上限 100 | 树、表格、图谱着色与档位映射的唯一输入 |',
+                '| `mSet` | 题目挂接集合（达标率分母） | 两部分之并：① 本周期各任务的题目所挂接的末级知识点，按任务汇总去重；② 关联知识点至少 1 个被挂接的能力末级节点，其得分率由这些知识点聚合派生 | 它不是整个知识树的末级节点，也不是全树叶子；挂接即证据，集合内每个节点都有得分率，因此不存在「无证据节点」这一类别 |',
+                '',
+                '### 2 聚合公式',
+                '',
+                '| 名称 | 公式 | 备注 |',
+                '| --- | --- | --- |',
+                '| 算术平均 | `mean` = Σ`v` ÷ `n` | 按任务次数平均，不按分值、不按权重重 |',
+                '| 时间衰减加权平均 | `W` = Σ(`w` × `v`) ÷ Σ`w` | 权重归一；仅 1 场时退化为该场原值 |',
+                '| 总体标准差 | `σ` = 根号下（Σ(`v` − `mean`)² ÷ `n`） | 除以 `n`，不是 `n` − 1；这是教学口径，不是抽样估计 |',
+                '| 稳定度 | 100 − `σ` | 越高越稳；`σ` 与稳定度须同源，不得各自四舍五入后相减 |',
+                '| 极差 | `max` − `min` | 结论里的最高、最低、极差同源 |',
+                '| 胜率 | 胜场数 ÷ 任务数 × 100 | 胜 = 本班（本人）严格大于对比对象；相等不计胜 |',
+                '| 环比 | 本周期值 − 上一周期同口径值 | 无基准返回空，不显示 0（0 会被读成「没有变化」） |',
+                '| 首末变化 | 末次值 − 首次值 | 有效场次按日期升序，跳过空值 |',
+                '| 名单人数 | 命中学生 ID 去重后的个数 | 同一学生可命中多个条件，须先取并集，不得把各组人数相加 |',
+                '',
+                '### 3 阈值总表（唯一出处）',
+                '',
+                '| 阈值 | 取值 | 使用位置 |',
+                '| --- | --- | --- |',
+                '| 达标线 | 「掌握」档下限：3 档 80%、4 档 80%（4 档的 90% 是「优秀」下限，不作达标线；达标线与档位数无关） | XK-04 达标率分子、XK-07 已达标、ST-07、ST-10 |',
+                '| 未掌握线 | 3 档 60% / 4 档 60%（取最低档上界） | XK-05 卡2、XK-06 树图着色、XK-07 断层目标、ST-05 卡2、ST-06 |',
+                '| 顽固：次数与失分率 | ≥3 次且失分率 ≥40% | XK-04 卡4、XK-05 卡6、XK-06 热力与底部结论、XK-07、ST-05 卡5、ST-13 |',
+                '| 顽固强度分档 | ≥5 次结构性 / 3~4 次疑似 / 1~2 次观察 | XK-07 顽固薄弱 |',
+                '| 断层：前置阈值与回溯层数 | <70% / ≤5 层 | XK-07 前序断层、ST-07、ST-10 |',
+                '| 易混出卡与链长 | ≥5 人次 / ≤3 | XK-07 易混淆、ST-07、ST-10 |',
+                '| 跨点习惯错误 | 同一易错点在 ≥3 个知识点命中 | XK-07 易错点 |',
+                '| 方法聚合 | 关联点 ≥2 且（顽固或断层占比 ≥50% 或掌握 <65%） | XK-07 规则 6 |',
+                '| 能力聚合 | 考查侧 ≥8 点且 <65%；依赖侧薄弱占比 ≥40% | XK-07 规则 7 |',
+                '| 考法覆盖 | 缺口 ≥40%；未验证 ≥50% | XK-07 规则 8（一期不上线） |',
+                '| 热力单元格五档 | <20 / 20~40 / 40~60 / 60~75 / ≥75，固定五档，不随掌握档位切换（另设 0% 无失分、未考查两态） | XK-06 热力演进 |',
+                '| 行尾趋势与错因迁移 | 前后两半均值差 ±5 / 首末占比差 ±3 | XK-06 行尾判定章、XK-08、ST-08 |',
+                '| 周期趋势档 | +3 显著回升 / +1 缓慢回升 / ±1 内持平 / −1 缓慢下滑 / −3 明显下滑 | XK-04 周期结论、ST-13 |',
+                '| 稳定度语义色 | `σ` ≥5 红 / 3~5 琥珀 / <3 绿 | XK-04、ST-13 |',
+                '| 胜率语义色 | ≥60% 绿 / <40% 红 / 其余琥珀 | XK-04 年级对比 |',
+                '| 诊断进步阈值 | 首末有效场次提升 ≥8 个百分点 | XK-07 已达标、ST-07 |',
+                '| 追赶班级 | 个人均值 − 班级均值 ≤ −5 | ST-10 |',
+                '| 五档等级 | ≥85 优秀 / ≥70 良好 / ≥60 合格 / 其余待合格；全部未交 = 未学习 | XK-10 列表与分布、ST-01 筛选 |',
+                '| 状态判定四参数 | `B` = 10 个百分点 / `k` = 2 次 / `m` = 2 次 / `H` = 30 天 | XK-10、ST-12、ST-13 |',
+                '| 状态派生界 | 位置分界 ±5（`B` ÷ 2）/ 单场异常界 20（2`B`）/ 近期窗 15 天（`H` ÷ 2）/ 基线窗 120 天（4`H`）/ 粗颗粒满分上限 20 分（200 ÷ `B`） | XK-10 |',
+                '',
+                '### 4 指标—页面索引（哪个指标在哪一章、哪个模块用）',
+                '',
+                '#### 4.1 学情汇总 · 周期概览（XK-04）',
+                '',
+                '| 指标 | 计算 | 使用位置 |',
+                '| --- | --- | --- |',
+                '| 平均得分率 | 各次任务 `cRate` 的算术平均 | XK-04 卡1、XK-05 卡4、ST-13 班级基准 |',
+                '| 稳定度 | 100 − `σ`(各次 `cRate`) | XK-04 卡2、XK-04 周期结论「稳定度」条 |',
+                '| 知识点达标率 | `mSet` 内掌握度 ≥ 达标线的节点数 ÷ `mSet` 节点数 × 100；达标 / 薄弱 / 未掌握三类一律正算，不得用「总数 − 达标 − 薄弱」反算未掌握；分母是题目挂接集合，不是全树末级节点 | XK-04 卡3（下钻 XK-06） |',
+                '| 顽固薄弱知识点 | `mSet`（含能力末级节点）中同一节点在 ≥3 场不同任务失分率 ≥40% 的节点数；副行给出净变化（新增 − 改善）与改善 / 新增个数 | XK-04 卡4（下钻 XK-06 热力）、XK-05 卡6 |',
+                '| 提交率 | 实交人次 ÷ 应交人次 × 100，应交人次 = 班级人数 × 任务数（迟交计入已交，不单列） | XK-04 卡5 |',
+                '| 需关注学生 | 缺交预警 ∪ 下滑预警 ∪ 持续落后，按 ID 去重计数 | XK-04 卡6（悬停名单、下钻）、XK-10 筛选、ST-12 |',
+                '| 年级对比胜率 | 本班 `cRate` 高于年级同场得分率的场次 ÷ 任务数 | XK-04 周期结论「年级对比」条 |',
+                '| 环比 | 本周期值 − 上一周期同口径值；上一周期同样由题库派生（独立 3 场任务），不存一份手填的对比数字 | XK-02 筛选说明、XK-04 卡1 徽章、XK-05 卡4 与卡5 徽章 |',
+                '| 趋势档位 | 环比（无环比取首末变化）按 +3 / +1 / −1 / −3 分档 | XK-04 周期结论「趋势」条 |',
+                '| 任务清单首要薄弱点 | `mSet` 内累计失分率最高的一项（含能力末级节点） | XK-04 任务清单合计行 |',
+                '',
+                '#### 4.2 知识点分析 · 明细、热力与图谱（XK-05 / XK-06 / XK-06A）',
+                '',
+                '| 指标 | 计算 | 使用位置 |',
+                '| --- | --- | --- |',
+                '| 节点得分率（加权） | Σ(`w` × `rate`) ÷ Σ`w`，`rate` 取该节点各场的单场知识点得分率（`qRate`，见 §7） | XK-06 树状图、表格、关联图谱、XK-11 详情页、ST-06 |',
+                '| 节点掌握档位 | 加权得分率落入档位区间后的档位名与色值 | XK-06 节点着色与图例、XK-07 配色、ST-06 |',
+                '| 覆盖徽章 x/y | 子树有证据节点数 ÷ 子树节点总数 | XK-06 统一目录、ST-06 目录 |',
+                '| 已检测节点数 | 证据为「本期已考查」或「仅有历史证据」的节点数 | XK-05 卡1、ST-05 卡1 |',
+                '| 未掌握节点数 | 加权掌握度低于未掌握线的节点数 | XK-05 卡2、ST-05 卡2 |',
+                '| 累计失分率 | 有效场次 `loss` 的算术平均（不衰减） | XK-06 热力累计列、底部结论「最突出短板」 |',
+                '| 热力行尾判定 | 顽固 / 反复 / 偶发 / 恶化 / 回升 / 稳定 六态 | XK-06 热力演进 |',
+                '| 关系覆盖度 | 有证据且已建前置关系的知识点 ÷ 有证据知识点 | XK-07 断层第四态、XK-09 建议降级 |',
+                '',
+                '#### 4.3 诊断与错因（XK-07 / XK-08 / XK-09）',
+                '',
+                '| 指标 | 计算 | 使用位置 |',
+                '| --- | --- | --- |',
+                '| 证据等级 A / B / C / D | 周期内直接考查场次：≥3 / 1~2 / 仅历史证据 / 无 | XK-07 六个标签、XK-07D、ST-07 |',
+                '| 前序断层 | 目标掌握度低于未掌握线，且祖先链存在 <70% 节点（回溯 ≤5 层） | XK-07、XK-07C 主因排序、ST-07、ST-10 |',
+                '| 可诊断覆盖率 | 可诊断 N ÷ 应诊断 M（%） | XK-07D 模块底部、XK-09、导出 CSV |',
+                '| 易混淆分级与命中人次 | 无序对归一后判双弱 / 单弱 / 双强，累计命中人次 | XK-07、ST-07、ST-10 |',
+                '| 方法掌握度 | 关联知识点得分率的算术平均（不按关系度加权） | XK-07 规则 6 |',
+                '| 错因占比迁移 | 末次占比 − 首次占比，绝对值 ≥3 为显著迁移 | XK-08 关键发现、ST-08 |',
+                '| 建议触发条件 | XK-09 与 ST-10 规则表的 when 条件 | XK-09 教学建议、ST-10 个人教学建议 |',
+                '',
+                '#### 4.4 学生学情与状态判定（XK-10 / ST-12 / ST-13）',
+                '',
+                '| 指标 | 计算 | 使用位置 |',
+                '| --- | --- | --- |',
+                '| `d` 序列 | 逐次任务 `rate` − `cRate` | XK-10 计算链路、ST-12 徽章、ST-13 通俗解读条 |',
+                '| `P` 全期位置 | 剔除极值后按 `w2` 加权平均 `d` | XK-10 位置档 |',
+                '| `S` 近期水平 | 最近 15 天内有效任务按 `w` 加权平均 `d` | XK-10 趋势态 |',
+                '| `L` 平时水平 | 15 天以前（基线窗内）有效任务按 `w` 加权平均 `d`，与 `S` 不重叠 | XK-10 趋势态、单场异常、悬停证据句 |',
+                '| `Δ` 变化量 | `S` − `L` | XK-10 趋势态、ST-13 |',
+                '| 位置档 | `P` ≤ −5 落后 / `P` ≥ +5 领先 / 否则同步 | XK-10 徽章、名单分类 |',
+                '| 趋势态 | `Δ` ≤ −10 且最近 2 次均低于 `L` → 下滑；`Δ` ≥ +10 且最近 2 次均高于 `L` → 进步；近窗仅 1 次越限 → 单次波动 | XK-10 徽章 |',
+                '| 单场异常 | 最新一次 ≤ `L` − 20，且相对上一次的落差 ≥20 | XK-10 徽章（待核实，不进名单） |',
+                '| 缺交预警 | 最近连续未交或缺考 ≥2 次 | XK-10 徽章、ST-12 |',
+                '| 数据积累中 | 近 15 天有效任务 <2 次，或基线窗无数据 | XK-10 徽章（不进名单） |',
+                '| 位置回升 | 最早 2 次有效任务均值 ≤ −5，而 `P` 已回到 −5 以上 | XK-10 徽章（正向关注） |',
+                '| 加权平均得分率与等级 | 半衰期加权平均 `rate`；≥85 / ≥70 / ≥60 / 其余；全部未交 = 未学习 | XK-10 列表与左侧分布、ST-01 等级筛选 |',
+                '| 个人提交率 | （任务数 − 未交次数）÷ 任务数 × 100 | XK-10 列表 |',
+                '| 正向关注人数 | 进步 ∪ 位置回升，按 ID 去重计数 | XK-04 卡6 副行、XK-10 筛选 |',
+                '',
+                '#### 4.5 学生追踪 · 个人口径（ST-05 / ST-13）',
+                '',
+                '| 指标 | 计算 | 使用位置 |',
+                '| --- | --- | --- |',
+                '| 个人平均得分率 | 各次任务个人 `rate` 的算术平均 | ST-13 卡1 |',
+                '| 个人稳定度 | 100 − `σ`(个人各次 `rate`) | ST-13 卡2、ST-13 结论「稳定度」条 |',
+                '| 高于班级场次 | 个人 `rate` 高于班级 `cRate` 的场次数 ÷ 任务数 | ST-13 卡4 |',
+                '| 个人掌握度均值 | 个人树节点掌握度的算术平均 | ST-05 卡4（卡名「知识点平均掌握度」） |',
+                '| 与班级差值 | 个人均值 − 班级均值 | ST-05 卡4 徽章、ST-10「追赶班级」触发条件 |',
+                '| 个人失分题次 | Σ 节点失分题次（约等于考察频次 × 未掌握比例） | ST-05 卡3（一期隐藏） |',
+                '| 个人趋势档位 | 首末变化按 +3 / +1 / −1 / −3 分档（个人无环比） | ST-13 趋势条目 |',
+                '',
+                '### 5 口径边界（三组数字不可互推）',
+                '',
+                '| 边界 | 说明 |',
+                '| --- | --- |',
+                '| 周期概览均值 vs 状态判定加权 | 前者按任务次数算术平均，回答「这周期整体考得怎么样」；后者按 `w` 加权，回答「现在是什么水平」。两者不相等是正常现象，页面不得互相引用，更不得为了让它们相等而改公式 |',
+                '| 热力累计失分率 vs 节点得分率 | 前者是有效场次 `loss` 的算术平均，后者是按 `w` 加权的 `rate`；只有恰好 1 场考查时才互补为 100 |',
+                '| 个人提交率 vs 班级提交率 | 个人按 6 次任务算本人交没交，班级按全班人次算整体交纳率；统计单元不同，不可相加、相减或互相校验 |',
+                '',
+                '### 6 已知实现差异（原型 vs 本章规范）——本版已全部收敛',
+                '',
+                '| 编号 | 位置 | 收敛结果 |',
+                '| --- | --- | --- |',
+                '| D1 | XK-04 卡3 达标率分母 | 已收敛：分母取 `mSet`（题目挂接的 kpTree 末级节点 + 被挂接的能力末级节点）；达标 / 薄弱 / 未掌握三档在同一集合内正算，三者之和恒等于分母 |',
+                '| D2 | ST-05 卡4 | 已收敛：卡 4 改名为「知识点平均掌握度 / 能力平均掌握度」，取个人树节点掌握度算术平均；任务得分率均值只出现在 ST-13 卡 1，两卡不再同卡混称 |',
+                '| D3 | XK-04 徽章与副行 | 已收敛：达标率环比、顽固净变化与改善 / 新增个数、提交率（276 ÷ 288 = 95.8%）均由周期模型实时派生；原演示常量中的教学跟进类指标（含其固定百分比）已随跟进功能整体删除，不再保留任何演示数值 |',
+                '| D4 | XK-06 节点得分率 | 已收敛：节点掌握度 = 100 − Σ(`w` × `loss`) ÷ Σ`w`，`loss` 由单场题目挂接聚合而来（见 §7）；前端只做档位映射 |',
+                '',
+                '### 7 数据基座：末级知识点图谱与题目挂接',
+                '',
+                '末级知识点取自教研标签表（《维度标签数据-高中数学》同步知识点表的末级目录），并入原有知识体系形成四层结构：**模块 → 章 → 节 → 考核项（kpTree 末级节点）→ 末级知识点（原子）**。',
+                '',
+                '| 层 | 来源 | 挂接关系 |',
+                '| --- | --- | --- |',
+                '| 末级知识点（原子） | 教研标签表末级目录：目录 id + 知识点名 + 归属考核项 + 模块 | 题目 → 多个末级知识点（一题多标签，不限额） |',
+                '| 考核项 | kpTree 末级节点（页面「考核项」） | 末级知识点 → 归属考核项（多对一） |',
+                '| 章 / 模块 | kpTree 上级节点 | 由有派生值的子节点回算均值，未覆盖子树保留基线值 |',
+                '',
+                '**派生链（单场 → 周期）**',
+                '',
+                '1. 单场知识点得分率 `qRate`：作业、考试两类任务已分别实现计算，本 PRD 不展开算式；同一道题可被多个知识点引用，各知识点得分率之间不存在加总守恒关系；',
+                '2. 考核项单场得分率 = 其下全部末级知识点对应题目**合并后**按分值加权（同一场同一考核项内合并计算，避免同一道题被重复计入）；',
+                '3. 周期掌握度 = Σ(`w` × 单场得分率) ÷ Σ`w`，见 XK-06A；',
+                '4. 父节点掌握度 = 有派生值子节点的算术平均，逐层向上回算；',
+                '5. 能力维度独立挂接：题目可同时标注能力素养标签，能力末级节点得分率 = 挂接该能力的题目按分值加权。',
+                '',
+                '**证据规则**',
+                '',
+                '- 挂接即证据：末级知识点在本周期没有任何题目挂接，就不产生得分率，也不进 `mSet`、不进达标率分母；',
+                '- 不进集合 ≠ 0 分：页面不显示 0，也不显示档位色（未知 ≠ 未掌握）；',
+                '- 原型题库规模：本周期 6 场任务（共 56 题）、上一周期 3 场（共 25 题）、末级知识点 61 条，覆盖当前考核项所在的集合与逻辑、函数基础、指数与对数、三角函数等模块；接入真实数据时原子表按教研标签表增量补行即可，派生链不需改动。',
+                '',
+                '> 本章只登记口径，不重复各章交互细节。新增任何指标时，先在 §3 登记阈值、在 §4 登记使用位置，再改页面——顺序颠倒就会出现同一个数字两种算法。'
             ].join('\n')
         }
     ];

@@ -458,7 +458,7 @@
                             周期学情概览<span class="prd-badge" data-prd="XK-04" title="查看 PRD XK-04：周期学情概览">XK-04</span>
                         </div>
                         <div class="header-actions">
-                            <span class="section-hint" id="periodStatHint">统计区间：近一月 · 纳入 6 次任务</span>
+                            <span class="section-hint" id="periodStatHint">统计区间：2026-W38（09-14 ~ 09-20） · 纳入 6 次任务</span>
                         </div>
                     </div>
                     <!-- 周期指标（迁移自校级学情报告平台 · 周期指标卡） -->
@@ -892,7 +892,7 @@
                                         <span class="stu-help-row"><i class="stu-help-dot" style="background: var(--primary);"></i><b>良好</b>平均得分率 70% ~ 85%</span>
                                         <span class="stu-help-row"><i class="stu-help-dot" style="background: #d9822b;"></i><b>合格</b>平均得分率 60% ~ 70%</span>
                                         <span class="stu-help-row"><i class="stu-help-dot" style="background: var(--danger);"></i><b>待合格</b>平均得分率 &lt; 60%</span>
-                                        <span class="stu-help-row"><i class="stu-help-dot" style="background: var(--text-muted);"></i><b>未学习</b>统计区间内作业全部未提交</span>
+                                        <span class="stu-help-row"><i class="stu-help-dot" style="background: var(--text-muted);"></i><b>未学习</b>统计区间内作业一次都没交（与徽章「缺交预警」是两套口径：这里只看提交，徽章还看趋势与位置）</span>
                                         <span class="stu-help-note">平均得分率：统计区间内已提交作业得分率的平均值</span>
                                     </span>
                                 </span>
@@ -908,26 +908,29 @@
                             <div class="stu-panel-head">
                                 <div class="stu-panel-title-wrap">
                                     <h3 class="stu-panel-title" id="stuListTitle">学生列表 (17人)</h3>
-                                    <!-- 状态判定说明入口：hover/聚焦小问号展开完整判定口径浮层（V2.0 六状态，完整规则见 PRD XK-10） -->
+                                    <!-- 状态判定说明入口：hover/聚焦小问号展开完整判定口径浮层（V3.0 四参数 + 九种显示态，完整规则见 PRD XK-10） -->
                                     <span class="stu-watch-wrap">
-                                        <span class="stu-watch-help" tabindex="0" role="button" aria-label="查看状态判定说明（V2.0）">
+                                        <span class="stu-watch-help" tabindex="0" role="button" aria-label="查看状态判定说明（V3.0）">
                                             <i class="fas fa-circle-question"></i>
                                         </span>
                                         <div class="stu-watch-legend">
                                             <div class="stu-watch-legend-head">
-                                                <i class="fas fa-circle-info"></i><span class="stu-watch-legend-title">状态判定说明（V2.0）</span>
-                                                <span class="stu-watch-legend-sub">口径（教师语言）：先看「这个学生比班级平均高/低多少」，抵消试卷难度；再把最近一个周期分成前后两半对比，平均得分率差 8 个百分点以上、且后半段至少 2 次持续才算趋势；进步和退步用同一把尺子。完整规则见 PRD XK-10。</span>
+                                                <i class="fas fa-circle-info"></i><span class="stu-watch-legend-title">状态判定说明（V3.0）</span>
+                                                <span class="stu-watch-legend-sub">口径（教师语言）：先看「这个学生比班级平均高/低多少」，抵消试卷难度；再看最近两周跟平时比差多少——差距 10 个百分点以上、且最近连续 2 次同向，才算形成趋势。越早的成绩权重越低（30 天前的那次只算一半）。位置（比班级高还是低）和趋势（比以前好还是差）分开看，不合成一个结论。完整规则见 PRD XK-10。</span>
                                             </div>
-                                            <!-- 六状态判定口径：平铺分段排列（非表格/网格），每段 = 状态徽章 + 描述 -->
+                                            <!-- 九种显示态判定口径：平铺分段排列（非表格/网格），每段 = 状态徽章 + 描述；顺序 = 需关注 → 正向关注 → 不进名单 → 平稳 -->
                                             <div class="stu-watch-legend-list">
-                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-down">断崖下跌</span><span class="stu-watch-legend-txt">后一半平均得分率比前一半低 8 个百分点以上，且后半段至少 2 次明显低于自己平时水平（需优先跟进）</span></div>
-                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-low">持续低位</span><span class="stu-watch-legend-txt">近一个月平均得分率不到 60%，长期低于班级平均，且连续两个周期没有起色</span></div>
-                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-up">低位回升</span><span class="stu-watch-legend-txt">原来长期在低位，后一半平均得分率比前一半高 8 个百分点以上，且至少 2 次超过平时水平（正向关注）</span></div>
-                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-up">明显进步</span><span class="stu-watch-legend-txt">原来中等以上，后一半平均得分率比前一半高 8 个百分点以上，且有 2 次以上持续确认（正向关注）</span></div>
-                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-pend">待观察</span><span class="stu-watch-legend-txt">有效作答不足 4 次，或成绩起伏过大——数据太少，暂不判断趋势，先补充数据</span></div>
-                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-flat">平稳</span><span class="stu-watch-legend-txt">没有明显上涨或下跌，按常规节奏观察（不显示徽章）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-absent">缺交预警</span><span class="stu-watch-legend-txt">连续 2 次没交作业或考试缺考——先联系学生 / 家长确认原因，再判断学业状态（与「数据不足」是两回事）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-down">下滑预警</span><span class="stu-watch-legend-txt">近两周比平时低 10 个百分点以上，且最近连续 2 次都在平时水平下方（需优先关注）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-low">持续落后</span><span class="stu-watch-legend-txt">平时就比班级平均低 5 个百分点以上，但趋势平稳——属于长期性差距，宜系统性补基础（需关注）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-up">进步</span><span class="stu-watch-legend-txt">近两周比平时高 10 个百分点以上，且最近连续 2 次都在平时水平上方（正向关注）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-up">位置回升</span><span class="stu-watch-legend-txt">原来比班级平均低 5 个百分点以上，现在已经回到班内中位——趋势不急，但位置追上来了（正向关注）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-anomaly">单场异常</span><span class="stu-watch-legend-txt">最近一次比平时低 20 个百分点以上——先核实是否缺考、白卷或录入有误，不进预警名单（不计入需关注）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-pend">数据积累中</span><span class="stu-watch-legend-txt">近两周有效任务不足 2 次（例如新转入），暂不判断趋势，等数据补齐（不计入任何名单）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-wave">单次波动</span><span class="stu-watch-legend-txt">只有 1 次偏离平时水平，还没形成趋势——不进预警名单，下一次任务继续观察</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-flat">平稳</span><span class="stu-watch-legend-txt">没有明显上涨或下跌，按既有教学节奏推进（不显示徽章）</span></div>
                                             </div>
-                                            <div class="stu-watch-legend-foot"><i class="fas fa-triangle-exclamation"></i>需关注 = 断崖下跌 + 持续低位；正向关注 = 低位回升 + 明显进步（不计入需关注）。结论仅供教师辅助预警，需人工复核。</div>
+                                            <div class="stu-watch-legend-foot"><i class="fas fa-triangle-exclamation"></i>需关注 = 缺交预警 + 下滑预警 + 持续落后；正向关注 = 进步 + 位置回升（不计入需关注）；单场异常、数据积累中、单次波动不计入任何名单。判定参数只有 4 个：波动带 10 个百分点 · 确认 2 次 · 缺交 2 次 · 半衰期 30 天。结论仅供教师辅助预警，需人工复核。</div>
                                         </div>
                                     </span>
                                 </div>
@@ -1326,7 +1329,7 @@
                                     </div>
                                     <div class="glass-card" id="stKpCard4">
                                         <div class="card-content">
-                                            <h3>个人平均得分率</h3>
+                                            <h3 id="stKpTitle4">节点平均掌握度</h3>
                                             <div class="value"><span id="stKpVal4">--</span><span class="value-unit">%</span><span class="badge badge-success" id="stKpBadge4">与班级 +0.0%</span></div>
                                         </div>
                                     </div>
@@ -1736,8 +1739,8 @@
                 <div class="source-timebar-row">
                     <div class="segmented-control" id="stKpTimeSegment">
                         <button class="segment-btn" data-tmode="year">学年</button>
-                        <button class="segment-btn active" data-tmode="month">月</button>
-                        <button class="segment-btn" data-tmode="week">周</button>
+                        <button class="segment-btn" data-tmode="month">月</button>
+                        <button class="segment-btn active" data-tmode="week">周</button>
                         <button class="segment-btn" data-tmode="custom">自定义</button>
                     </div>
                     <div class="date-range" id="stKpYearPicker" style="display: none;">
@@ -1747,12 +1750,12 @@
                             <option>2024-2025学年</option>
                         </select>
                     </div>
-                    <div class="date-range" id="stKpMonthPicker">
+                    <div class="date-range" id="stKpMonthPicker" style="display: none;">
                         <input type="month" id="stKpMonthInput" value="2026-09">
                     </div>
-                    <div class="date-range" id="stKpWeekPicker" style="display: none;">
-                        <input type="week" id="stKpWeekInput" value="2026-W39">
-                        <span class="week-hint" id="stKpWeekHint">09-21 ~ 09-27</span>
+                    <div class="date-range" id="stKpWeekPicker">
+                        <input type="week" id="stKpWeekInput" value="2026-W38">
+                        <span class="week-hint" id="stKpWeekHint">09-14 ~ 09-20</span>
                     </div>
                     <div class="date-range" id="stKpCustomRange" style="display: none;">
                         <input type="date" id="stKpCustomFrom" value="2026-09-01">
@@ -1913,8 +1916,8 @@
                 <div class="source-timebar-row">
                     <div class="segmented-control" id="timeSegment">
                         <button class="segment-btn">学年</button>
-                        <button class="segment-btn active">月</button>
-                        <button class="segment-btn">周</button>
+                        <button class="segment-btn">月</button>
+                        <button class="segment-btn active">周</button>
                         <button class="segment-btn">自定义</button>
                     </div>
                     <!-- 日期控件：随所选档位切换（学年→学年 / 月→月 / 周→自然周 / 自定义→区间） -->
@@ -1926,10 +1929,10 @@
                         </select>
                     </div>
                     <!-- 月/周/自定义支持跨学年选择：min/max = 教权数据范围并集（2023-09-01 ~ 2026-10-12） -->
-                    <div class="date-range" id="monthPicker">
+                    <div class="date-range" id="monthPicker" style="display: none;">
                         <input type="month" id="monthPickInput" value="2026-09" min="2023-09" max="2026-10" title="支持跨学年选择教权数据范围内任意月份（2023-09 ~ 2026-10）">
                     </div>
-                    <div class="date-range" id="weekPicker" style="display: none;">
+                    <div class="date-range" id="weekPicker">
                         <input type="week" id="weekPickInput" value="2026-W38" min="2023-W35" max="2026-W41" title="支持跨学年选择教权数据范围内任意自然周（2023-W35 ~ 2026-W41）">
                         <span class="week-hint" id="weekPickHint">09-14 ~ 09-20</span>
                     </div>
@@ -2920,6 +2923,51 @@
 })();
 
 </script>
+<script data-proto-review="changes">
+/* 更新说明的位置定位；复用锚点与展开，不生成序号或改写 PRD。 */
+(() => {
+    'use strict';
+    let overlay=null, stop=null, generation=0;
+    async function locate(target, notes=[]) {
+        const token=++generation;
+        const A=window.ProtoAnchors;
+        if (!A || !target || target.deleted) return {ok:false,message:target?.deleted?'该内容已删除，请查看变更详情':'当前页面尚未准备好'};
+        try {
+            if (target.stateId) await A.enterState(target.stateId);
+            const note=target.noteId && notes.find(n=>n.id===target.noteId);
+            const anchor=note?.anchor || target.anchor;
+            if (!anchor) return {ok:true,level:'page',message:'已打开对应页面'};
+            let element;
+            if (anchor.textRule) {
+                const canonical=value=>JSON.stringify(value && typeof value==='object' ? Array.isArray(value)?value.map(v=>JSON.parse(canonical(v))):Object.fromEntries(Object.keys(value).sort().map(k=>[k,JSON.parse(canonical(value[k]))])):value);
+                const rules=JSON.parse(document.getElementById('proto-text-edits-data')?.textContent || '[]');
+                const rule=rules.find(r=>canonical(r.binding)===anchor.textRule);
+                if(rule)element=window.ProtoTextRuntime?.locate(document,rule.binding);
+            } else {
+                element=A.resolve(anchor)?.element;
+                if (!element || A.hidden(element)) element=await A.revealAndWait(anchor);
+            }
+            if(token!==generation)return {ok:false,cancelled:true};
+            if (!element || A.hidden(element)) return {ok:false,message:'目标暂时无法定位，已打开所属页面'};
+            element.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+            if (stop) stop();
+            overlay=document.createElement('div'); overlay.setAttribute('data-prototype-owned','');
+            Object.assign(overlay.style,{position:'fixed',pointerEvents:'none',zIndex:'2147483630',border:'3px solid #2563eb',
+                borderRadius:'5px',boxShadow:'0 0 0 4px #2563eb25',boxSizing:'border-box'});
+            document.documentElement.append(overlay);
+            const paint=()=>{const r=element.getBoundingClientRect(); Object.assign(overlay.style,{left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px'});};
+            paint(); window.addEventListener('scroll',paint,true); window.addEventListener('resize',paint);
+            const observer=new ResizeObserver(paint); observer.observe(element);
+            let timer;
+            stop=()=>{clearTimeout(timer); observer.disconnect();window.removeEventListener('scroll',paint,true);window.removeEventListener('resize',paint);overlay?.remove();overlay=null;stop=null;};
+            timer=setTimeout(stop,3000);
+            return {ok:true,level:'element',message:'已定位更新位置'};
+        } catch (_) { return {ok:false,message:'目标已变化，已打开所属页面'}; }
+    }
+    window.ProtoChangeLocator={locate};
+})();
+
+</script>
 <script data-proto-review="bridge">
 /* 评审壳 ↔ 原型页桥：随导出内嵌进每个原型 HTML，跑在 iframe 内。
    壳与原型改用 postMessage 通信，不再由壳跨文档注入脚本——ZIP 解压后 file:// 直接打开时
@@ -2998,6 +3046,11 @@
                 break;
             case 'reveal':
                 if (m.note) { window.__REVIEW__.selectedNoteId = m.note.id; window.__reviewSelectNote?.(m.note.id); reveal(m.note); }
+                break;
+            case 'locateChange':
+                Promise.resolve(window.ProtoChangeLocator?.locate(m.target,window.__REVIEW__.notes)).then(result=>{
+                    post({type:'changeLocated',requestId:m.requestId,...(result || {ok:false,message:'定位功能暂不可用'})});
+                });
                 break;
             case 'select':
                 window.__REVIEW__.selectedNoteId = m.noteId || null;

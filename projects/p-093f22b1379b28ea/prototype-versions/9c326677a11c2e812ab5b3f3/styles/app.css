@@ -2999,11 +2999,13 @@ body {
     flex-shrink: 0;
 }
 
-.pk-watch-pop .wpg-cliff .wpg-label::before { background: #ef4444; }
-.pk-watch-pop .wpg-low .wpg-label::before { background: #f59e0b; }
-.pk-watch-pop .wpg-lowUp .wpg-label::before { background: #10b981; }
+/* 分组色点：需关注三组（缺交/下滑/落后）用重色，正向与待核实用轻色（V3.0） */
+.pk-watch-pop .wpg-absent .wpg-label::before { background: #b91c1c; }
+.pk-watch-pop .wpg-down .wpg-label::before { background: #ef4444; }
+.pk-watch-pop .wpg-lag .wpg-label::before { background: #f59e0b; }
+.pk-watch-pop .wpg-anomaly .wpg-label::before { background: #94a3b8; }
+.pk-watch-pop .wpg-pending .wpg-label::before { background: #64748b; }
 .pk-watch-pop .wpg-up .wpg-label::before { background: #10b981; }
-.pk-watch-pop .wpg-pending .wpg-label::before { background: #94a3b8; }
 
 .pk-watch-pop .wpg-label b {
     color: var(--text-main);
@@ -3688,6 +3690,11 @@ body {
     border-radius: 3px;
     margin-right: 5px;
     vertical-align: -1.5px;
+}
+
+.heat-legend .sw.h0 {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
 }
 
 .heat-legend .sw.h1 {
@@ -7913,7 +7920,27 @@ body {
     color: #64748b;
 }
 
-/* 待观察（样本不足）：灰底 + 虚线边框，与平稳区分（V2.0 新增状态） */
+/* 缺交预警（硬标记，优先级最高）：深红实底——它不是成绩问题，不能用趋势色系（V3.0） */
+.stu-watch-tag.wtag-absent {
+    background: #b91c1c;
+    color: #ffffff;
+}
+
+/* 单场异常（待核实）：灰底 + 虚线框 + 左侧竖线，表示「数据可疑、先不结论」而非「成绩差」（V3.0） */
+.stu-watch-tag.wtag-anomaly {
+    background: #f8fafc;
+    color: #475569;
+    border: 1px dashed #cbd5e1;
+    border-left: 3px solid #94a3b8;
+}
+
+/* 单次波动（未形成趋势）：灰蓝——既不是需关注的负面态，也不是正向进步态（V3.0） */
+.stu-watch-tag.wtag-wave {
+    background: #eef4fb;
+    color: #4a6583;
+}
+
+/* 待观察（样本不足）：灰底 + 虚线边框，与平稳区分 */
 .stu-watch-tag.wtag-pend {
     background: #f1f5f9;
     color: #64748b;
@@ -7928,7 +7955,7 @@ body {
     min-width: 0;
 }
 
-/* 状态判定说明入口：标题旁小问号，hover/聚焦展开完整判定口径浮层（V2.0 六状态） */
+/* 状态判定说明入口：标题旁小问号，hover/聚焦展开完整判定口径浮层（V3.0 九显示态） */
 .stu-watch-wrap {
     flex: none;
     display: inline-flex;
@@ -8010,7 +8037,7 @@ body {
     line-height: 1.5;
 }
 
-/* 六状态判定口径：平铺分段式排列（非表格/网格），两列自适应换行，窄屏自动单列；每段 = 状态徽章 + 描述 */
+/* 状态判定口径：平铺分段式排列（非表格/网格），两列自适应换行，窄屏自动单列；每段 = 状态徽章 + 描述（V3.0 共九项） */
 .stu-watch-legend-list {
     display: flex;
     flex-wrap: wrap;
