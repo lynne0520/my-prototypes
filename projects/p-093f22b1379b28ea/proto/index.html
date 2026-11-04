@@ -414,38 +414,16 @@
                         </div>
                     </div>
 
-                    <!-- Right: time filter + selected count -->
+                    <!-- Right: 时间范围与学情来源合并入口（外部只回显，档位/日期/勾选统一在弹窗内一次设定） -->
                     <div class="filter-bar-right">
-                        <div class="segmented-control" id="timeSegment">
-                            <button class="segment-btn">学年</button>
-                            <button class="segment-btn active">月</button>
-                            <button class="segment-btn">周</button>
-                            <button class="segment-btn">自定义</button>
-                        </div>
-                        <!-- 时间筛选日期控件：随所选档位切换（学年→学年 / 月→月 / 周→自然周 / 自定义→区间） -->
-                        <div class="date-range" id="yearRangePicker" style="display: none;">
-                            <select id="yearPickSelect">
-                                <option>2025-2026学年</option>
-                                <option>2024-2025学年</option>
-                                <option>2023-2024学年</option>
-                            </select>
-                        </div>
-                        <!-- 月/周/自定义支持跨学年选择：min/max = 教权数据范围并集（2023-09-01 ~ 2026-10-12） -->
-                        <div class="date-range" id="monthPicker">
-                            <input type="month" id="monthPickInput" value="2026-09" min="2023-09" max="2026-10" title="支持跨学年选择教权数据范围内任意月份（2023-09 ~ 2026-10）">
-                        </div>
-                        <div class="date-range" id="weekPicker" style="display: none;">
-                            <input type="week" id="weekPickInput" value="2026-W38" min="2023-W35" max="2026-W41" title="支持跨学年选择教权数据范围内任意自然周（2023-W35 ~ 2026-W41）">
-                            <span class="week-hint" id="weekPickHint">09-14 ~ 09-20</span>
-                        </div>
-                        <div class="date-range" id="customDateRange" style="display: none;" title="支持跨学年选择；环比 = 起始日期前的等长前置窗口，窗口内无任务时不显示环比">
-                            <input type="date" id="customDateStart" value="2026-09-01" min="2023-09-01" max="2026-10-12">
-                            <span class="date-range-sep">-</span>
-                            <input type="date" id="customDateEnd" value="2026-09-15" min="2023-09-01" max="2026-10-12">
-                        </div>
-                        <div class="filter-count" id="filterCount">
-                            <i class="fas fa-file-signature" style="margin-right: 8px;"></i> 已选：24 份
-                        </div>
+                        <button type="button" class="filter-count filter-scope" id="filterCount"
+                            title="设置统计时间范围与学情来源（与下方明细同口径）">
+                            <i class="fas fa-calendar-day"></i>
+                            <span class="filter-scope-range" id="filterRangeText">2026年9月</span>
+                            <span class="filter-scope-sep">·</span>
+                            <span class="filter-scope-count" id="filterCountText">已选 24 份</span>
+                            <i class="fas fa-chevron-down filter-scope-caret"></i>
+                        </button>
                         <!-- 掌握程度设置：对整体学科学情生效，与学情来源同级放筛选栏；入口随角色权限切换（学科组长及以上可改，其余只读） -->
                         <div class="filter-setup" id="btnMasterySetup" role="button" tabindex="0">
                             <i class="fas fa-cog" id="masterySetupIcon"></i>
@@ -938,18 +916,18 @@
                                         <div class="stu-watch-legend">
                                             <div class="stu-watch-legend-head">
                                                 <i class="fas fa-circle-info"></i><span class="stu-watch-legend-title">状态判定说明（V2.0）</span>
-                                                <span class="stu-watch-legend-sub">口径：以「残差 = 个人得分率 − 留一法班级均值」剥离试卷难度；个人波动带 = 历史残差 median ± 1.5σ（σ = 1.4826 × MAD，窗口 5~8 场；不足 3 场用班级残差标准差替代并标「波动带近似」）；进步与退步对称判定（同一 Δ 阈值 + 同样的持续性确认）。原型为模拟数据，完整规则见 PRD XK-10。</span>
+                                                <span class="stu-watch-legend-sub">口径（教师语言）：先看「这个学生比班级平均高/低多少」，抵消试卷难度；再把最近一个周期分成前后两半对比，平均得分率差 8 个百分点以上、且后半段至少 2 次持续才算趋势；进步和退步用同一把尺子。完整规则见 PRD XK-10。</span>
                                             </div>
                                             <!-- 六状态判定口径：平铺分段排列（非表格/网格），每段 = 状态徽章 + 描述 -->
                                             <div class="stu-watch-legend-list">
-                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-down">断崖下跌</span><span class="stu-watch-legend-txt">Δ ≤ −Δ_th（默认 8%，取 max(8, 0.8×SD_Δ) 分学科校准），且后半段 ≥2 场低于波动带下限 L（需优先跟进）</span></div>
-                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-low">持续低位</span><span class="stu-watch-legend-txt">周期平均得分率 &lt;60% 且平均残差 &lt;−0.5×SD_r，趋势无回升（Δ≤0 或 R_post≤R_pre+2%），连续 ≥2 个周期命中</span></div>
-                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-up">低位回升</span><span class="stu-watch-legend-txt">原处低位（上一周期持续低位，或本周期前半段低位），Δ ≥ +Δ_th 且后半段 ≥2 场高于波动带上限 U（正向关注）</span></div>
-                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-up">明显进步</span><span class="stu-watch-legend-txt">中 / 高位（平均残差 ≥ −0.5×SD_r 或年级分位 ≥40%），Δ ≥ +Δ_th 且 ≥2 场确认（正向关注）</span></div>
-                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-pend">待观察</span><span class="stu-watch-legend-txt">有效场次 &lt;4、或前 / 后半段各 &lt;2、或波动带不可用且无替代——不判趋势，补充数据</span></div>
-                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-flat">平稳</span><span class="stu-watch-legend-txt">以上均不满足且有效场次足够——常规观察</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-down">断崖下跌</span><span class="stu-watch-legend-txt">后一半平均得分率比前一半低 8 个百分点以上，且后半段至少 2 次明显低于自己平时水平（需优先跟进）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-low">持续低位</span><span class="stu-watch-legend-txt">近一个月平均得分率不到 60%，长期低于班级平均，且连续两个周期没有起色</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-up">低位回升</span><span class="stu-watch-legend-txt">原来长期在低位，后一半平均得分率比前一半高 8 个百分点以上，且至少 2 次超过平时水平（正向关注）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-up">明显进步</span><span class="stu-watch-legend-txt">原来中等以上，后一半平均得分率比前一半高 8 个百分点以上，且有 2 次以上持续确认（正向关注）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-pend">待观察</span><span class="stu-watch-legend-txt">有效作答不足 4 次，或成绩起伏过大——数据太少，暂不判断趋势，先补充数据</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-flat">平稳</span><span class="stu-watch-legend-txt">没有明显上涨或下跌，按常规节奏观察（不显示徽章）</span></div>
                                             </div>
-                                            <div class="stu-watch-legend-foot"><i class="fas fa-triangle-exclamation"></i>需关注 = 断崖下跌 ∪ 持续低位 · 正向关注 = 低位回升 ∪ 明显进步（不计入需关注）；本方案定位仅供教师端辅助预警，需人工复核。</div>
+                                            <div class="stu-watch-legend-foot"><i class="fas fa-triangle-exclamation"></i>需关注 = 断崖下跌 + 持续低位；正向关注 = 低位回升 + 明显进步（不计入需关注）。结论仅供教师辅助预警，需人工复核。</div>
                                         </div>
                                     </span>
                                 </div>
@@ -1249,7 +1227,7 @@
 
                             <!-- ===== 知识点分析视图（分析范围：当前学生，结构对齐学科学情-知识点分析） ===== -->
                             <div class="st-view" id="stViewKnowledge" hidden>
-                                <!-- 时间筛选（同学科学情顶部时间筛选：学年/月/周/自定义）+ 学科筛选 + 已选份数 -->
+                                <!-- 筛选条（同步学科学情合并方案）：学科独立在下拉；统计时间范围与作业/考试勾选统一收在「学情来源与统计范围」弹窗内一次设定，此处只回显「时间范围 · 已选 N 份」 -->
                                 <div class="st-kp-timebar" id="stKpTimeBar">
                                     <div class="select-group" id="stKpSubjectGroup">
                                         <select id="stKpSubjectSelect" title="教师教务权限内的学科（演示：数学 / 语文双学科）">
@@ -1257,33 +1235,13 @@
                                             <option>语文</option>
                                         </select>
                                     </div>
-                                    <div class="segmented-control" id="stKpTimeSegment">
-                                        <button class="segment-btn" data-tmode="year">学年</button>
-                                        <button class="segment-btn active" data-tmode="month">月</button>
-                                        <button class="segment-btn" data-tmode="week">周</button>
-                                        <button class="segment-btn" data-tmode="custom">自定义</button>
-                                    </div>
-                                    <div class="date-range" id="stKpYearPicker" style="display: none;">
-                                        <select id="stKpYearSelect">
-                                            <option selected>2026-2027学年</option>
-                                            <option>2025-2026学年</option>
-                                            <option>2024-2025学年</option>
-                                        </select>
-                                    </div>
-                                    <div class="date-range" id="stKpMonthPicker">
-                                        <input type="month" id="stKpMonthInput" value="2026-09">
-                                    </div>
-                                    <div class="date-range" id="stKpWeekPicker" style="display: none;">
-                                        <input type="week" id="stKpWeekInput" value="2026-W39">
-                                        <span class="week-hint" id="stKpWeekHint">09-21 ~ 09-27</span>
-                                    </div>
-                                    <div class="date-range" id="stKpCustomRange" style="display: none;">
-                                        <input type="date" id="stKpCustomFrom" value="2026-09-01">
-                                        <span class="date-range-sep">-</span>
-                                        <input type="date" id="stKpCustomTo" value="2026-09-15">
-                                    </div>
-                                    <div class="filter-count" id="stKpFilterCount">
-                                        <i class="fas fa-file-signature" style="margin-right: 8px;"></i> 已选：-- 份
+                                    <div class="filter-count filter-scope" id="stKpFilterCount" role="button" tabindex="0"
+                                        title="设置统计时间范围与学情来源（与下方明细同口径）">
+                                        <i class="fas fa-calendar-day"></i>
+                                        <span class="filter-scope-range" id="stKpRangeText">2026年9月</span>
+                                        <span class="filter-scope-sep">·</span>
+                                        <span class="filter-scope-count" id="stKpFilterCountText">已选 -- 份</span>
+                                        <i class="fas fa-chevron-down filter-scope-caret"></i>
                                     </div>
                                     <span class="prd-badge" data-prd="ST-03" title="查看 PRD ST-03：学科与时间筛选条">ST-03</span>
                                 </div>
@@ -1766,9 +1724,43 @@
     <div class="modal-overlay" id="stKpFilterModalOverlay">
         <div class="filter-modal source-modal">
             <header class="modal-header">
-                <h2>学情来源</h2>
+                <h2>学情来源与统计范围</h2>
                 <i class="fas fa-times close-modal" id="stKpFilterModalClose"></i>
             </header>
+            <!-- 顶部统计时间范围条：档位与日期控件由筛选栏迁入，与下方勾选同屏一次设定（选定即生效） -->
+            <div class="source-timebar">
+                <div class="source-timebar-hd">
+                    <span class="source-timebar-title"><i class="fas fa-clock"></i>统计时间范围</span>
+                    <span class="source-timebar-hint">切换后列表与概览即时重算</span>
+                </div>
+                <div class="source-timebar-row">
+                    <div class="segmented-control" id="stKpTimeSegment">
+                        <button class="segment-btn" data-tmode="year">学年</button>
+                        <button class="segment-btn active" data-tmode="month">月</button>
+                        <button class="segment-btn" data-tmode="week">周</button>
+                        <button class="segment-btn" data-tmode="custom">自定义</button>
+                    </div>
+                    <div class="date-range" id="stKpYearPicker" style="display: none;">
+                        <select id="stKpYearSelect">
+                            <option selected>2026-2027学年</option>
+                            <option>2025-2026学年</option>
+                            <option>2024-2025学年</option>
+                        </select>
+                    </div>
+                    <div class="date-range" id="stKpMonthPicker">
+                        <input type="month" id="stKpMonthInput" value="2026-09">
+                    </div>
+                    <div class="date-range" id="stKpWeekPicker" style="display: none;">
+                        <input type="week" id="stKpWeekInput" value="2026-W39">
+                        <span class="week-hint" id="stKpWeekHint">09-21 ~ 09-27</span>
+                    </div>
+                    <div class="date-range" id="stKpCustomRange" style="display: none;">
+                        <input type="date" id="stKpCustomFrom" value="2026-09-01">
+                        <span class="date-range-sep">-</span>
+                        <input type="date" id="stKpCustomTo" value="2026-09-15">
+                    </div>
+                </div>
+            </div>
             <div class="modal-content source-columns">
                 <!-- 左栏：作业列表（池 = 当前学科 + 当前时间范围任务） -->
                 <section class="source-column">
@@ -1801,6 +1793,12 @@
                 </section>
             </div>
             <footer class="modal-footer">
+                <div class="modal-scope-echo">
+                    <span class="modal-scope-label">当前范围</span>
+                    <span class="modal-scope-range" id="stKpModalRangeEcho">2026年9月</span>
+                    <span class="filter-scope-sep">·</span>
+                    <span id="stKpModalCountEcho">已选 -- 份</span>
+                </div>
                 <button class="btn btn-ghost" id="stKpBtnCancelModal">取消</button>
                 <button class="btn btn-primary" id="stKpBtnConfirmModal">确定</button>
             </footer>
@@ -1903,9 +1901,45 @@
     <div class="modal-overlay" id="filterModalOverlay">
         <div class="filter-modal source-modal">
             <header class="modal-header">
-                <h2>学情来源</h2>
+                <h2>学情来源与统计范围</h2>
                 <i class="fas fa-times close-modal" id="closeModalIcon"></i>
             </header>
+            <!-- 统计时间范围：原筛选栏的档位与日期控件整体迁入，与下方勾选同屏一次设定 -->
+            <div class="source-timebar">
+                <div class="source-timebar-hd">
+                    <span class="source-timebar-title"><i class="fas fa-clock"></i>统计时间范围</span>
+                    <span class="source-timebar-hint">与下方勾选的作业 / 考试共同决定统计口径，选择即时生效</span>
+                </div>
+                <div class="source-timebar-row">
+                    <div class="segmented-control" id="timeSegment">
+                        <button class="segment-btn">学年</button>
+                        <button class="segment-btn active">月</button>
+                        <button class="segment-btn">周</button>
+                        <button class="segment-btn">自定义</button>
+                    </div>
+                    <!-- 日期控件：随所选档位切换（学年→学年 / 月→月 / 周→自然周 / 自定义→区间） -->
+                    <div class="date-range" id="yearRangePicker" style="display: none;">
+                        <select id="yearPickSelect">
+                            <option>2025-2026学年</option>
+                            <option>2024-2025学年</option>
+                            <option>2023-2024学年</option>
+                        </select>
+                    </div>
+                    <!-- 月/周/自定义支持跨学年选择：min/max = 教权数据范围并集（2023-09-01 ~ 2026-10-12） -->
+                    <div class="date-range" id="monthPicker">
+                        <input type="month" id="monthPickInput" value="2026-09" min="2023-09" max="2026-10" title="支持跨学年选择教权数据范围内任意月份（2023-09 ~ 2026-10）">
+                    </div>
+                    <div class="date-range" id="weekPicker" style="display: none;">
+                        <input type="week" id="weekPickInput" value="2026-W38" min="2023-W35" max="2026-W41" title="支持跨学年选择教权数据范围内任意自然周（2023-W35 ~ 2026-W41）">
+                        <span class="week-hint" id="weekPickHint">09-14 ~ 09-20</span>
+                    </div>
+                    <div class="date-range" id="customDateRange" style="display: none;" title="支持跨学年选择；环比 = 起始日期前的等长前置窗口，窗口内无任务时不显示环比">
+                        <input type="date" id="customDateStart" value="2026-09-01" min="2023-09-01" max="2026-10-12">
+                        <span class="date-range-sep">-</span>
+                        <input type="date" id="customDateEnd" value="2026-09-15" min="2023-09-01" max="2026-10-12">
+                    </div>
+                </div>
+            </div>
             <div class="modal-content source-columns">
                 <!-- 左栏：作业列表 -->
                 <section class="source-column">
@@ -1938,6 +1972,13 @@
                 </section>
             </div>
             <footer class="modal-footer">
+                <div class="modal-scope-echo" title="与筛选栏胶囊同源：时间范围 + 已选份数">
+                    <i class="fas fa-circle-check"></i>
+                    <span class="modal-scope-label">当前范围</span>
+                    <span class="modal-scope-range" id="modalRangeEcho">2026年9月</span>
+                    <span class="filter-scope-sep">·</span>
+                    <span id="modalCountEcho">已选 24 份</span>
+                </div>
                 <button class="btn btn-ghost" id="btnCancelModal">取消</button>
                 <button class="btn btn-primary" id="btnConfirmModal">确定</button>
             </footer>
