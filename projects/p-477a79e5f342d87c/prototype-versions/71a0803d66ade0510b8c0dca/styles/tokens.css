@@ -1,0 +1,215 @@
+/* ==========================================================================
+   学科侧重表 · Design Tokens
+   三层架构：Primitive（原始值）→ Semantic（语义别名）→ Component（组件令牌）
+   组件层只引用语义层，禁止裸 hex / rgba 硬编码。
+   取值依据：对参考图（2000×1038）逐像素取样测得。
+   ========================================================================== */
+
+:root {
+  /* ---------- L1 Primitive：原始色板与尺度 ---------- */
+  --pr-white: #ffffff;
+  --pr-gray-25: #fbfcfe;
+  --pr-gray-50: #f6f8fb;
+  --pr-gray-100: #eef2f8;
+  --pr-gray-150: #e5ebf4;
+  --pr-gray-200: #dbe3ee;
+  --pr-gray-300: #c4cedd;
+  --pr-gray-400: #9aa5b6;
+  --pr-gray-500: #78849a;
+  --pr-gray-600: #5b6779;
+  --pr-gray-700: #3c4757;
+  --pr-gray-900: #1e2632;
+
+  /* 冷蓝中性阶：参考图实测的表格线 / 分隔线 / 底纹 */
+  --pr-blue-20: #f1f5ff;   /* 10px 分隔色带 */
+  --pr-blue-25: #f9fafe;   /* 表头底色 */
+  --pr-blue-50: #eef4ff;
+  --pr-blue-75: #e1ebff;   /* 表格行线 / 列竖线 */
+  --pr-blue-80: #e2ebff;   /* 页签分隔线 / 侧栏激活底色 */
+  --pr-blue-100: #dce8ff;
+  --pr-blue-200: #bed3ff;
+  --pr-blue-300: #8fb4ff;
+  --pr-blue-400: #7fa6ff;  /* 激活下划线胶囊 */
+  --pr-blue-450: #004fff;  /* 实心填充：复选框 / 主按钮 */
+  --pr-blue-500: #0044ff;  /* 品牌主色：文字 / 图标 */
+  --pr-blue-600: #0038cc;
+  --pr-blue-700: #002ea3;
+
+  --pr-purple-500: #7c5cff;
+  --pr-purple-600: #6a46f5;
+  --pr-green-500: #18a058;
+  --pr-orange-500: #e08a1e;
+  --pr-red-500: #e5484d;
+  --pr-teal-400: #34d399;
+  --pr-mask: rgba(16, 24, 40, 0.45);   /* 弹窗遮罩 */
+
+  /* 离均差热力色阶：负向（红）→ 中性（灰蓝）→ 正向（绿） */
+  --pr-heat-n3-bg: #f8d2d4;
+  --pr-heat-n3-fg: #a2262c;
+  --pr-heat-n2-bg: #fde3e3;
+  --pr-heat-n2-fg: #bd3940;
+  --pr-heat-n1-bg: #fdf1f1;
+  --pr-heat-n1-fg: #9d5b5f;
+  --pr-heat-flat-bg: #f1f4f9;
+  --pr-heat-flat-fg: #5b6779;
+  --pr-heat-p1-bg: #ebf7f0;
+  --pr-heat-p1-fg: #2f7d54;
+  --pr-heat-p2-bg: #d4efdf;
+  --pr-heat-p2-fg: #16794a;
+  --pr-heat-p3-bg: #b6e5ca;
+  --pr-heat-p3-fg: #0d6b3f;
+
+  --pr-space-1: 4px;
+  --pr-space-2: 8px;
+  --pr-space-3: 12px;
+  --pr-space-4: 16px;
+  --pr-space-5: 20px;
+  --pr-space-6: 24px;
+  --pr-space-7: 30px;
+  --pr-space-8: 32px;
+  --pr-space-10: 40px;
+  --pr-space-13: 52px;
+  --pr-space-14: 56px;
+
+  --pr-radius-xs: 4px;
+  --pr-radius-sm: 6px;
+  --pr-radius-md: 8px;
+  --pr-radius-lg: 12px;
+  --pr-radius-pill: 999px;
+
+  --pr-font-sans: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei",
+    "Source Han Sans SC", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pr-font-numeric: "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+
+  --pr-fs-xs: 12px;    /* 因子徽标 */
+  --pr-fs-sm: 14px;
+  --pr-fs-base: 18px;  /* 正文 / 表格 / 筛选区 */
+  --pr-fs-md: 18px;
+  --pr-fs-lg: 20px;    /* 顶导 / 页签 */
+  --pr-fs-xl: 22px;    /* 面板标题 / 副品牌 */
+  --pr-fs-2xl: 30px;   /* 主品牌 */
+
+  --pr-fw-regular: 400;
+  --pr-fw-medium: 500;
+  --pr-fw-semibold: 600;
+  --pr-fw-bold: 700;
+
+  /* ---------- L2 Semantic：语义别名 ---------- */
+  --color-bg-app: var(--pr-gray-50);
+  --color-bg-surface: var(--pr-white);
+  --color-bg-subtle: var(--pr-gray-100);
+  --color-bg-sidebar: var(--pr-blue-20);
+  --color-bg-sidebar-active: var(--pr-blue-80);
+  --color-bg-brand-soft: var(--pr-blue-50);
+  --color-bg-disabled: var(--pr-gray-150);
+
+  --color-text-title: var(--pr-gray-900);
+  --color-text-body: var(--pr-gray-700);
+  --color-text-secondary: var(--pr-gray-500);
+  --color-text-muted: var(--pr-gray-400);
+  --color-text-brand: var(--pr-blue-500);
+  --color-text-inverse: var(--pr-white);
+
+  --color-border-soft: var(--pr-gray-100);
+  --color-border-default: var(--pr-gray-200);
+  --color-border-strong: var(--pr-gray-300);
+  --color-divider: var(--pr-blue-80);
+
+  --color-brand: var(--pr-blue-500);
+  --color-brand-solid: var(--pr-blue-450);
+  --color-brand-strong: var(--pr-blue-600);
+  --color-brand-deep: var(--pr-blue-700);
+  --color-indicator: var(--pr-blue-400);
+  --color-success: var(--pr-green-500);
+  --color-warning: var(--pr-orange-500);
+  --color-danger: var(--pr-red-500);
+  --mask-bg: var(--pr-mask);
+
+  --color-success-soft: rgba(24, 160, 88, 0.1);
+  --color-warning-soft: rgba(224, 138, 30, 0.12);
+  --color-danger-soft: rgba(229, 72, 77, 0.1);
+
+  /* 离均差热力：语义别名，组件层只引用这一层 */
+  --heat-n3-bg: var(--pr-heat-n3-bg);
+  --heat-n3-fg: var(--pr-heat-n3-fg);
+  --heat-n2-bg: var(--pr-heat-n2-bg);
+  --heat-n2-fg: var(--pr-heat-n2-fg);
+  --heat-n1-bg: var(--pr-heat-n1-bg);
+  --heat-n1-fg: var(--pr-heat-n1-fg);
+  --heat-flat-bg: var(--pr-heat-flat-bg);
+  --heat-flat-fg: var(--pr-heat-flat-fg);
+  --heat-p1-bg: var(--pr-heat-p1-bg);
+  --heat-p1-fg: var(--pr-heat-p1-fg);
+  --heat-p2-bg: var(--pr-heat-p2-bg);
+  --heat-p2-fg: var(--pr-heat-p2-fg);
+  --heat-p3-bg: var(--pr-heat-p3-bg);
+  --heat-p3-fg: var(--pr-heat-p3-fg);
+
+  --shadow-raised: 0 1px 2px rgba(30, 38, 50, 0.06), 0 1px 3px rgba(30, 38, 50, 0.04);
+  --shadow-float: 0 8px 24px rgba(30, 38, 50, 0.14);
+  --shadow-brand: 0 4px 12px rgba(0, 79, 255, 0.24);
+  --shadow-topnav: 0 6px 8px rgba(30, 38, 50, 0.05);
+  --ring-brand: 0 0 0 3px rgba(0, 79, 255, 0.18);
+
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.3, 1);
+
+  /* ---------- L3 Component：组件令牌 ---------- */
+  --topnav-height: 60px;
+  --tabbar-height: 52px;
+  --sidebar-width: 210px;
+  --control-height: 40px;
+  --btn-height: 40px;
+
+  --btn-primary-bg: var(--color-brand-solid);
+  --btn-primary-bg-hover: var(--color-brand);
+  --btn-primary-bg-active: var(--color-brand-strong);
+  --btn-primary-fg: var(--color-text-inverse);
+
+  --input-bg: var(--color-bg-surface);
+  --input-border: var(--color-border-default);
+  --input-border-hover: var(--color-border-strong);
+  --input-fg: var(--color-text-body);
+  --input-placeholder: var(--color-text-muted);
+
+  /* 弹窗：时间与作业统一筛选 */
+  --modal-width: 640px;
+  --task-row-h: 36px;
+
+  --checkbox-size: 20px;
+  --checkbox-bg: var(--color-bg-surface);
+  --checkbox-border: var(--color-border-strong);
+  --checkbox-checked-bg: var(--color-brand-solid);
+  --checkbox-checked-border: var(--color-brand-solid);
+  --checkbox-tick: var(--color-text-inverse);
+
+  --table-head-bg: var(--pr-blue-25);
+  --table-head-fg: var(--color-text-title);
+  --table-body-fg: var(--color-text-body);
+  --table-row-border: var(--pr-blue-75);
+  --table-col-border: var(--pr-blue-75);
+  --table-group-border: var(--pr-blue-80);
+  --table-card-border: var(--pr-blue-75);
+  --table-cell-pad: 22px;
+  --table-head-h1: 66px;
+  --table-head-h2: 60px;
+  --table-row-h: 60px;
+
+  --indicator-w: 30px;
+  --indicator-h: 6px;
+
+  --link-fg: var(--color-brand);
+  --link-fg-hover: var(--color-brand-strong);
+  --link-fg-active: var(--color-brand);
+
+  /* 学科侧重 · 得分率条形图 */
+  --bar-track-bg: var(--pr-gray-100);
+  --bar-fill-start: var(--pr-blue-300);
+  --bar-fill-end: var(--color-brand);
+  --bar-mark: var(--color-text-muted);
+  --bar-height: 14px;
+
+  /* 学科侧重 · 卡片与紧凑表格 */
+  --focus-card-border: var(--pr-blue-75);
+  --focus-cell-pad: var(--pr-space-2);
+  --heat-cell-pad: 10px;
+}
