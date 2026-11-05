@@ -4856,6 +4856,28 @@ body {
     color: #475569;
 }
 
+/* 病型·习惯型：跨点反复命中属审题 / 书写习惯问题，用粉色与「顽固 · N 次」红底区分 */
+.kg-tag-pink {
+    background: rgba(236, 72, 153, 0.12);
+    color: #db2777;
+}
+
+/* 排序提示（优先专项）用描边次级样式：病型徽章是实色主信息，两者不得同色同形 */
+.kg-tag-outline {
+    background: transparent;
+    border: 1px solid rgba(100, 116, 139, 0.45);
+    color: #475569;
+}
+
+/* 顽固卡「处置 <动作>」：与 .kg-stub-chap（知识点路径）区分，动作加粗以示可执行 */
+.kg-stub-act {
+    color: var(--text-muted);
+}
+
+.kg-stub-act b {
+    color: var(--text-primary);
+}
+
 /* ── 子模块 1：顽固薄弱知识点 ── */
 .kg-stub-item {
     display: flex;
@@ -8241,6 +8263,24 @@ body {
 .stu-lv-none {
     background: #f0f2f5;
     color: var(--text-muted);
+}
+
+/* 样本不足（有效任务 <2 次）：不改五档口径，只用虚线描边 + 右上角点提示「方向对、样本太薄」 */
+.stu-level-badge.stu-lv-thin {
+    position: relative;
+    border: 1px dashed var(--warning);
+}
+
+.stu-level-badge.stu-lv-thin::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--warning);
+    box-shadow: 0 0 0 1.5px #fff;
 }
 
 /* ---- 学生学情窄屏适配 ---- */
