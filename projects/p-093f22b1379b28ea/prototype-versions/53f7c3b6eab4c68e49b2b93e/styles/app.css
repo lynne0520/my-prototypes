@@ -8265,6 +8265,24 @@ body {
     color: var(--text-muted);
 }
 
+/* 样本不足（有效任务 <2 次）：不改五档口径，只用虚线描边 + 右上角点提示「方向对、样本太薄」 */
+.stu-level-badge.stu-lv-thin {
+    position: relative;
+    border: 1px dashed var(--warning);
+}
+
+.stu-level-badge.stu-lv-thin::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--warning);
+    box-shadow: 0 0 0 1.5px #fff;
+}
+
 /* ---- 学生学情窄屏适配 ---- */
 @media (max-width: 1180px) {
     .stu-layout {
