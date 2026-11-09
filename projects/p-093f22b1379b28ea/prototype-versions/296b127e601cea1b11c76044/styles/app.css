@@ -1841,9 +1841,24 @@ body {
     margin-right: 5px;
 }
 
-.source-timebar-hint {
+/* 数据时效口径（作业截止 T-1 / 考试以完整学情发布为准）：独占一行，不挤占标题行 */
+.source-timebar-note {
+    flex-basis: 100%;
+    margin-top: -2px;
     font-size: 12px;
+    line-height: 1.5;
     color: var(--text-muted);
+}
+
+.source-timebar-note i {
+    color: var(--primary);
+    margin-right: 5px;
+    font-size: 11px;
+}
+
+.source-timebar-note b {
+    color: var(--text-main);
+    font-weight: 600;
 }
 
 .source-timebar-row {
@@ -2805,10 +2820,6 @@ body {
     font-weight: 800;
     line-height: 1.2;
     color: var(--text-main);
-}
-
-.period-kpi.tone-warn .pk-value {
-    color: var(--warning);
 }
 
 .period-kpi.tone-bad .pk-value {
@@ -9175,4 +9186,3 @@ body.prd-resizing {
     font-size: 11px;
     color: #94a3b8;
 }
-

@@ -1,0 +1,1750 @@
+<!DOCTYPE html>
+<!--
+  学科学情分析系统 · 一期独立分享版
+  构建时间: 2026-11-02 15:48（多文件工程版：2026-11-03 反向拆分）
+  范围: 学情汇总、知识点分析、学生学情、学生追踪、关联诊断与教学建议。
+  边界: 不包含题目生成、组卷配置、mock 题干、保存题库或布置新练习。
+  形态: 多文件工程版（index.html + styles/*.css + js/app.js + vendor/echarts.min.js）。
+        shared 单文件分享版仍见《学科学情\学科学情_一期独立分享版.html》，双击即开。
+  离线: 样式、脚本、ECharts、Font Awesome 与 Outfit 字体全部本地，无外部网络请求。
+  数据: 原型演示数据；PRD 本地修改使用一期独立 localStorage 命名空间。
+-->
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学科学情分析系统 · 一期</title>
+    <link rel="stylesheet" href="styles/app.css">
+    <link rel="stylesheet" href="styles/fontawesome.css">
+    <link rel="stylesheet" href="styles/fonts.css">
+    <!-- ECharts 5.4.2：本地 vendor 副本，无外部网络请求 -->
+    <script src="vendor/echarts.min.js"></script>
+</head>
+
+<body>
+    <div class="app-shell">
+        <!-- Main Content Area -->
+        <div class="main-wrapper">
+            <!-- Top Navigation (Global) -->
+            <nav class="top-nav">
+                <div class="brand">
+                    <div class="logo-container"><i class="fas fa-bolt"></i></div>
+                    <div class="brand-text">
+                        <div class="brand-name">新教育</div>
+                        <div class="brand-sub">xinjiaoyu.com</div>
+                    </div>
+                </div>
+                <div class="top-nav-menu">
+                    <div class="top-nav-item">首页</div>
+                    <div class="top-nav-item">备课授课</div>
+                    <div class="top-nav-item">作业</div>
+                    <div class="top-nav-item">错题本</div>
+                    <div class="top-nav-item">题库卷库</div>
+                    <div class="top-nav-item active">学情分析</div>
+                    <div class="top-nav-item">考试</div>
+                    <div class="top-nav-item">试卷库</div>
+                    <div class="top-nav-item">资源库</div>
+                    <div class="top-nav-item">班级管理</div>
+                </div>
+                <div class="top-nav-actions">
+                    <div class="nav-grid-icon" title="应用中心"><i class="fas fa-th-large"></i></div>
+                    <div class="nav-divider"></div>
+                    <div class="user-entry">
+                        <div class="user-avatar"><i class="fas fa-user"></i></div>
+                        <span class="user-name">王老师</span>
+                        <i class="fas fa-chevron-down user-caret"></i>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Sub Navigation (secondary level) -->
+            <nav class="sub-nav">
+                <div class="sub-nav-item" data-view="school">校级报告</div>
+                <div class="sub-nav-item" data-view="class">班级报告</div>
+                <div class="sub-nav-item active" data-view="subject" id="subNavSubject">学科学情</div>
+                <div class="sub-nav-item" data-view="track" id="subNavTrack">学生追踪</div>
+            </nav>
+
+            <!-- Scrollable Content -->
+            <main class="content-body slide-up">
+                <!-- ===== 学科学情视图（sub-nav: 学科学情） ===== -->
+                <div id="subjectView">
+                <!-- Dashboard Filters -->
+                <header class="filter-bar">
+                    <!-- Left: basic dimensions -->
+                    <div class="filter-bar-left">
+                        <!-- 学年下拉：只展示学年，不展示各学年所带年级班级；查询范围恒取当前学年任教的班级，按所选学年回查历史作业与考试（映射规则见 PRD XK-02，页面不渲染） -->
+                        <div class="select-group">
+                            <select id="yearAuthSelect" title="教师任教学年；以当前学年任教班级为查询范围，回查所选学年的作业与考试数据">
+                                <option selected>2025-2026学年</option>
+                                <option>2024-2025学年</option>
+                                <option>2023-2024学年</option>
+                            </select>
+                        </div>
+                        <div class="cascade-group" id="gradeClassCascade">
+                            <button type="button" class="cascade-trigger" id="cascadeTrigger">
+                                <span id="cascadeValue">高二1班</span>
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                            <div class="cascade-panel" id="cascadePanel">
+                                <ul class="cascade-col" id="cascadeGrades">
+                                    <li data-grade="高一">高一</li>
+                                    <li data-grade="高二">高二</li>
+                                    <li data-grade="高三">高三</li>
+                                </ul>
+                                <ul class="cascade-col" id="cascadeClasses">
+                                    <!-- 班级列表动态生成 -->
+                                </ul>
+                            </div>
+                        </div>
+                        <!-- 学科下拉：演示为双学科教务权限（数学 / 语文）。数学有完整知识体系；语文有任务、有批改但无知识体系，切过去走 L2-a 缺省页（口径见 PRD XK-13），不出现「无可选学科」 -->
+                        <div class="select-group">
+                            <select id="subjectSelect" title="教师教务权限内的学科（演示：数学 / 语文双学科）">
+                                <option selected>数学</option>
+                                <option>语文</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Right: 时间范围与学情来源合并入口（外部只回显，档位/日期/勾选统一在弹窗内一次设定） -->
+                    <div class="filter-bar-right">
+                        <button type="button" class="filter-count filter-scope" id="filterCount"
+                            title="设置统计时间范围与学情来源（与下方明细同口径）">
+                            <i class="fas fa-calendar-day"></i>
+                            <span class="filter-scope-range" id="filterRangeText">2026年9月</span>
+                            <span class="filter-scope-sep">·</span>
+                            <span class="filter-scope-count" id="filterCountText">已选 24 份</span>
+                            <i class="fas fa-chevron-down filter-scope-caret"></i>
+                        </button>
+                        <!-- 掌握程度设置：对整体学科学情生效，与学情来源同级放筛选栏；入口随角色权限切换（学科组长及以上可改，其余只读） -->
+                        <div class="filter-setup" id="btnMasterySetup" role="button" tabindex="0">
+                            <i class="fas fa-cog" id="masterySetupIcon"></i>
+                            <span id="masterySetupText">设置掌握程度</span>
+                                                    </div>
+                        <span class="prd-badge" data-prd="XK-02" title="查看 PRD XK-02：顶部筛选栏">XK-02</span>
+                    </div>
+                </header>
+
+                <!-- 主页签：学情汇总 / 知识点分析 / 学生学情（filter-bar 下的内容分三个页签） -->
+                <div class="subject-main-tabs" id="subjectMainTabs">
+                    <span class="subject-main-tab active" data-main-tab="summary">学情汇总</span>
+                    <span class="subject-main-tab" data-main-tab="analysis">知识点分析</span>
+                    <!-- 维度子导航：仅「知识点分析」页签激活且维度 ≥2 时展开（chip 由 JS 渲染）；单维度学科不渲染不占位 -->
+                    <div class="dim-group dim-collapsed" id="dimGroup">
+                        <span class="dim-divider"></span>
+                        <div class="dim-chips" id="dimChipGroup">
+                            <!-- Injected by JS -->
+                        </div>
+                        <span class="prd-badge" data-prd="XK-05" title="查看 PRD XK-05：维度切换与摘要卡">XK-05</span>
+                    </div>
+                    <span class="subject-main-tab" data-main-tab="students">学生学情</span>
+                    <span class="prd-badge" data-prd="XK-03" title="查看 PRD XK-03：主页签">XK-03</span>
+                </div>
+
+                <!-- 页签面板：学情汇总（周期学情概览，默认激活） -->
+                <div class="subject-tab-panel" id="summaryTabPanel">
+                <!-- Period Overview Section（整合自班级周期分析报告） -->
+                <section class="section-container" id="periodOverviewSection">
+                    <div class="section-header">
+                        <div class="section-title">
+                            周期学情概览<span class="prd-badge" data-prd="XK-04" title="查看 PRD XK-04：周期学情概览">XK-04</span>
+                        </div>
+                        <div class="header-actions">
+                            <span class="section-hint" id="periodStatHint">统计区间：2026-W38（09-14 ~ 09-20） · 纳入 6 次任务</span>
+                        </div>
+                    </div>
+                    <!-- 周期指标（迁移自校级学情报告平台 · 周期指标卡） -->
+                    <div class="period-kpi-grid" id="periodKpiGrid">
+                        <!-- Injected by JS -->
+                    </div>
+
+                    <div class="period-layout">
+                        <div class="period-chart-panel">
+                            <div id="periodTrendChart" style="height: 320px;"></div>
+                            <div class="chart-legend">
+                                <span class="legend-item"><i class="legend-dot"
+                                        style="background:#3b82f6"></i>本班得分率</span>
+                                <span class="legend-item"><i class="legend-dot"
+                                        style="background:#94a3b8"></i>年级得分率</span>
+                                <span class="legend-item"><i class="legend-dot"
+                                        style="background:#ef4444"></i>上一周期基准</span>
+                                <span class="legend-item"><i class="legend-shape">▲</i>考试<i
+                                        class="legend-shape" style="margin-left:6px">●</i>作业</span>
+                            </div>
+                        </div>
+                        <div class="period-insight-panel">
+                            <h4 class="panel-title">周期结论</h4>
+                            <div class="insight-list" id="periodInsightList"></div>
+                        </div>
+                    </div>
+
+                    <!-- 期间任务清单（迁移自校级学情报告平台 · 班级周期分析报告第 3 节） -->
+                    <div class="task-list-block" id="periodTaskBlock">
+                        <h4 class="panel-title">任务列表</h4>
+                        <div id="periodTaskTableWrap">
+                            <!-- Injected by JS -->
+                        </div>
+                    </div>
+                </section>
+                </div><!-- /#summaryTabPanel -->
+
+                <!-- 页签面板：知识点分析（维度子导航已内嵌主页签栏，此面板不再有独立维度行） -->
+                <div class="subject-tab-panel" id="analysisTabPanel" hidden>
+                <!-- 分析内容区：章节目录仅位于分析明细模块内 -->
+                <div class="content-inner-layout">
+                    <!-- Main Dynamic Pane -->
+                    <div class="right-content-pane">
+                        <!-- Summary Cards -->
+                        <section class="summary-grid">
+                            <div class="glass-card" id="cardSummary1">
+                                <div class="card-content">
+                                    <h3 id="summaryTitle1">考核项数量</h3>
+                                    <div class="value"><span id="valSummary1">10</span><span
+                                            class="value-unit">个</span></div>
+                                </div>
+                            </div>
+                            <div class="glass-card" id="cardSummary2">
+                                <div class="card-content">
+                                    <h3 id="summaryTitle2">未掌握数量</h3>
+                                    <div class="value"><span id="valSummary2">4</span><span
+                                            class="value-unit">个</span><span class="badge badge-danger"
+                                            id="badgeMasteryThreshold">得分率 &lt; 60%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- 一期隐藏：共性错题摘要卡（二期随错题模块一并恢复，去掉 hidden 即可） -->
+                            <div class="glass-card" id="cardSummary3" hidden>
+                                <div class="card-content">
+                                    <h3 id="summaryTitle3">共性错题数</h3>
+                                    <div class="value"><span id="valSummary3">104</span><span
+                                            class="value-unit">道</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="glass-card" id="cardSummary4">
+                                <div class="card-content">
+                                    <h3>班级平均得分率</h3>
+                                    <div class="value"><span id="valSummary4">71.1</span><span
+                                            class="value-unit">%</span><span class="badge badge-success"
+                                            id="badgePeriodDelta">环比 +1.3%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- 年级平均得分率（随班级筛选联动：选中具体班级 → 与班级卡并列；全部班级 → 仅本卡） -->
+                            <div class="glass-card" id="cardSummary6">
+                                <div class="card-content">
+                                    <h3 id="summaryTitle6">年级平均得分率</h3>
+                                    <div class="value"><span id="valSummary6">70</span><span
+                                            class="value-unit">%</span><span class="badge badge-success"
+                                            id="badgeGradeDelta">环比 +0.9%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="glass-card" id="cardSummary5">
+                                <div class="card-content">
+                                    <h3 id="summaryTitle5">顽固薄弱项</h3>
+                                    <div class="value"><span id="valSummary5">2</span><span
+                                            class="value-unit">个</span><span class="badge badge-danger"
+                                            id="badgeStubbornRule">≥3次失分率≥40%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- 一期隐藏：共性错题历史数据模块；本分享版不提供题目生成或组卷操作。 -->
+                        <section class="section-container" id="mistakeSection" hidden>
+                            <div class="section-header">
+                                <div class="section-title">
+                                    班级共性错题
+                                </div>
+                                <div class="header-actions">
+                                    <span class="mistake-sel-info" id="mistakeSelInfo">已选 0 道</span>
+                                    <span class="section-hint" style="font-weight: 400;">口径：班级得分率 ≤60% · 来自周期内已选任务</span>
+                                </div>
+                            </div>
+                            <div class="table-scroll-wrap">
+                                <table class="analysis-table mistake-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="ck-cell"><input type="checkbox" id="mistakeCheckAll" title="全选">
+                                            </th>
+                                            <th>题目</th>
+                                            <th>来源</th>
+                                            <th>班级得分率 (%)</th>
+                                            <th>年级得分率 (%)</th>
+                                            <th id="mistakeKpTh">关联知识点</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="mistakeListBody"></tbody>
+                                </table>
+                            </div>
+                        </section>
+
+                        <!-- Analysis Section -->
+                        <section class="section-container analysis-section" id="analysisSection">
+                            <div class="section-header">
+                                <div class="analysis-heading">
+                                    <div class="section-title">
+                                        <span id="sectionTitleText">知识点分析明细</span><span class="prd-badge" data-prd="XK-06" title="查看 PRD XK-06：知识点分析明细">XK-06</span><span class="prd-badge" data-prd="XK-06A" title="查看 PRD XK-06A：周期得分率与时间衰减模型">算法</span>
+                                    </div>
+                                    <button type="button" class="chapter-toggle" id="btnToggleChapters"
+                                        aria-controls="chapterSidebar" aria-expanded="true" aria-label="收起目录">
+                                        <i class="fas fa-outdent" aria-hidden="true"></i>
+                                        <span>收起目录</span>
+                                    </button>
+                                </div>
+                                <div class="header-actions">
+                                    <div class="segmented-control" style="margin-bottom: 0;">
+                                        <button class="segment-btn active" id="btnTree">树状图</button>
+                                        <button class="segment-btn" id="btnHeat">热力演进<span class="kpi-tip" tabindex="0" data-tip="单元格数值 = 班级失分率%，越红越严重（得分率 = 100 − 失分率）；「·」= 该场未考查；顽固 = ≥3 次失分率 ≥40%；累计 = 有效场次均值；「判定」列 = 本行走势自动结论；行悬停可读整行解读">?</span></button>
+                                        <button class="segment-btn" id="btnTable">表格</button>
+                                        <button class="segment-btn" id="btnGraph">关联图谱</button>
+                                    </div>
+                                    <div class="segmented-control kg-only" style="margin-bottom: 0;">
+                                        <button class="segment-btn active" id="kgBtnForce">力导向</button>
+                                        <button class="segment-btn" id="kgBtnRadial">放射</button>
+                                    </div>
+                                    <span class="action-link kg-only" id="kgBtnFit"><i class="fas fa-expand"></i>
+                                        适应画布</span>
+                                    <div class="action-links">
+                                        <span class="action-link" id="btnExport"><i class="fas fa-download"></i>
+                                            导出</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="analysis-layout" id="analysisLayout">
+                                <!-- 左：统一目录（数据驱动，按当前维度渲染一级节点过滤器，四视图共用） -->
+                                <aside class="kg-side" id="chapterSidebar">
+                                    <div class="kg-side-header">
+                                        <span id="dirTitle">知识模块</span>
+                                        <span class="kg-side-count" id="kgModuleCount">11/11</span>
+                                    </div>
+                                    <!-- 范围开关：默认仅显示周期学情包含的知识点模块（零覆盖模块整棵隐藏）；勾选后显示维度下全部知识点 -->
+                                    <label class="kg-check kg-showall" id="kgShowAllWrap" title="默认仅显示周期学情包含的知识点模块（零覆盖模块整棵隐藏）；勾选后显示维度下全部知识点（未检测/未学灰色标识）。统计口径不随开关变化">
+                                        <input type="checkbox" id="kgShowAll"> 查看全部知识点
+                                    </label>
+                                    <div class="kg-module-list" id="kgModuleList">
+                                        <!-- Injected by JS -->
+                                    </div>
+                                </aside>
+
+                                <div class="analysis-main">
+                                    <!-- Tree View -->
+                                    <div id="treeView">
+                                        <div id="kpTreeChart" class="chart-container"></div>
+                                        <!-- 掌握程度图例：随「设置掌握程度」3/4 档实时生成（色块与节点着色同源）；灰色 = 无本期作答证据 -->
+                                        <div class="tree-legend" id="treeLegend"></div>
+                                    </div>
+
+                                    <!-- Heat Evolution View（整合自周期报告：考核项 × 任务失分率矩阵） -->
+                                    <div id="heatView" style="display: none;">
+                                        <!-- Injected by JS -->
+                                    </div>
+
+                                    <!-- Table View (Hidden by default) -->
+                                    <div id="tableView" style="display: none;">
+                                        <div class="table-tabs" id="kpTableTabs">
+                                            <span class="active" data-mode="0">全部</span>
+                                            <span data-mode="1">一级知识点</span>
+                                            <span data-mode="2">二级知识点</span>
+                                            <span data-mode="3">三级知识点</span>
+                                        </div>
+                                        <table class="analysis-table">
+                                            <thead id="kpTableHead">
+                                                <!-- Injected by JS -->
+                                            </thead>
+                                            <tbody id="kpTableBody">
+                                                <!-- Data will be injected here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <!-- 图谱工具栏：深度 / 关系开关 / 标签策略 / 仅看关联（仅关联图谱视图显示；
+                                         置于目录右侧主区顶部，不横跨目录上方） -->
+                                    <div class="kg-toolbar kg-only" id="kgToolbar">
+                                        <div class="kg-toolbar-group">
+                                            <span class="kg-toolbar-label">深度</span>
+                                            <div class="kg-chip-group" id="kgDepthGroup">
+                                                <span class="kg-chip" data-depth="1">一级</span>
+                                                <span class="kg-chip" data-depth="2">二级</span>
+                                                <span class="kg-chip active" data-depth="3">三级</span>
+                                            </div>
+                                        </div>
+                                        <div class="kg-toolbar-group">
+                                            <span class="kg-toolbar-label">关系</span>
+                                            <div class="kg-chip-group" id="kgRelationGroup">
+                                                <span class="kg-chip active" data-rel="prerequisite">前置/后续</span>
+                                                <span class="kg-chip" data-rel="confusable">易混淆</span>
+                                                <span class="kg-chip active" data-rel="structure">树状结构</span>
+                                            </div>
+                                        </div>
+                                        <div class="kg-toolbar-group">
+                                            <span class="kg-toolbar-label">标签</span>
+                                            <div class="kg-chip-group" id="kgLabelGroup">
+                                                <span class="kg-chip active" data-label="compact">简洁</span>
+                                                <span class="kg-chip" data-label="all">全部</span>
+                                                <span class="kg-chip" data-label="none">隐藏</span>
+                                            </div>
+                                        </div>
+                                        <label class="kg-check"><input type="checkbox" id="kgOnlyRelated"> 仅看有关联的知识点</label>
+                                        <div class="kg-stat" id="kgStat"></div>
+                                    </div>
+
+                                    <!-- KG View（关联图谱：多关系 + 力导向/放射布局） -->
+                                    <div id="kgView" style="display: none;">
+                                        <div class="kg-canvas-wrap">
+                                            <div id="kgChart"></div>
+                                        </div>
+                                        <div class="chart-legend" id="kgLegend">
+                                            <!-- Injected by JS -->
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 右：选中节点详情（仅关联图谱视图显示） -->
+                                <aside class="kg-detail kg-only" id="kgDetailPanel">
+                                    <!-- Injected by JS -->
+                                </aside>
+                            </div>
+                        </section>
+                        
+                        
+                        <!-- KG Diagnosis Section（迁移自校级学情报告平台 · 班级周期分析报告）
+                             含 4 个子模块：顽固薄弱知识点 / 前序断层归因 TOP / 易混淆知识点 / 题型 × 易错点 -->
+                        <section class="section-container" id="kgDiagnosisSection">
+                            <div class="section-header">
+                                <div class="section-title">
+                                    知识图谱诊断<span class="prd-badge" data-prd="XK-07" title="查看 PRD XK-07：知识图谱诊断">XK-07</span><span class="prd-badge" data-prd="XK-07A" title="查看 PRD XK-07A：诊断关系体系与画布边界">规则</span>
+                                </div>
+                                <div class="header-actions">
+                                    <span class="section-hint" style="font-weight: 400;">基于图谱关系聚合 · 顽固薄弱 / 前序断层 / 易混淆 / 题型易错点 / 前后序证据与分组教学建议</span>
+                                </div>
+                            </div>
+
+                            <!-- 诊断标签条：计数徽章保留一屏总览能力；计数为 0 的标签灰显但仍可查看空态 -->
+                            <div class="kg-diag-tabs" id="kgDiagTabs" role="tablist">
+                                <button type="button" class="kg-diag-tab active" data-diag="stub" role="tab"
+                                    aria-selected="true">
+                                    顽固薄弱
+                                    <span class="kg-diag-count" id="kgStubCount">0</span>
+                                </button>
+                                <button type="button" class="kg-diag-tab" data-diag="fault" role="tab"
+                                    aria-selected="false">
+                                    前序断层
+                                    <span class="kg-diag-count" id="kgFaultCount">0</span>
+                                </button>
+                                <button type="button" class="kg-diag-tab" data-diag="conf" role="tab"
+                                    aria-selected="false">
+                                    易混淆
+                                    <span class="kg-diag-count" id="kgConfCount">0</span>
+                                </button>
+                                <button type="button" class="kg-diag-tab" data-diag="pit" role="tab"
+                                    aria-selected="false">
+                                    题型易错点
+                                    <span class="kg-diag-count" id="kgPitCount">0</span>
+                                </button>
+                                <button type="button" class="kg-diag-tab" data-diag="evidence" role="tab"
+                                    aria-selected="false">
+                                    前后序证据
+                                    <span class="kg-diag-count" id="kgEvidenceCount">0</span>
+                                </button>
+                                <button type="button" class="kg-diag-tab" data-diag="ach" role="tab"
+                                    aria-selected="false">
+                                    已达标
+                                    <span class="kg-diag-count" id="kgAchCount">0</span>
+                                </button>
+                                <span class="kg-diag-overview" id="kgDiagOverview"></span>
+                            </div>
+
+                            <div class="kg-diag-panels">
+                                <!-- 1. 顽固薄弱知识点 -->
+                                <div class="kg-diag-panel active" data-diag="stub" role="tabpanel">
+                                    <div class="kg-diag-note">判定：同一知识点在 ≥3 次不同任务中失分率 ≥40%</div>
+                                    <div class="kg-diag-bd" id="kgStubList"></div>
+                                    <div class="kg-diag-foot">与单次分析的区别：单次看「这次哪里错」，周期看「哪些错一直没解决」。本期不做病型五类判断（概念 / 基础 / 方法 / 习惯 / 孤立），所有顽固项给同一条建议：<b>同点巩固 + 变式复测</b>——先复盘各次失分题、归类错因，再用同知识点变式题连续 2 次复测，失分率降到 40% 以下即退出顽固名单；顽固点应安排<b>专项课</b>而非重复讲题。</div>
+                                </div>
+
+                                <!-- 2. 前序断层归因 TOP -->
+                                <div class="kg-diag-panel" data-diag="fault" role="tabpanel">
+                                    <div class="kg-diag-note">按目标知识点掌握度升序 · 回溯前置链，判定根因层</div>
+                                    <div class="kg-diag-bd" id="kgFaultList"></div>
+                                    <div class="kg-diag-foot">判定规则：目标知识点掌握度 &lt;60%，且其前置中存在 &lt;70% 的节点 → 根因在前序，沿最弱前置回溯（最多 5 层、跨一级模块停止、环路跳过）至达标节点为止；近 5 层无 &lt;70% 前置则改判本点自身问题。<b>直接讲薄弱点会无效，需先补前序。</b></div>
+                                </div>
+
+                                <!-- 3. 易混淆知识点 -->
+                                <div class="kg-diag-panel" data-diag="conf" role="tabpanel">
+                                    <div class="kg-diag-note">成对辨析清单，替代无效刷题</div>
+                                    <div class="kg-diag-bd" id="kgConfList"></div>
+                                    <div class="kg-diag-foot">易混淆错误的特征是：<b>学生不是不会，而是把两个概念用反了</b>。这类错误刷题收益很低，正确做法是成对辨析 + 让学生自己讲出差别。</div>
+                                </div>
+
+                                <!-- 4. 题型 × 易错点 -->
+                                <div class="kg-diag-panel" data-diag="pit" role="tabpanel">
+                                    <div class="kg-diag-note">讲评落点，可直接写进讲评稿</div>
+                                    <div class="kg-diag-bd" id="kgPitList"></div>
+                                    <div class="kg-diag-foot">易错点比「错因」更细：错因说明<b>为什么错</b>，易错点说明<b>在哪一步错</b>。命中判定来自阅卷标注 + 客观题规则匹配。</div>
+                                </div>
+
+                                <!-- 5. 前序 / 后序证据总览（同步自讲评试卷 3.0 方案 · 周期汇总版） -->
+                                <div class="kg-diag-panel" data-diag="evidence" role="tabpanel">
+                                    <div class="kg-diag-note">单次作业无法获取前后序作答数据，本模块基于周期内多任务汇总证据</div>
+                                    <div class="kg-diag-bd">
+                                        <div class="kg-ev-chips" id="kgEvidenceChips">
+                                            <!-- Injected by JS -->
+                                        </div>
+                                        <div class="kg-ev-list" id="kgEvidenceList">
+                                            <!-- Injected by JS -->
+                                        </div>
+                                    </div>
+                                    <div class="kg-diag-foot">判断红线：<b>无作答证据 = 未知</b>，先诊断再下结论，不得标为未掌握；<b>未学内容仅衔接</b>不布置加练；<b>班级均值 ≠ 人人有问题</b>，补练按学生分组证据处理。证据与分组均为原型模拟。</div>
+                                </div>
+
+                                <!-- 6. 已达标与进步（正向展示：存量认可 + 增量可见，增强成就感） -->
+                                <div class="kg-diag-panel" data-diag="ach" role="tabpanel">
+                                    <div class="kg-diag-note" id="kgAchNote">达标线 ≥80%（随「设置掌握程度」档位联动）</div>
+                                    <div class="kg-diag-bd">
+                                        <div class="kg-ach-summary" id="kgAchSummary"></div>
+                                        <div class="kg-ach-group">
+                                            <div class="kg-ach-group-hd"><i class="fas fa-arrow-trend-up"></i>本周期正向变化<span class="kg-ach-group-cnt" id="kgAchTrendCnt"></span></div>
+                                            <div class="kg-ach-trend" id="kgAchTrend"></div>
+                                        </div>
+                                        <div class="kg-ach-group">
+                                            <div class="kg-ach-group-hd"><i class="fas fa-crown"></i><span id="kgAchSkilledTitle">熟练掌握</span><span class="kg-ach-group-cnt" id="kgAchSkilledCnt"></span></div>
+                                            <div class="kg-ach-chips" id="kgAchSkilledChips"></div>
+                                            <span class="kg-ach-more" id="kgAchSkilledMore" hidden></span>
+                                        </div>
+                                        <div class="kg-ach-group">
+                                            <div class="kg-ach-group-hd"><i class="fas fa-circle-check"></i><span id="kgAchPassedTitle">达标</span><span class="kg-ach-group-cnt" id="kgAchPassedCnt"></span></div>
+                                            <div class="kg-ach-chips" id="kgAchPassedChips"></div>
+                                            <span class="kg-ach-more" id="kgAchPassedMore" hidden></span>
+                                        </div>
+                                    </div>
+                                    <div class="kg-diag-foot">进步判定：首末有效场次得分率提升 ≥8%（得分率 = 100% − 失分率，仅统计周期内考查行）。已达标内容建议转为「减量维持」：每周 1 次滚动复测防回退；<b>新晋达标项建议换情境再测一次</b>确认稳定后，再移出重点清单。</div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Cause Structure Section（整合自班级周期分析报告） -->
+                        <section class="section-container" id="causeSection">
+                            <div class="section-header">
+                                <div class="section-title">
+                                    错因结构分析<span class="prd-badge" data-prd="XK-08" title="查看 PRD XK-08：错因结构分析">XK-08</span>
+                                </div>
+                                <div class="header-actions">
+                                    <span class="section-hint">各次任务失分归因占比 · 首尾对比识别错因迁移 · <em style="font-style:normal; color:var(--warning);">仅智批作业支持错因分析</em></span>
+                                </div>
+                            </div>
+                            <div class="cause-layout">
+                                <div class="cause-chart-panel">
+                                    <div id="causeStackChart" style="height: 340px;"></div>
+                                    <div class="chart-legend" id="causeLegend"></div>
+                                </div>
+                                <div class="cause-insight-panel">
+                                    <h4 class="panel-title"> 关键发现</h4>
+                                    <div class="insight-list" id="causeFindingList"></div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- 教学建议（规则表驱动：汇总本页诊断结论为可执行动作，数据依据随维度联动） -->
+                        <section class="section-container" id="teachAdviceSection">
+                            <div class="section-header">
+                                <div class="section-title">
+                                    教学建议<span class="prd-badge" data-prd="XK-09" title="查看 PRD XK-09：教学建议">XK-09</span>
+                                </div>
+                                <div class="header-actions">
+                                    <span class="action-link" id="btnExportAdvice"><i class="fas fa-file-export"></i>
+                                        导出建议单</span>
+                                    <span class="section-hint" style="font-weight: 400;">基于周期概览 / 图谱诊断 / 错因分析汇总 · 每条附数据依据与直达入口</span>
+                                </div>
+                            </div>
+                            <div class="advice-list" id="teachAdviceList"></div>
+                            <!-- 综合教学建议：汇总上方建议为一周期教学路径、关注范围与使用场景。 -->
+                            <div class="advice-summary" id="teachAdviceSummary"></div>
+                        </section>
+
+                    </div>
+                </div>
+                </div><!-- /#analysisTabPanel -->
+
+                <!-- 页签面板：学生学情（筛选条件范围内学生的作业考试情况，点击学生跳转学生追踪-知识点分析） -->
+                <div class="subject-tab-panel" id="studentsTabPanel" hidden>
+                    <div class="stu-layout">
+                        <!-- 左：学情分布柱状图 + 等级筛选（标题问号悬浮展示等级划分口径） -->
+                        <aside class="stu-side">
+                            <div class="stu-side-title">
+                                <i class="fas fa-chart-bar"></i>学情分布
+                                <span class="stu-title-help" tabindex="0" aria-label="等级划分说明">
+                                    <i class="fas fa-question-circle"></i>
+                                    <span class="stu-help-tip" role="tooltip">
+                                        <b class="stu-help-tip-title">等级划分说明</b>
+                                        <span class="stu-help-row"><i class="stu-help-dot" style="background: var(--success);"></i><b>优秀</b>平均得分率 ≥ 85%</span>
+                                        <span class="stu-help-row"><i class="stu-help-dot" style="background: var(--primary);"></i><b>良好</b>平均得分率 70% ~ 85%</span>
+                                        <span class="stu-help-row"><i class="stu-help-dot" style="background: #d9822b;"></i><b>合格</b>平均得分率 60% ~ 70%</span>
+                                        <span class="stu-help-row"><i class="stu-help-dot" style="background: var(--danger);"></i><b>待合格</b>平均得分率 &lt; 60%</span>
+                                        <span class="stu-help-row"><i class="stu-help-dot" style="background: var(--text-muted);"></i><b>未学习</b>统计区间内作业一次都没交（与徽章「缺交预警」是两套口径：这里只看提交，徽章还看趋势与位置）</span>
+                                        <span class="stu-help-note">平均得分率：统计区间内已提交作业得分率的平均值</span>
+                                    </span>
+                                </span>
+                            </div>
+                            <div id="stuDistChart" style="height: 250px;"></div>
+                            <div class="stu-level-btns" id="stuLevelBtns">
+                                <!-- Injected by JS -->
+                            </div>
+                        </aside>
+
+                        <!-- 右：学生列表 -->
+                        <section class="stu-main-panel">
+                            <div class="stu-panel-head">
+                                <div class="stu-panel-title-wrap">
+                                    <h3 class="stu-panel-title" id="stuListTitle">学生列表 (17人)</h3>
+                                    <!-- 状态判定说明入口：hover/聚焦小问号展开完整判定口径浮层（V3.0 四参数 + 九种显示态，完整规则见 PRD XK-10） -->
+                                    <span class="stu-watch-wrap">
+                                        <span class="stu-watch-help" tabindex="0" role="button" aria-label="查看状态判定说明（V3.0）">
+                                            <i class="fas fa-circle-question"></i>
+                                        </span>
+                                        <div class="stu-watch-legend">
+                                            <div class="stu-watch-legend-head">
+                                                <i class="fas fa-circle-info"></i><span class="stu-watch-legend-title">状态判定说明（V3.0）</span>
+                                                <span class="stu-watch-legend-sub">口径（教师语言）：先看「这个学生比班级平均高/低多少」，抵消试卷难度；再看最近两周跟平时比差多少——差距 10 个百分点以上、且最近连续 2 次同向，才算形成趋势。越早的成绩权重越低（30 天前的那次只算一半）。位置（比班级高还是低）和趋势（比以前好还是差）分开看，不合成一个结论。完整规则见 PRD XK-10。</span>
+                                            </div>
+                                            <!-- 九种显示态判定口径：平铺分段排列（非表格/网格），每段 = 状态徽章 + 描述；顺序 = 需关注 → 正向关注 → 不进名单 → 平稳 -->
+                                            <div class="stu-watch-legend-list">
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-absent">缺交预警</span><span class="stu-watch-legend-txt">连续 2 次没交作业或考试缺考——先联系学生 / 家长确认原因，再判断学业状态（与「数据不足」是两回事）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-down">下滑预警</span><span class="stu-watch-legend-txt">近两周比平时低 10 个百分点以上，且最近连续 2 次都在平时水平下方（需优先关注）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-low">持续落后</span><span class="stu-watch-legend-txt">平时就比班级平均低 5 个百分点以上，但趋势平稳——属于长期性差距，宜系统性补基础（需关注）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-up">进步</span><span class="stu-watch-legend-txt">近两周比平时高 10 个百分点以上，且最近连续 2 次都在平时水平上方（正向关注）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-up">位置回升</span><span class="stu-watch-legend-txt">原来比班级平均低 5 个百分点以上，现在已经回到班内中位——趋势不急，但位置追上来了（正向关注）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-anomaly">单场异常</span><span class="stu-watch-legend-txt">最近一次比平时低 20 个百分点以上——先核实是否缺考、白卷或录入有误，不进预警名单（不计入需关注）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-pend">数据积累中</span><span class="stu-watch-legend-txt">近两周有效任务不足 2 次（例如新转入），暂不判断趋势，等数据补齐（不计入任何名单）</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-wave">单次波动</span><span class="stu-watch-legend-txt">只有 1 次偏离平时水平，还没形成趋势——不进预警名单，下一次任务继续观察</span></div>
+                                                <div class="stu-watch-legend-item"><span class="stu-watch-tag wtag-flat">平稳</span><span class="stu-watch-legend-txt">没有明显上涨或下跌，按既有教学节奏推进（不显示徽章）</span></div>
+                                            </div>
+                                            <div class="stu-watch-legend-foot"><i class="fas fa-triangle-exclamation"></i>需关注 = 缺交预警 + 下滑预警 + 持续落后；正向关注 = 进步 + 位置回升（不计入需关注）；单场异常、数据积累中、单次波动不计入任何名单。判定参数只有 4 个：波动带 10 个百分点 · 确认 2 次 · 缺交 2 次 · 半衰期 30 天。结论仅供教师辅助预警，需人工复核。</div>
+                                        </div>
+                                    </span>
+                                </div>
+                                <span class="prd-badge" data-prd="XK-10" title="查看 PRD XK-10：学生学情">XK-10</span>
+                                <div class="stu-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" id="stuSearchInput" placeholder="请输入学生姓名">
+                                </div>
+                            </div>
+                            <div class="stu-table-wrap">
+                                <table class="st-table stu-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="stu-col-star">标记学生</th>
+                                            <th class="stu-th-name">学生姓名</th>
+                                            <th>未提交次数</th>
+                                            <th>提交率 (%)</th>
+                                            <th>平均得分率 (%)</th>
+                                            <th>学情分布</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="stuTableBody">
+                                        <!-- Injected by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="st-pagination" id="stuPagination">
+                                <!-- Injected by JS -->
+                            </div>
+                        </section>
+                    </div>
+                </div><!-- /#studentsTabPanel -->
+
+                <!-- 学科知识体系未接入 · L2-a 缺省页（口径见 PRD XK-13）：演示双学科权限下切到语文时展示。
+                     只做一句说明，不给任何操作指引（产品侧原因，教师无法自助处置）；有任务无体系 ≠ 无数据，因此不显示 0 -->
+                <section class="section-container subject-offline" id="subjectOfflineSection" hidden>
+                    <div class="section-header">
+                        <div class="section-title">知识点分析<span class="prd-badge" data-prd="XK-13" title="查看 PRD XK-13：缺省页与空态方案">XK-13</span></div>
+                    </div>
+                    <div class="subject-offline-card">
+                        <div class="subject-offline-icon"><i class="fas fa-book-open" aria-hidden="true"></i></div>
+                        <div class="subject-offline-main">
+                            <h3 id="subjectOfflineTitle">语文学科知识体系未覆盖</h3>
+                            <p id="subjectOfflineDesc">本周期已有 2 份语文学科任务完成批改，但题库尚未接入语文学科知识体系，暂不提供知识点分析。</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 已选 0 份 · L0-b 缺省页（口径见 PRD XK-13）：学情来源被全部取消勾选时展示。
+                     注意与 L0 区分：这不是「本周期无任务」，任务池里有任务，只是用户没选
+                     筛选栏与学情来源入口始终可见，因此这里给一个可自助的出口（重新选择任务） -->
+                <section class="section-container subject-offline" id="sourceEmptySection" hidden>
+                    <div class="section-header">
+                        <div class="section-title">知识点分析<span class="prd-badge" data-prd="XK-13" title="查看 PRD XK-13：缺省页与空态方案">XK-13</span></div>
+                    </div>
+                    <div class="subject-offline-card">
+                        <div class="subject-offline-icon"><i class="fas fa-file-signature" aria-hidden="true"></i></div>
+                        <div class="subject-offline-main">
+                            <h3>未选择分析数据</h3>
+                            <p>已取消全部任务勾选，当前无可分析数据。</p>
+                            <div class="subject-offline-actions">
+                                <button type="button" class="subject-offline-btn" id="btnReselectTasks">重新选择任务</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                </div><!-- /#subjectView -->
+
+                <!-- ===== 学生追踪视图（sub-nav: 学生追踪，依据原型截图还原） ===== -->
+                <div id="studentTrackView" hidden>
+                    <div class="st-layout">
+                        <!-- 左侧：学生列表 -->
+                        <aside class="st-sidebar">
+                            <div class="st-side-tools">
+                                <label class="st-side-filter">
+                                    <i class="fas fa-filter"></i>
+                                    <select id="stGroupFilter" title="学生分组">
+                                        <option value="all">全部</option>
+                                        <option value="starred">星标学生</option>
+                                    </select>
+                                </label>
+                                <div class="st-side-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" id="stSearchInput" placeholder="输入学生姓名/学号">
+                                </div>
+                                <span class="prd-badge" data-prd="ST-01" title="查看 PRD ST-01：学生列表">ST-01</span>
+                            </div>
+                            <ul class="st-student-list" id="stStudentList">
+                                <!-- Injected by JS -->
+                            </ul>
+                        </aside>
+
+                        <!-- 右侧：学生详情主区 -->
+                        <section class="st-main">
+                            <header class="st-header">
+                                <!-- 标题行：星标 + 姓名 + 学号 | 数据页签（作业/考试/错题本/知识点分析）同行，竖线间隔，节省纵向空间 -->
+                                <div class="st-title-row">
+                                    <button class="st-star starred" id="stStarBtn" title="收藏学生"><i class="fas fa-star"></i></button>
+                                    <span class="st-name" id="stStudentName">刘鸿锦</span>
+                                    <span class="st-no" id="stStudentNo">(40313)</span>
+                                    <span class="st-title-divider" aria-hidden="true"></span>
+                                    <nav class="st-data-tabs" id="stDataTabs">
+                                        <span class="st-data-tab active" data-tab="homework">作业</span>
+                                        <span class="st-data-tab" data-tab="exam">考试</span>
+                                        <span class="st-data-tab" data-tab="mistake">错题本</span>
+                                        <span class="st-data-tab" data-tab="knowledge">知识点分析</span>
+                                        <span class="prd-badge" data-prd="ST-02" title="查看 PRD ST-02：学生头部与数据页签">ST-02</span>
+                                    </nav>
+                                </div>
+                            </header>
+
+                            <!-- ===== 作业视图（截图主还原目标） ===== -->
+                            <div class="st-view" id="stViewHomework">
+                                <div class="st-card">
+                                    <!-- 筛选工具行 -->
+                                    <div class="st-toolbar">
+                                        <select class="st-select" id="stGradeSelect">
+                                            <option>高一</option>
+                                            <option>高二</option>
+                                            <option>高三</option>
+                                        </select>
+                                        <div class="st-subject-switch" id="stSubjectSwitch">
+                                            <span class="st-sub-chip active" data-subject="英语">英语</span>
+                                            <span class="st-sub-chip" data-subject="物理">物理</span>
+                                        </div>
+                                        <div class="st-date-wrap">
+                                            <div class="st-date-display" id="stDateDisplay" title="统计时间范围">
+                                                <i class="far fa-calendar-alt"></i>
+                                                <span id="stDateText">2026-03-29 ~ 2026-09-29</span>
+                                                <i class="fas fa-chevron-down"></i>
+                                            </div>
+                                            <div class="st-date-pop" id="stDatePop">
+                                                <div class="st-date-row">
+                                                    <input type="date" id="stDateStart" value="2026-03-29">
+                                                    <span>~</span>
+                                                    <input type="date" id="stDateEnd" value="2026-09-29">
+                                                </div>
+                                                <div class="st-date-actions">
+                                                    <button class="st-mini-btn ghost" id="stDateReset">重置</button>
+                                                    <button class="st-mini-btn primary" id="stDateApply">确定</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <label class="st-rank-check" title="显示/隐藏班名列">
+                                            <input type="checkbox" id="stRankToggle" checked>
+                                            <span>显示排名</span>
+                                        </label>
+                                        <span class="st-toolbar-spacer"></span>
+                                        <span class="st-export" id="stExportBtn"><i class="fas fa-download"></i> 导出</span>
+                                        <button class="st-ebook" id="stEbookBtn">电子作业本</button>
+                                    </div>
+
+                                    <!-- 作业表格 -->
+                                    <div class="st-table-wrap">
+                                        <table class="st-table" id="stHwTable">
+                                            <thead>
+                                                <tr>
+                                                    <th>学科</th>
+                                                    <th class="st-th-name">作业名称</th>
+                                                    <th>提交日期</th>
+                                                    <th class="st-col-rank">班名</th>
+                                                    <th>满分</th>
+                                                    <th>得分</th>
+                                                    <th>均分差</th>
+                                                    <th>得分率</th>
+                                                    <th>操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="stHwBody">
+                                                <!-- Injected by JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div class="st-note">说明：师生作业列表展示可能存在差异，教师可实时查看所有已扫描作业；学生端仅展示本人已扫作业，未扫作业需班级扫描率达50%才可见。</div>
+
+                                    <div class="st-pagination" id="stHwPagination">
+                                        <!-- Injected by JS -->
+                                    </div>
+                                </div>
+
+                                <!-- 得分变化曲线 -->
+                                <div class="st-card st-chart-card">
+                                    <div class="st-chart-head">
+                                        <div class="st-chart-title-group">
+                                            <h3 class="st-chart-title">得分变化曲线</h3>
+                                            <div class="st-chart-subject" id="stChartSubject">
+                                                <span class="st-chart-sub-label">学科：</span>
+                                                <span class="st-chart-sub active" data-subject="英语">英语</span>
+                                                <span class="st-chart-sub" data-subject="物理">物理</span>
+                                            </div>
+                                        </div>
+                                        <select class="st-select st-metric" id="stMetricSelect" title="图表指标">
+                                            <option value="score">得分</option>
+                                            <option value="rate">得分率</option>
+                                        </select>
+                                    </div>
+                                    <div id="stTrendChart" style="height: 320px;"></div>
+                                </div>
+                            </div>
+
+                            <!-- ===== 考试视图（依据原型截图还原：最近考试汇总 / 学科成绩柱状图 / 历次学情统计） ===== -->
+                            <div class="st-view" id="stViewExam" hidden>
+                                <!-- 1. 最近考试成绩汇总 -->
+                                <div class="st-card st-exam-card">
+                                    <div class="st-exam-sec-title">1. 最近考试成绩汇总</div>
+                                    <div class="st-exam-latest">
+                                        <div class="st-exam-latest-info">
+                                            <span class="st-exam-name" id="stExamLatestName">0924测试1</span>
+                                            <span class="st-exam-trend up" id="stExamLatestTrend"><i class="fas fa-arrow-trend-up"></i> 连续上升</span>
+                                        </div>
+                                        <div class="st-exam-kpis" id="stExamKpis">
+                                            <!-- Injected by JS：总分/等级、平均分、最高分、排名、T分数 -->
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 1.1 学科成绩汇总 -->
+                                <div class="st-card st-exam-card">
+                                    <div class="st-exam-sec-title">1.1 学科成绩汇总</div>
+                                    <div id="stExamBarChart" style="height: 300px;"></div>
+                                    <div class="st-exam-legend">
+                                        <span class="st-ex-lg"><i style="background:#3b82f6"></i>得分</span>
+                                        <span class="st-ex-lg"><i style="background:#06b6d4"></i>班级平均</span>
+                                        <span class="st-ex-lg"><i style="background:#10b981"></i>班级最高</span>
+                                        <span class="st-ex-lg"><i style="background:#ef4444"></i>班级最低</span>
+                                        <span class="st-ex-lg"><i style="background:#8b5cf6"></i>班级中位数</span>
+                                    </div>
+                                </div>
+
+                                <!-- 2. 历次学情统计 -->
+                                <div class="st-card st-exam-card">
+                                    <div class="st-exam-sec-title">2. 历次学情统计 <span class="st-exam-sub">（仅对比原始分）</span></div>
+                                    <div class="st-exam-history-tabs" id="stExamSubjectTabs">
+                                        <!-- Injected by JS：总分 / 语文 / 数学 / 英语 / 物理 / 化学 / 生物 / 政治 / 历史 / 物化生 / 文科综合-1 -->
+                                    </div>
+                                    <div class="st-exam-history-head">
+                                        <div class="st-exam-view-switch">
+                                            <span class="st-exam-view-btn active" id="stExamBtnTable">表格</span>
+                                            <span class="st-exam-view-btn" id="stExamBtnLine">折线图</span>
+                                            <span class="st-export" id="stExamHistoryExport"><i class="fas fa-download"></i> 导出</span>
+                                        </div>
+                                        <select class="st-select st-exam-rank-select" id="stExamRankSelect" title="图表指标">
+                                            <option value="classRank">班级排名</option>
+                                            <option value="score">个人得分</option>
+                                            <option value="gradeRank">年级排名</option>
+                                        </select>
+                                    </div>
+                                    <div class="st-exam-history-body">
+                                        <div class="st-exam-table-wrap" id="stExamHistoryTableWrap">
+                                            <table class="st-table st-exam-table" id="stExamHistoryTable">
+                                                <thead>
+                                                    <tr>
+                                                        <th>考试日期</th>
+                                                        <th>考试名称</th>
+                                                        <th class="st-exam-val-col">个人得分</th>
+                                                        <th class="st-exam-val-col">班级排名</th>
+                                                        <th class="st-exam-val-col">年级排名</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="stExamHistoryBody">
+                                                    <!-- Injected by JS -->
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div class="st-exam-chart-wrap" id="stExamChartWrap" hidden>
+                                            <div class="st-exam-chart-title" id="stExamChartTitle">个人得分</div>
+                                            <div id="stExamTrendChart" style="height: 320px;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ===== 错题本视图 ===== -->
+                            <div class="st-view" id="stViewMistake" hidden>
+                                <div class="st-card">
+                                    <div class="st-toolbar">
+                                        <div class="st-subject-switch" id="stMistakeSubject">
+                                            <span class="st-sub-chip active" data-msub="all">全部</span>
+                                            <span class="st-sub-chip" data-msub="英语">英语</span>
+                                            <span class="st-sub-chip" data-msub="物理">物理</span>
+                                        </div>
+                                        <span class="st-toolbar-spacer"></span>
+                                        <span class="st-export" id="stMistakeExport"><i class="fas fa-download"></i> 导出</span>
+                                    </div>
+                                    <div class="st-mistake-list" id="stMistakeList">
+                                        <!-- Injected by JS -->
+                                    </div>
+                                    <div class="st-pagination">
+                                        <span class="st-page-arrow disabled"><i class="fas fa-angle-left"></i></span>
+                                        <span class="st-page-num active">1</span>
+                                        <span class="st-page-arrow disabled"><i class="fas fa-angle-right"></i></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ===== 知识点分析视图（分析范围：当前学生，结构对齐学科学情-知识点分析） ===== -->
+                            <div class="st-view" id="stViewKnowledge" hidden>
+                                <!-- 筛选条（同步学科学情合并方案）：学科独立在下拉；统计时间范围与作业/考试勾选统一收在「学情来源与统计范围」弹窗内一次设定，此处只回显「时间范围 · 已选 N 份」 -->
+                                <div class="st-kp-timebar" id="stKpTimeBar">
+                                    <div class="select-group" id="stKpSubjectGroup">
+                                        <select id="stKpSubjectSelect" title="教师教务权限内的学科（演示：数学 / 语文双学科）">
+                                            <option selected>数学</option>
+                                            <option>语文</option>
+                                        </select>
+                                    </div>
+                                    <div class="filter-count filter-scope" id="stKpFilterCount" role="button" tabindex="0"
+                                        title="设置统计时间范围与学情来源（与下方明细同口径）">
+                                        <i class="fas fa-calendar-day"></i>
+                                        <span class="filter-scope-range" id="stKpRangeText">2026年9月</span>
+                                        <span class="filter-scope-sep">·</span>
+                                        <span class="filter-scope-count" id="stKpFilterCountText">已选 -- 份</span>
+                                        <i class="fas fa-chevron-down filter-scope-caret"></i>
+                                    </div>
+                                    <span class="prd-badge" data-prd="ST-03" title="查看 PRD ST-03：学科与时间筛选条">ST-03</span>
+                                </div>
+
+                                <!-- 模块 01：个人周期学情概览（参考班级周期学情概览：KPI + 得分趋势/周期结论双栏并列） -->
+                                <section class="section-container st-module" id="stKpPeriodSection">
+                                    <div class="section-header">
+                                        <div class="section-title"><span class="st-module-num">01</span>
+                                            个人周期学情概览<span class="st-tab-status" id="stKpTabStatus"></span><span class="prd-badge" data-prd="ST-13" title="查看 PRD ST-13：个人周期学情概览">ST-13</span>
+                                        </div>
+                                        <div class="header-actions">
+                                            <span class="section-hint" id="stKpPeriodHint">统计区间：--</span>
+                                        </div>
+                                    </div>
+                                    <div class="period-kpi-grid" id="stKpPeriodKpiGrid">
+                                        <!-- Injected by JS -->
+                                    </div>
+                                    <!-- 得分趋势 + 周期结论双栏并列（趋势图左 2fr / 结论右 1fr，窄屏回退单栏） -->
+                                    <div class="st-kp-period-layout">
+                                        <!-- 该生周期得分趋势（自学情来源弹窗迁入：个人/班级双折线，口径与 KPI/结论同源 = 纳入统计的已勾选任务） -->
+                                        <div class="st-kp-period-trend">
+                                            <div class="st-kp-period-trend-head">
+                                                <span class="st-kp-period-trend-title">周期得分趋势</span>
+                                                <span class="st-kp-period-trend-note">个人得分率 vs 班级得分率 · 口径与周期结论一致</span>
+                                            </div>
+                                            <div id="stKpPeriodTrendChart" style="height: 240px;"></div>
+                                            <div class="chart-legend">
+                                                <span class="legend-item"><i class="legend-dot" style="background:#3b82f6"></i>个人得分率</span>
+                                                <span class="legend-item"><i class="legend-dot" style="background:#94a3b8"></i>班级得分率</span>
+                                                <span class="legend-item"><i class="legend-shape">▲</i>考试<i class="legend-shape" style="margin-left:6px">●</i>作业</span>
+                                            </div>
+                                            <!-- 学情状态通俗解读：六状态大白话解释，与该生当前状态动态联动（学生学情页徽章同源） -->
+                                            <div class="st-kp-period-status-note" id="stKpPeriodStatusNote">
+                                                <i class="fas fa-lightbulb"></i>
+                                                <span>学情状态：</span>
+                                                <b id="stKpPeriodStatusPlain">--</b>
+                                            </div>
+                                            <div class="st-kp-period-trend-empty" id="stKpPeriodTrendEmpty" style="display: none;">
+                                                <i class="fas fa-inbox"></i>
+                                                <p>当前筛选范围内暂无任务</p>
+                                            </div>
+                                        </div>
+                                        <div class="st-kp-period-insight">
+                                            <h4 class="panel-title">个人周期结论</h4>
+                                            <div class="insight-list" id="stKpPeriodInsightList"></div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <!-- ===== 模块 02：知识点维度分析（维度切换并入模块头 → 个人教学建议全部内容） ===== -->
+                                <section class="st-module" id="stKpDimensionSection">
+                                    <div class="st-module-head">
+                                        <span class="st-module-num">02</span>
+                                        <div class="st-module-title">知识点维度分析</div>
+                                        <div class="st-kp-dims">
+                                            <span class="top-nav-link active" id="stKpTabKp" style="margin-right: 24px; font-size: 14px;">知识点 (86)</span>
+                                            <span class="top-nav-link" id="stKpTabAbility" style="font-size: 14px; color: var(--text-muted);">能力 (13)</span>
+                                        </div>
+                                        <span class="prd-badge" data-prd="ST-04" title="查看 PRD ST-04：维度切换（并入模块头）">ST-04</span>
+                                    </div>
+
+                                <!-- Summary Cards -->
+                                <section class="summary-grid">
+                                    <span class="prd-badge prd-badge-corner" data-prd="ST-05" title="查看 PRD ST-05：摘要卡">ST-05</span>
+                                    <div class="glass-card" id="stKpCard1">
+                                        <div class="card-content">
+                                            <h3 id="stKpTitle1">考核项数量</h3>
+                                            <div class="value"><span id="stKpVal1">--</span><span class="value-unit">个</span></div>
+                                        </div>
+                                    </div>
+                                    <div class="glass-card st-kp-clickable" id="stKpCard2">
+                                        <div class="card-content">
+                                            <h3 id="stKpTitle2">未掌握数量</h3>
+                                            <div class="value"><span id="stKpVal2">--</span><span class="value-unit">个</span><span class="badge badge-danger" id="stKpBadge2">得分率 &lt; 60%</span></div>
+                                        </div>
+                                    </div>
+                                    <div class="glass-card st-kp-clickable" id="stKpCard3" style="display:none;">
+                                        <div class="card-content">
+                                            <h3>个人失分题次</h3>
+                                            <div class="value"><span id="stKpVal3">--</span><span class="value-unit">次</span></div>
+                                        </div>
+                                    </div>
+                                    <div class="glass-card" id="stKpCard4">
+                                        <div class="card-content">
+                                            <h3 id="stKpTitle4">节点平均掌握度</h3>
+                                            <div class="value"><span id="stKpVal4">--</span><span class="value-unit">%</span><span class="badge badge-success" id="stKpBadge4">与班级 +0.0%</span></div>
+                                        </div>
+                                    </div>
+                                    <div class="glass-card st-kp-clickable" id="stKpCard5">
+                                        <div class="card-content">
+                                            <h3 id="stKpTitle5">顽固薄弱项</h3>
+                                            <div class="value"><span id="stKpVal5">--</span><span class="value-unit">个</span><span class="badge badge-danger" id="stKpBadge5">≥3次失分率≥40%</span></div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <!-- 个人失分明细（当前隐藏）：仅保留历史作答数据，不提供题目生成或组卷操作。 -->
+                                <section class="section-container" id="stKpLostSection" style="display:none;">
+                                    <div class="section-header">
+                                        <div class="section-title">
+                                            个人失分明细<span class="prd-badge" data-prd="ST-09" title="查看 PRD ST-09：个人失分明细（当前隐藏）">ST-09</span>
+                                            <span class="section-hint" style="font-weight: 400;">口径：周期内该生有失分记录的<span id="stKpLostLabel">知识点</span> · 失分题次合计与摘要卡一致</span>
+                                        </div>
+                                        <div class="header-actions">
+                                            <span class="mistake-sel-info" id="stKpLostSelInfo">已选 0 项</span>
+                                        </div>
+                                    </div>
+                                    <div class="table-scroll-wrap">
+                                        <table class="analysis-table mistake-table">
+                                            <thead>
+                                                <tr>
+                                                    <th class="ck-cell"><input type="checkbox" id="stKpLostCheckAll" title="全选"></th>
+                                                    <th id="stKpLostTh">失分知识点</th>
+                                                    <th>章节</th>
+                                                    <th>考察频次</th>
+                                                    <th>个人得分率 (%)</th>
+                                                    <th>班级得分率 (%)</th>
+                                                    <th>失分次数</th>
+                                                    <th>操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="stKpLostBody"></tbody>
+                                        </table>
+                                    </div>
+                                </section>
+
+                                <!-- 分析明细：章节目录 + 树状图/表格 -->
+                                <section class="section-container analysis-section" id="stKpAnalysisSection">
+                                    <div class="section-header">
+                                        <div class="analysis-heading">
+                                            <div class="section-title">
+                                                <span id="stKpTitleText">知识点分析明细</span><span class="prd-badge" data-prd="ST-06" title="查看 PRD ST-06：知识点分析明细">ST-06</span>
+                                            </div>
+                                            <button type="button" class="chapter-toggle" id="stKpToggleChapters"
+                                                aria-controls="stKpChapterSidebar" aria-expanded="true" aria-label="收起章节目录">
+                                                <i class="fas fa-outdent" aria-hidden="true"></i>
+                                                <span>收起目录</span>
+                                            </button>
+                                        </div>
+                                        <div class="header-actions">
+                                            <div class="segmented-control" style="margin-bottom: 0;">
+                                                <button class="segment-btn active" id="stKpBtnTree">树状图</button>
+                                                <button class="segment-btn" id="stKpBtnTable">表格</button>
+                                                <button class="segment-btn" id="stKpBtnGraph">关联图谱</button>
+                                            </div>
+                                            <!-- 图谱专属控件（同步学科学情：布局切换 / 适应画布，仅关联图谱视图显示） -->
+                                            <div class="segmented-control kg-only" style="margin-bottom: 0;">
+                                                <button class="segment-btn active" id="stKpKgBtnForce">力导向</button>
+                                                <button class="segment-btn" id="stKpKgBtnRadial">放射</button>
+                                            </div>
+                                            <span class="action-link kg-only" id="stKpKgBtnFit"><i class="fas fa-expand"></i>
+                                                适应画布</span>
+                                            <div class="action-links">
+                                                <span class="action-link" id="stKpExport"><i class="fas fa-download"></i>
+                                                    导出</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="analysis-layout" id="stKpLayout">
+                                        <!-- 左：统一目录（同步学科学情 kg-side：一级模块开关过滤，四视图渲染层共用） -->
+                                        <aside class="kg-side" id="stKpChapterSidebar" aria-labelledby="stKpDirTitle">
+                                            <div class="kg-side-header">
+                                                <span id="stKpDirTitle">知识模块</span>
+                                                <span class="kg-side-count" id="stKpModuleCount">11/11</span>
+                                            </div>
+                                            <!-- 范围开关（同步学科学情 kgShowAll）：默认仅显示该生周期学情包含的知识点模块（零覆盖模块整棵隐藏）；勾选后显示维度下全部知识点（未检测/未学灰色标识） -->
+                                            <label class="kg-check kg-showall" id="stKpShowAllWrap" title="默认仅显示周期学情包含的知识点模块（零覆盖模块整棵隐藏）；勾选后显示维度下全部知识点（未检测/未学灰色标识）。统计口径不随开关变化">
+                                                <input type="checkbox" id="stKpShowAll"> 查看全部知识点
+                                            </label>
+                                            <div class="kg-module-list" id="stKpModuleList">
+                                                <!-- Injected by JS -->
+                                            </div>
+                                        </aside>
+
+                                        <div class="analysis-main">
+                                            <!-- Tree View -->
+                                            <div id="stKpTreeView">
+                                                <div id="stKpTreeChart" class="chart-container"></div>
+                                                <!-- 掌握程度图例：随「设置掌握程度」全校共用档位实时生成；灰色 = 无作答证据 / 未覆盖 -->
+                                                <div class="tree-legend" id="stKpTreeLegend"></div>
+                                            </div>
+
+                                            <!-- Table View (Hidden by default) -->
+                                            <div id="stKpTableView" style="display: none;">
+                                                <div class="table-tabs" id="stKpTableTabs">
+                                                    <span class="active" data-mode="0">全部</span>
+                                                    <span data-mode="1">一级知识点</span>
+                                                    <span data-mode="2">二级知识点</span>
+                                                    <span data-mode="3">三级知识点</span>
+                                                </div>
+                                                <table class="analysis-table">
+                                                    <thead id="stKpTableHead">
+                                                        <!-- Injected by JS -->
+                                                    </thead>
+                                                    <tbody id="stKpTableBody">
+                                                        <!-- Injected by JS -->
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <!-- 图谱工具栏（同步学科学情：深度 / 关系开关 / 标签策略 / 仅看关联，
+                                                 仅关联图谱视图显示；置于目录右侧主区顶部，不横跨目录上方） -->
+                                            <div class="kg-toolbar kg-only" id="stKpKgToolbar">
+                                                <div class="kg-toolbar-group">
+                                                    <span class="kg-toolbar-label">深度</span>
+                                                    <div class="kg-chip-group" id="stKpDepthGroup">
+                                                        <span class="kg-chip" data-depth="1">一级</span>
+                                                        <span class="kg-chip" data-depth="2">二级</span>
+                                                        <span class="kg-chip active" data-depth="3">三级</span>
+                                                    </div>
+                                                </div>
+                                                <div class="kg-toolbar-group">
+                                                    <span class="kg-toolbar-label">关系</span>
+                                                    <div class="kg-chip-group" id="stKpRelationGroup">
+                                                        <span class="kg-chip active" data-rel="prerequisite">前置/后续</span>
+                                                        <span class="kg-chip" data-rel="confusable">易混淆</span>
+                                                        <span class="kg-chip active" data-rel="structure">树状结构</span>
+                                                    </div>
+                                                </div>
+                                                <div class="kg-toolbar-group">
+                                                    <span class="kg-toolbar-label">标签</span>
+                                                    <div class="kg-chip-group" id="stKpLabelGroup">
+                                                        <span class="kg-chip active" data-label="compact">简洁</span>
+                                                        <span class="kg-chip" data-label="all">全部</span>
+                                                        <span class="kg-chip" data-label="none">隐藏</span>
+                                                    </div>
+                                                </div>
+                                                <label class="kg-check"><input type="checkbox" id="stKpOnlyRelated"> 仅看有关联的知识点</label>
+                                                <div class="kg-stat" id="stKpKgStat"></div>
+                                            </div>
+
+                                            <!-- KG View（关联图谱：多关系 + 力导向/放射布局，同步学科学情；节点掌握度为该生个人口径） -->
+                                            <div id="stKpGraphView" style="display: none;">
+                                                <div class="kg-canvas-wrap">
+                                                    <div id="stKpGraphChart"></div>
+                                                </div>
+                                                <div class="chart-legend" id="stKpKgLegend">
+                                                    <!-- Injected by JS -->
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- 右：选中节点关联详情（同步学科学情，仅关联图谱视图显示） -->
+                                        <aside class="kg-detail kg-only" id="stKpKgDetailPanel">
+                                            <!-- Injected by JS -->
+                                        </aside>
+                                    </div>
+                                </section>
+
+                                <!-- 个人知识图谱诊断（顽固薄弱 / 前序断层 / 易混淆 / 题型易错点 / 前后序证据 / 已达标，同步学科学情-知识图谱诊断 6 标签结构） -->
+                                <section class="section-container" id="stKpDiagSection">
+                                    <div class="section-header">
+                                        <div class="section-title">
+                                            个人知识图谱诊断<span class="prd-badge" data-prd="ST-07" title="查看 PRD ST-07：个人知识图谱诊断">ST-07</span>
+                                        </div>
+                                        <div class="header-actions">
+                                            <span class="section-hint" style="font-weight: 400;">基于该生周期作答证据 · 顽固薄弱 / 前序断层 / 易混淆 / 题型易错点 / 前后序证据与已达标</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- 诊断标签条：计数徽章保留一屏总览能力；计数为 0 的标签灰显但仍可查看空态 -->
+                                    <div class="kg-diag-tabs" id="stKpDiagTabs" role="tablist">
+                                        <button type="button" class="kg-diag-tab active" data-diag="stub" role="tab" aria-selected="true">
+                                            顽固薄弱
+                                            <span class="kg-diag-count" id="stKpStubCount">0</span>
+                                        </button>
+                                        <button type="button" class="kg-diag-tab" data-diag="fault" role="tab" aria-selected="false">
+                                            前序断层
+                                            <span class="kg-diag-count" id="stKpFaultCount">0</span>
+                                        </button>
+                                        <button type="button" class="kg-diag-tab" data-diag="conf" role="tab" aria-selected="false">
+                                            易混淆
+                                            <span class="kg-diag-count" id="stKpConfCount">0</span>
+                                        </button>
+                                        <button type="button" class="kg-diag-tab" data-diag="pit" role="tab" aria-selected="false">
+                                            题型易错点
+                                            <span class="kg-diag-count" id="stKpPitCount">0</span>
+                                        </button>
+                                        <button type="button" class="kg-diag-tab" data-diag="evidence" role="tab" aria-selected="false">
+                                            前后序证据
+                                            <span class="kg-diag-count" id="stKpEvidenceCount">0</span>
+                                        </button>
+                                        <button type="button" class="kg-diag-tab" data-diag="ach" role="tab" aria-selected="false">
+                                            已达标
+                                            <span class="kg-diag-count" id="stKpAchCount">0</span>
+                                        </button>
+                                        <span class="kg-diag-overview" id="stKpDiagOverview"></span>
+                                    </div>
+
+                                    <div class="kg-diag-panels">
+                                        <!-- 1. 顽固薄弱知识点 -->
+                                        <div class="kg-diag-panel active" data-diag="stub" role="tabpanel">
+                                            <div class="kg-diag-note">判定：该生同一知识点在 ≥3 次不同任务中失分率 ≥40%</div>
+                                            <div class="kg-diag-bd" id="stKpStubList"></div>
+                                            <div class="kg-diag-foot">与单次分析的区别：单次看「这次哪里错」，周期看「哪些错一直没解决」。本期不区分病型，顽固项统一按<b>同点巩固 + 变式复测</b>编排（复盘失分题 → 变式复测 2 次 → 失分率降到 40% 以下退出名单），以<b>个人专项加练</b>落地而非随堂重复讲题。</div>
+                                        </div>
+
+                                        <!-- 2. 前序断层归因 TOP -->
+                                        <div class="kg-diag-panel" data-diag="fault" role="tabpanel">
+                                            <div class="kg-diag-note">按该生掌握度升序 · 回溯前置链，判定根因层</div>
+                                            <div class="kg-diag-bd" id="stKpFaultList"></div>
+                                            <div class="kg-diag-foot" id="stKpFaultFoot">判定规则：该生目标知识点掌握度 &lt;60%，且其前置中存在 &lt;70% 的节点 → 根因在前序，沿最弱前置回溯（最多 5 层、跨一级模块停止、环路跳过）至达标节点为止；近 5 层无 &lt;70% 前置则改判本点自身问题。<b>直接讲薄弱点会无效，需先补前序。</b></div>
+                                        </div>
+
+                                        <!-- 3. 易混淆知识点 -->
+                                        <div class="kg-diag-panel" data-diag="conf" role="tabpanel">
+                                            <div class="kg-diag-note">成对辨析清单，替代无效刷题</div>
+                                            <div class="kg-diag-bd" id="stKpConfList"></div>
+                                            <div class="kg-diag-foot">易混淆错误的特征是：<b>学生不是不会，而是把两个概念用反了</b>。这类错误刷题收益很低，正确做法是成对辨析 + 让学生自己讲出差别。</div>
+                                        </div>
+
+                                        <!-- 4. 题型 × 易错点 -->
+                                        <div class="kg-diag-panel" data-diag="pit" role="tabpanel">
+                                            <div class="kg-diag-note">该生个人易错点清单，可直接写进面批记录</div>
+                                            <div class="kg-diag-bd" id="stKpPitList"></div>
+                                            <div class="kg-diag-foot">易错点比「错因」更细：错因说明<b>为什么错</b>，易错点说明<b>在哪一步错</b>。命中判定来自阅卷标注 + 客观题规则匹配。</div>
+                                        </div>
+
+                                        <!-- 5. 前序 / 后序证据总览（个人口径：该生周期内多任务汇总证据） -->
+                                        <div class="kg-diag-panel" data-diag="evidence" role="tabpanel">
+                                            <div class="kg-diag-note">单次作业无法获取前后序作答数据，本模块基于该生周期内多任务汇总证据</div>
+                                            <div class="kg-diag-bd">
+                                                <div class="kg-ev-chips" id="stKpEvidenceChips"></div>
+                                                <div class="kg-ev-list" id="stKpEvidenceList"></div>
+                                            </div>
+                                            <div class="kg-diag-foot">判断红线：<b>无作答证据 = 未知</b>，先诊断再下结论，不得标为未掌握；<b>未学内容仅衔接</b>不布置加练。证据为原型模拟。</div>
+                                        </div>
+
+                                        <!-- 6. 已达标与进步（正向展示：存量认可 + 增量可见，增强学生信心） -->
+                                        <div class="kg-diag-panel" data-diag="ach" role="tabpanel">
+                                            <div class="kg-diag-note" id="stKpAchNote">达标线 ≥80%（随「设置掌握程度」档位联动）</div>
+                                            <div class="kg-diag-bd">
+                                                <div class="kg-ach-summary" id="stKpAchSummary"></div>
+                                                <div class="kg-ach-group">
+                                                    <div class="kg-ach-group-hd"><i class="fas fa-arrow-trend-up"></i>本周期正向变化<span class="kg-ach-group-cnt" id="stKpAchTrendCnt"></span></div>
+                                                    <div class="kg-ach-trend" id="stKpAchTrend"></div>
+                                                </div>
+                                                <div class="kg-ach-group">
+                                                    <div class="kg-ach-group-hd"><i class="fas fa-crown"></i><span id="stKpAchSkilledTitle">熟练掌握</span><span class="kg-ach-group-cnt" id="stKpAchSkilledCnt"></span></div>
+                                                    <div class="kg-ach-chips" id="stKpAchSkilledChips"></div>
+                                                    <span class="kg-ach-more" id="stKpAchSkilledMore" hidden></span>
+                                                </div>
+                                                <div class="kg-ach-group">
+                                                    <div class="kg-ach-group-hd"><i class="fas fa-circle-check"></i><span id="stKpAchPassedTitle">达标</span><span class="kg-ach-group-cnt" id="stKpAchPassedCnt"></span></div>
+                                                    <div class="kg-ach-chips" id="stKpAchPassedChips"></div>
+                                                    <span class="kg-ach-more" id="stKpAchPassedMore" hidden></span>
+                                                </div>
+                                            </div>
+                                            <div class="kg-diag-foot">进步判定：首末有效场次得分率提升 ≥8%。该生已达标内容建议转为「减量维持」：每周 1 次滚动复测防回退；<b>新晋达标项建议换情境再测一次</b>确认稳定后，再移出重点关注清单。</div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <!-- 个人错因结构分析（同步学科学情-错因结构分析，该生各次任务失分归因占比） -->
+                                <section class="section-container" id="stKpCauseSection">
+                                    <div class="section-header">
+                                        <div class="section-title">
+                                            个人错因结构分析<span class="prd-badge" data-prd="ST-08" title="查看 PRD ST-08：个人错因结构分析">ST-08</span>
+                                        </div>
+                                        <div class="header-actions">
+                                            <span class="section-hint">该生各次任务失分归因占比 · 首尾对比识别错因迁移 · <em style="font-style:normal; color:var(--warning);">仅智批作业支持错因分析</em></span>
+                                        </div>
+                                    </div>
+                                    <div class="cause-layout">
+                                        <div class="cause-chart-panel">
+                                            <div id="stKpCauseStackChart" style="height: 340px;"></div>
+                                            <div class="chart-legend" id="stKpCauseLegend"></div>
+                                        </div>
+                                        <div class="cause-insight-panel">
+                                            <h4 class="panel-title"> 关键发现</h4>
+                                            <div class="insight-list" id="stKpCauseFindingList"></div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <!-- 个人教学建议（规则表驱动：汇总该生各诊断结论为可执行动作） -->
+                                <section class="section-container" id="stKpAdviceSection">
+                                    <div class="section-header">
+                                        <div class="section-title">
+                                            个人教学建议<span class="prd-badge" data-prd="ST-10" title="查看 PRD ST-10：个人教学建议">ST-10</span>
+                                            <span class="section-hint" style="font-weight: 400;">基于该生周期作答证据 · 每条附数据依据与直达入口</span>
+                                        </div>
+                                        <div class="header-actions">
+                                            <span class="action-link" id="stKpAdviceExport"><i class="fas fa-file-export"></i> 导出建议单</span>
+                                        </div>
+                                    </div>
+                                    <div class="advice-list" id="stKpAdviceList"></div>
+                                    <!-- 个人综合教学建议：复用班级版渲染器，关注范围与文案为该生口径。 -->
+                                    <div class="advice-summary" id="stKpAdviceSummary"></div>
+                                </section>
+                                </section><!-- /#stKpDimensionSection 模块 02 结束 -->
+                            </div>
+                        </section>
+                    </div>
+
+                </div><!-- /#studentTrackView -->
+            </main>
+        </div>
+    </div>
+
+    <!-- Details View Overlay (Hidden by default) -->
+    <div class="details-view" id="detailsView">
+        <header class="details-header">
+            <div class="back-link" id="closeDetails"><i class="fas fa-chevron-left"></i> 返回</div>
+        </header>
+
+        <div class="details-layout">
+            <!-- Sidebar with items -->
+            <aside class="details-sidebar">
+                <div class="details-sidebar-header">
+                    <span id="detailsSidebarLabel">考核项</span>
+                    <span>班级得分率 (%)</span>
+                </div>
+                <div id="detailsSidebarList">
+                    <!-- Items injected by JS -->
+                </div>
+            </aside>
+
+            <!-- Main analysis area -->
+            <main class="details-main-content">
+                <div class="details-top-bar">
+                    <div class="type-filter" id="detailsTypeFilter">
+                        类型：<span class="active" data-type="all">全部</span><span
+                            data-type="assignment">作业</span><span data-type="exam">考试</span>
+                    </div>
+                </div>
+
+                <div class="section-container" style="margin-top: 0; padding: 24px;">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <span id="detailsTitleText">作业考试明细</span><span class="prd-badge" data-prd="XK-11" title="查看 PRD XK-11：作业考试明细详情页">XK-11</span>
+                        </div>
+                        <div class="header-actions">
+                            <div class="segmented-control" style="margin-bottom: 0;">
+                                <button class="segment-btn" id="btnDetailsChart">趋势图</button>
+                                <button class="segment-btn active" id="btnDetailsTable">表格</button>
+                            </div>
+                            <div class="action-links">
+                                <span class="action-link" id="btnExportDetails"><i class="fas fa-download"></i>
+                                    导出</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="detailsChartContainer" style="height: 350px; display: none; margin-bottom: 24px;"></div>
+                    <div id="detailsTableWrapper">
+                        <table class="analysis-table">
+                            <thead>
+                                <tr>
+                                    <th>作业考试名称</th>
+                                    <th>对应题号</th>
+                                    <th>班级得分率 (%)</th>
+                                    <th>年级得分率 (%)</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detailsTableBody">
+                                <!-- Injected by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- 学生追踪：作答详情/图像弹窗（置于 body 顶层，避开 .content-body slide-up 动画 transform 对 fixed 遮罩的包含块劫持） -->
+    <div class="modal-overlay" id="stModalOverlay">
+        <div class="st-modal">
+            <div class="st-modal-head">
+                <span id="stModalTitle"></span>
+                <i class="fas fa-times st-modal-close" id="stModalClose"></i>
+            </div>
+            <div class="st-modal-body" id="stModalBody"></div>
+        </div>
+    </div>
+
+    <!-- 学生追踪-知识点分析：学情来源弹窗（点击时间筛选条「已选：N 份」打开；交互同学科学情-学情来源，作业/考试双栏勾选 + 栏头全选计数 + 确定/取消；置于 body 顶层同理避免 fixed 遮罩包含块劫持） -->
+    <div class="modal-overlay" id="stKpFilterModalOverlay">
+        <div class="filter-modal source-modal">
+            <header class="modal-header">
+                <h2>学情来源与统计范围</h2>
+                <i class="fas fa-times close-modal" id="stKpFilterModalClose"></i>
+            </header>
+            <!-- 顶部统计时间范围条：档位与日期控件由筛选栏迁入，与下方勾选同屏一次设定（选定即生效） -->
+            <div class="source-timebar">
+                <div class="source-timebar-hd">
+                    <span class="source-timebar-title"><i class="fas fa-clock"></i>统计时间范围</span>
+                    <span class="source-timebar-note"><i class="fas fa-circle-info"></i>作业数据<b>截止到前一天（不含今天）</b>；考试<b>以完整学情发布为准</b>，未发布不计入</span>
+                </div>
+                <div class="source-timebar-row">
+                    <div class="segmented-control" id="stKpTimeSegment">
+                        <button class="segment-btn" data-tmode="year">学年</button>
+                        <button class="segment-btn" data-tmode="month">月</button>
+                        <button class="segment-btn active" data-tmode="week">周</button>
+                        <button class="segment-btn" data-tmode="custom">自定义</button>
+                    </div>
+                    <div class="date-range" id="stKpYearPicker" style="display: none;">
+                        <select id="stKpYearSelect">
+                            <option selected>2026-2027学年</option>
+                            <option>2025-2026学年</option>
+                            <option>2024-2025学年</option>
+                        </select>
+                    </div>
+                    <div class="date-range" id="stKpMonthPicker" style="display: none;">
+                        <input type="month" id="stKpMonthInput" value="2026-09">
+                    </div>
+                    <div class="date-range" id="stKpWeekPicker">
+                        <input type="week" id="stKpWeekInput" value="2026-W38">
+                        <span class="week-hint" id="stKpWeekHint">09-14 ~ 09-20</span>
+                    </div>
+                    <div class="date-range" id="stKpCustomRange" style="display: none;">
+                        <input type="date" id="stKpCustomFrom" value="2026-09-01">
+                        <span class="date-range-sep">-</span>
+                        <input type="date" id="stKpCustomTo" value="2026-09-15">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-content source-columns">
+                <!-- 左栏：作业列表（池 = 当前学科 + 当前时间范围任务） -->
+                <section class="source-column">
+                    <label class="source-column-header">
+                        <input type="checkbox" id="stKpCheckAllAssignments">
+                        <span>作业<span class="source-count" id="stKpLabelAssignCount">(0/0)</span></span>
+                    </label>
+                    <p class="source-note">不包含学案及无分值的通用题卡</p>
+                    <div class="check-list" id="stKpModalAssignList">
+                        <!-- 动态生成列表项 -->
+                    </div>
+                    <div class="source-empty" id="stKpAssignEmpty" style="display: none;">
+                        <i class="fas fa-inbox"></i>
+                        <p>暂无作业</p>
+                    </div>
+                </section>
+                <!-- 右栏：考试列表 -->
+                <section class="source-column">
+                    <label class="source-column-header">
+                        <input type="checkbox" id="stKpCheckAllExams">
+                        <span>考试<span class="source-count" id="stKpLabelExamCount">(0/0)</span></span>
+                    </label>
+                    <div class="check-list" id="stKpModalExamList">
+                        <!-- 动态生成列表项 -->
+                    </div>
+                    <div class="source-empty" id="stKpExamEmpty" style="display: none;">
+                        <i class="fas fa-inbox"></i>
+                        <p>暂无考试</p>
+                    </div>
+                </section>
+            </div>
+            <footer class="modal-footer">
+                <div class="modal-scope-echo">
+                    <span class="modal-scope-label">当前范围</span>
+                    <span class="modal-scope-range" id="stKpModalRangeEcho">2026年9月</span>
+                    <span class="filter-scope-sep">·</span>
+                    <span id="stKpModalCountEcho">已选 -- 份</span>
+                </div>
+                <button class="btn btn-ghost" id="stKpBtnCancelModal">取消</button>
+                <button class="btn btn-primary" id="stKpBtnConfirmModal">确定</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- 学生追踪-知识点分析：作答图像预览弹窗（点击作答证据卡「我的作答」打开；原型演示：未接入真实作答图像，使用占位图） -->
+    <div class="modal-overlay" id="stAnsPreviewOverlay">
+        <div class="st-ansov">
+            <div class="st-ansov-head">
+                <div>
+                    <div class="st-ansov-title" id="stAnsPreviewTitle">我的作答</div>
+                    <div class="st-ansov-meta" id="stAnsPreviewMeta"></div>
+                </div>
+                <i class="fas fa-times st-ansov-close" id="stAnsPreviewClose"></i>
+            </div>
+            <div class="st-ansov-body">
+                <!-- 作答原图占位（模拟扫描手写答题纸，真实数据接入后替换为 <img>） -->
+                <div class="st-ansov-paper">
+                    <div class="st-ansov-paper-bar">
+                        <span id="stAnsPreviewNo">第 1 题</span>
+                        <span id="stAnsPreviewFull">10 分</span>
+                    </div>
+                    <div class="st-ansov-hand">
+                        <i style="width: 58%;"></i>
+                        <i style="width: 86%;"></i>
+                        <i style="width: 44%;"></i>
+                        <i style="width: 72%;"></i>
+                        <i style="width: 91%;"></i>
+                        <i style="width: 36%;"></i>
+                    </div>
+                    <div class="st-ansov-watermark">原型占位图</div>
+                </div>
+                <div class="st-ansov-tip"><i class="fas fa-circle-info"></i> 原型演示：学生作答原图尚未接入真实数据，此处以占位图示意。</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mastery Setup Modal：全校共用档位，故带权限态（组长可改 / 其余只读）与最后保存留痕 -->
+    <div class="modal-overlay" id="masteryModalOverlay">
+        <div class="mastery-setup-panel" id="masterySetupPanel">
+            <div class="mastery-setup-body">
+                <div class="mastery-setup-title">
+                    <span>设置掌握程度</span>
+                    <i class="fas fa-times close-modal" id="closeMasteryIcon"></i>
+                </div>
+
+                <!-- 并发冲突提示：打开弹窗后配置被他人保存 → 以最后一次保存为准，由用户决定覆盖或采用最新 -->
+                <div class="mastery-conflict-bar" id="masteryConflictBar">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    <div class="mastery-conflict-main">
+                        <b>保存冲突 · 配置已被他人更新</b>
+                        <span id="masteryConflictText">—</span>
+                    </div>
+                    <div class="mastery-conflict-actions">
+                        <button type="button" class="btn btn-ghost btn-xs" id="btnConflictDiscard">使用最新设置</button>
+                        <button type="button" class="btn btn-xs btn-conflict" id="btnConflictOverwrite">以我的修改为准</button>
+                    </div>
+                </div>
+
+                <div class="mastery-setup-row">
+                    <span class="mastery-setup-label">设置档位：</span>
+                    <div class="mastery-radio-group">
+                        <label class="radio-item"><input type="radio" name="masteryLevel" value="3" checked> 3档</label>
+                        <label class="radio-item"><input type="radio" name="masteryLevel" value="4"> 4档</label>
+                    </div>
+                </div>
+
+                <div id="masteryLevelContainer" style="margin-top: 32px;">
+                    <!-- 动态渲染档位配置行 -->
+                </div>
+
+                <!-- 最后保存留痕：时间 + 操作人（脱敏：姓 + 名末字 + 账号后四位） -->
+                <div class="mastery-audit-bar" id="masteryAuditBar">
+                    <i class="fas fa-clock-rotate-left"></i>
+                    <span class="mastery-audit-main">最后一次保存：<b id="masteryAuditTime">—</b> · <b id="masteryAuditUser">—</b></span>
+                    <span class="mastery-audit-tip" id="masteryAuditTip">修改将同步全体教师</span>
+                </div>
+            </div>
+
+            <div class="mastery-setup-footer">
+                <!-- 原型演示岛：真实系统由登录态下发角色、由后端推送并发更新，上线时删除此组即可 -->
+                <div class="mastery-demo-tools">
+                    <span class="mastery-demo-label">原型演示</span>
+                    <select id="masteryRoleSelect" title="切换当前登录角色以查看权限差异">
+                        <option value="leader">学科组长</option>
+                        <option value="director">教研主任</option>
+                        <option value="teacher">学科教师</option>
+                        <option value="head">班主任</option>
+                    </select>
+                    <button type="button" class="mastery-demo-btn" id="btnSimulatePeerSave" title="模拟另一位组长在你打开弹窗后保存了档位，用于验证冲突提示">模拟他人保存</button>
+                </div>
+                <button class="btn btn-ghost" id="btnCancelMastery">取消</button>
+                <button class="btn btn-primary" id="btnConfirmMastery">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 学情来源 Modal -->
+    <div class="modal-overlay" id="filterModalOverlay">
+        <div class="filter-modal source-modal">
+            <header class="modal-header">
+                <h2>学情来源与统计范围</h2>
+                <i class="fas fa-times close-modal" id="closeModalIcon"></i>
+            </header>
+            <!-- 统计时间范围：原筛选栏的档位与日期控件整体迁入，与下方勾选同屏一次设定 -->
+            <div class="source-timebar">
+                <div class="source-timebar-hd">
+                    <span class="source-timebar-title"><i class="fas fa-clock"></i>统计时间范围</span>
+                    <span class="source-timebar-note"><i class="fas fa-circle-info"></i>作业数据<b>截止到前一天（不含今天）</b>；考试<b>以完整学情发布为准</b>，未发布不计入</span>
+                </div>
+                <div class="source-timebar-row">
+                    <div class="segmented-control" id="timeSegment">
+                        <button class="segment-btn">学年</button>
+                        <button class="segment-btn">月</button>
+                        <button class="segment-btn active">周</button>
+                        <button class="segment-btn">自定义</button>
+                    </div>
+                    <!-- 日期控件：随所选档位切换（学年→学年 / 月→月 / 周→自然周 / 自定义→区间） -->
+                    <div class="date-range" id="yearRangePicker" style="display: none;">
+                        <select id="yearPickSelect">
+                            <option>2025-2026学年</option>
+                            <option>2024-2025学年</option>
+                            <option>2023-2024学年</option>
+                        </select>
+                    </div>
+                    <!-- 月/周/自定义支持跨学年选择：min/max = 教权数据范围并集（2023-09-01 ~ 2026-10-12） -->
+                    <div class="date-range" id="monthPicker" style="display: none;">
+                        <input type="month" id="monthPickInput" value="2026-09" min="2023-09" max="2026-10" title="支持跨学年选择教权数据范围内任意月份（2023-09 ~ 2026-10）">
+                    </div>
+                    <div class="date-range" id="weekPicker">
+                        <input type="week" id="weekPickInput" value="2026-W38" min="2023-W35" max="2026-W41" title="支持跨学年选择教权数据范围内任意自然周（2023-W35 ~ 2026-W41）">
+                        <span class="week-hint" id="weekPickHint">09-14 ~ 09-20</span>
+                    </div>
+                    <div class="date-range" id="customDateRange" style="display: none;" title="支持跨学年选择；环比 = 起始日期前的等长前置窗口，窗口内无任务时不显示环比">
+                        <input type="date" id="customDateStart" value="2026-09-01" min="2023-09-01" max="2026-10-12">
+                        <span class="date-range-sep">-</span>
+                        <input type="date" id="customDateEnd" value="2026-09-15" min="2023-09-01" max="2026-10-12">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-content source-columns">
+                <!-- 左栏：作业列表 -->
+                <section class="source-column">
+                    <label class="source-column-header">
+                        <input type="checkbox" id="checkAllAssignments">
+                        <span>作业<span class="source-count" id="labelAssignCount">(0/0)</span></span>
+                    </label>
+                    <p class="source-note">不包含学案及无分值的通用题卡</p>
+                    <div class="check-list" id="modalAssignList">
+                        <!-- 动态生成列表项 -->
+                    </div>
+                    <div class="source-empty" id="assignEmpty" style="display: none;">
+                        <i class="fas fa-inbox"></i>
+                        <p>暂无作业</p>
+                    </div>
+                </section>
+                <!-- 右栏：考试列表 -->
+                <section class="source-column">
+                    <label class="source-column-header">
+                        <input type="checkbox" id="checkAllExams">
+                        <span>考试<span class="source-count" id="labelExamCount">(0/0)</span></span>
+                    </label>
+                    <div class="check-list" id="modalExamList">
+                        <!-- 动态生成列表项 -->
+                    </div>
+                    <div class="source-empty" id="examEmpty" style="display: none;">
+                        <i class="fas fa-inbox"></i>
+                        <p>暂无考试</p>
+                    </div>
+                </section>
+            </div>
+            <footer class="modal-footer">
+                <div class="modal-scope-echo" title="与筛选栏胶囊同源：时间范围 + 已选份数">
+                    <i class="fas fa-circle-check"></i>
+                    <span class="modal-scope-label">当前范围</span>
+                    <span class="modal-scope-range" id="modalRangeEcho">2026年9月</span>
+                    <span class="filter-scope-sep">·</span>
+                    <span id="modalCountEcho">已选 24 份</span>
+                </div>
+                <button class="btn btn-ghost" id="btnCancelModal">取消</button>
+                <button class="btn btn-primary" id="btnConfirmModal">确定</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- 前序 / 后序关联诊断抽屉（同步自讲评试卷 3.0 方案 · 周期汇总版） -->
+    <div class="rel-diag-overlay" id="relDiagOverlay">
+        <aside class="rel-diag-drawer" id="relDiagDrawer" role="dialog" aria-label="关联诊断抽屉">
+            <div class="rd-scroll" id="relDiagBody">
+                <!-- Injected by JS -->
+            </div>
+            <div class="rd-foot">
+                <button type="button" class="btn btn-ghost" id="relDiagClose">关闭</button>
+                <button type="button" class="btn btn-primary" id="relDiagGenDrill"><i class="fas fa-list-check"></i>
+                    查看分组教学建议</button>
+            </div>
+        </aside>
+    </div>
+
+    <!-- 分组教学建议抽屉 -->
+    <div class="rel-diag-overlay" id="drillOverlay">
+        <aside class="rel-diag-drawer" id="drillDrawer" role="dialog" aria-label="分组教学建议抽屉">
+            <!-- 顶部面包屑：返回上一层弹窗（前后序关联诊断）；层级关系常驻头栏，不随内容滚动 -->
+            <nav class="rd-crumb" aria-label="返回上一层">
+                <button type="button" class="rd-crumb-back" id="drillBackRelDiag" title="返回上一层弹窗：前后序关联诊断">
+                    <i class="fas fa-chevron-left"></i>
+                    <span>前后序关联诊断</span>
+                </button>
+                <i class="fas fa-angle-right rd-crumb-sep" aria-hidden="true"></i>
+                <span class="rd-crumb-cur">分组教学建议</span>
+            </nav>
+            <div class="rd-scroll" id="drillBody">
+                <!-- Injected by JS -->
+            </div>
+            <div class="rd-foot">
+                <button type="button" class="btn btn-ghost" id="drillClose">关闭</button>
+                <button type="button" class="btn btn-ghost" id="drillCopy"><i class="fas fa-copy"></i> 复制建议</button>
+                <button type="button" class="btn btn-ghost" id="drillExport"><i class="fas fa-download"></i>
+                    导出 CSV</button>
+            </div>
+        </aside>
+    </div>
+
+    <!-- 学生追踪 / 学生学情 Toast 提示 -->
+    <div class="st-toast" id="stToast"></div>
+
+    <!-- PRD 查看器：浮动入口 + 右侧抽屉（无遮罩，原型与 PRD 可同时查看） -->
+    <button type="button" class="prd-fab" id="prdFab" title="查看产品需求文档（PRD）｜可按住拖动"><i class="fas fa-book-open"></i><span>PRD</span></button>
+    <aside class="prd-drawer" id="prdDrawer" aria-label="PRD 查看器">
+        <div class="prd-resize-handle" id="prdResizeHandle" title="拖动调节抽屉宽度（双击恢复默认）" aria-hidden="true"></div>
+        <div class="prd-drawer-head">
+            <div class="prd-drawer-title"><i class="fas fa-book-open"></i> 产品需求文档（PRD）<span class="prd-drawer-sub">学科学情一期 · 学生追踪-知识点分析 · Markdown 版</span></div>
+            <i class="fas fa-download prd-head-btn" id="prdExport" title="导出 PRD（Markdown 文档，含全部本地修改）"></i>
+            <i class="fas fa-upload prd-head-btn" id="prdImport" title="导入 PRD 修改（Markdown 文档，按「## 编号 标题」回填正文）"></i>
+            <i class="fas fa-times prd-drawer-close" id="prdClose" title="关闭"></i>
+        </div>
+        <div class="prd-searchbar">
+            <i class="fas fa-search"></i>
+            <input type="text" id="prdSearchInput" placeholder="搜索章节标题 / 正文关键词，如「环比」「顽固」「需关注」" autocomplete="off">
+            <i class="fas fa-times prd-search-clear" id="prdSearchClear" title="清空"></i>
+            <div class="prd-search-results" id="prdSearchResults"></div>
+        </div>
+        <div class="prd-drawer-body">
+            <nav class="prd-toc" id="prdToc"></nav>
+            <div class="prd-content" id="prdContent"></div>
+        </div>
+    </aside>
+
+    <script src="js/app.js"></script>
+</body>
+
+</html>

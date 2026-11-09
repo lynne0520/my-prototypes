@@ -415,8 +415,6 @@ const periodTasks = [
     { name: '同步作业(七)', full: '高中数学必修一同步作业 (七)', date: '2025-11-20', type: 'assignment', classRate: 71.3, gradeRate: 69.8, chapter: '指数与对数', score: 50, submitted: 45, weakKp: '指数函数' },
     { name: '冲刺卷(一)', full: '期末模拟冲刺卷 (一)', date: '2025-12-11', type: 'exam', classRate: 76.8, gradeRate: 75.4, chapter: '综合测试', score: 100, submitted: 45, weakKp: '指数函数' }
 ];
-const prevPeriodRate = 69.8;   // 上一周期基准（班级口径）
-const prevPeriodGradeRate = 69.1;   // 上一周期年级平均得分率基准（年级口径，卡6 环比用）
 
 // 错因体系（配色 + 教学建议文案，幅度数字由数据动态计算）
 const CAUSE_DEFS = [
@@ -455,7 +453,7 @@ const causeMatrix = [
    ① 目录 id（表内原始 id，可与教研标签体系回查）、② 末级知识点名称（表内目录名）、
    ③ kp 归属（该末级知识点挂在 kpTree 的哪个末级节点下，即页面「考核项」）。
    题目按「一题多标签」组织：每道题可同时挂接多个末级知识点与多项能力素养（题库第 3/4 字段），
-   于是节点得分率、达标率、顽固薄弱、提交率、环比全部由作答数据聚合派生（见 buildPeriodModel），
+   于是节点得分率、达标率、顽固薄弱、提交率全部由作答数据聚合派生（见 buildPeriodModel），
    页面不再出现硬编码的结果数字。链路：题目失分率 → 末级知识点 → 考核项（kpTree 末级节点）→ 父节点回算。
    达标线取「掌握」档下限（3 档 / 4 档均为 80%），见 MASTERY_PRESETS。 */
 
@@ -600,46 +598,6 @@ const PERIOD_QUESTION_BANK = [
     ]
 ];
 
-// 上一周期题库（3 次任务）：仅用于达标率环比与顽固薄弱增减，不参与本周期任何统计
-// 设计约束：达标率 38.5%（5/13）低于本周期；无任何节点命中顽固（同一节点 ≥3 场 ≥40%），故「新增」非零、「已改善」为零
-const PREV_TASK_META = [
-    { name: '第一次月考(上周期)', date: '2025-09-12', classRate: 65 },
-    { name: '同步作业(一)', date: '2025-09-20', classRate: 66 },
-    { name: '九月月考', date: '2025-09-26', classRate: 70 }
-];
-const PREV_QUESTION_BANK = [
-    [   // 100 分 · 得分率 65
-        [5, 10, ['并集的运算'], ['演绎推理']],
-        [5, 16, ['集合间的基本关系'], ['演绎推理']],
-        [10, 48, ['全集与补集'], ['演绎推理']],
-        [10, 14, ['并集交集的混合运算'], ['整式加减']],
-        [12, 52, ['交、并、补混合运算'], ['分式化简']],
-        [13, 46, ['充分条件、必要条件的判断'], ['归纳推理']],
-        [15, 56, ['利用充分、必要条件求参数范围'], ['演绎推理']],
-        [15, 44, ['全称量词命题及真假判断'], ['归纳推理']],
-        [15, 17, ['全称量词命题的否定'], ['归纳推理']]
-    ],
-    [   // 50 分 · 得分率 66
-        [5, 12, ['函数概念的理解'], ['整式加减']],
-        [5, 40, ['求具体函数的定义域'], ['分式化简']],
-        [8, 44, ['求抽象函数的定义域'], ['演绎推理']],
-        [8, 42, ['观察法求函数的值域'], ['估值计算']],
-        [8, 32, ['判断函数的单调性'], ['演绎推理']],
-        [8, 26, ['利用定义判断(证明)函数的奇偶性'], ['演绎推理']],
-        [8, 26, ['利用奇偶性求函数值'], ['整式加减']]
-    ],
-    [   // 100 分 · 得分率 70
-        [5, 14, ['根式化简求值'], ['分式化简']],
-        [5, 26, ['指数函数的判断'], ['估值计算']],
-        [10, 30, ['指数函数的单调性'], ['演绎推理']],
-        [10, 16, ['对数的运算'], ['整式加减']],
-        [10, 18, ['对数运算性质的应用'], ['整式加减']],
-        [12, 34, ['求对数函数的定义域'], ['分式化简']],
-        [16, 40, ['对数型函数单调性的判断'], ['演绎推理']],
-        [16, 26, ['指数函数的应用（比较大小）'], ['估值计算']],
-        [16, 34, ['与指数函数有关的值域问题'], ['估值计算']]
-    ]
-];
 
 // 考核项 × 任务 失分率矩阵（null = 该场未考查，与「无失分」区分）；由 buildPeriodModel 从题库派生填充
 let heatData = { kp: [], ability: [] };
@@ -856,27 +814,6 @@ function buildPeriodModel() {
     const should = CLASS_SIZE * periodTasks.length;
     const done = periodTasks.reduce((a, t) => a + (t.submitted || 0), 0);
     PERIOD_MODEL.submit = { should, done, missing: should - done, rate: should ? Math.round(done / should * 1000) / 10 : 0 };
-
-    /* ⑦ 上一周期：同样由题库派生，供达标率环比与顽固薄弱增减使用 */
-    const pDates = PREV_TASK_META.map(t => t.date);
-    const pAnchor = new Date(pDates[pDates.length - 1] + 'T00:00:00');
-    const pTasks = PREV_TASK_META.map((t, i) => calibrateLoss(PREV_QUESTION_BANK[i] || [], Math.round((100 - t.classRate) * 10) / 10));
-    const pLoss = leafLossMatrix(pTasks, PERIOD_MODEL.atomByName);
-    const pNames = kpLeaves.map(n => n.name).filter(nm => pLoss[nm]);
-    const pRows = periodRowsOf(pNames, pNames.map(nm => pLoss[nm]), kpPathOf, pDates, pAnchor);
-    const line = reachLine();
-    const pStub = new Set(pRows.filter(r => r.heavyCnt >= 3).map(r => r.name));
-    const cStub = new Set(PERIOD_MODEL.mSet.filter(r => r.heavyCnt >= 3).map(r => r.name));
-    PERIOD_MODEL.prev = {
-        rows: pRows,
-        n: pRows.length,
-        good: pRows.filter(r => r.mastery >= line).length,
-        reach: pRows.length ? Math.round(pRows.filter(r => r.mastery >= line).length / pRows.length * 1000) / 10 : 0,
-        stubs: [...pStub],
-        improved: [...pStub].filter(nm => !cStub.has(nm)),   // 上周期顽固、本周期已脱离
-        added: [...cStub].filter(nm => !pStub.has(nm)),      // 本周期新增顽固
-        tasks: PREV_TASK_META.length
-    };
     return PERIOD_MODEL;
 }
 
@@ -1181,7 +1118,7 @@ const DRILL_PURPOSE_META = {
     retest: { label: '效果验证', color: '#8b5cf6', desc: '补练完成后 → 结合后续课堂反馈或既有任务验证掌握情况' }
 };
 
-/* ---------------- 掌握程度档位/* ---------------- 掌握程度档位 ---------------- */
+/* ---------------- 掌握程度档位 ---------------- */
 
 const MASTERY_PRESETS = {
     3: [
@@ -1200,7 +1137,7 @@ const MASTERY_PRESETS = {
 /* ---------------- State ---------------- */
 
 let currentDimension = 'kp';   // kp | ability
-let currentMainTab = 'summary'; // 主页签：summary 学情汇总 | analysis 知识点分析 | students 学生学情
+let currentMainTab = 'summary'; // 主页签：summary 学情汇总（默认） | analysis 知识点分析
 let chapterSidebarExpanded = true; // 目录显隐独立于数据与分析视图
 let currentView = 'tree';      // tree | heat | table
 let currentTableMode = 0;      // 0 全部 / 1 一级 / 2 二级 / 3 三级
@@ -1283,10 +1220,8 @@ const El = {
     valSummary4: document.getElementById('valSummary4'),
     valSummary5: document.getElementById('valSummary5'),
     summaryTitle5: document.getElementById('summaryTitle5'),
-    badgePeriodDelta: document.getElementById('badgePeriodDelta'),
     // 年级平均得分率卡（随班级筛选联动，见 syncSummaryCards）
     valSummary6: document.getElementById('valSummary6'),
-    badgeGradeDelta: document.getElementById('badgeGradeDelta'),
     cardSummary4: document.getElementById('cardSummary4'),
     heatView: document.getElementById('heatView'),
     causeFindingList: document.getElementById('causeFindingList'),
@@ -1405,7 +1340,7 @@ function updateDimGroupVisibility() {
 function refreshDashboard() {
     const label = dimensionLabel();
 
-    // 标题（随维度联动显示：知识点分析明细 / 能力分析明细，与学生追踪 stKpTitleText 同款命名）
+    // 标题（随维度联动显示：知识点分析明细 / 能力分析明细）
     El.sectionTitleText.innerText = `${label}分析明细`;
 
     // 统计卡片
@@ -1433,23 +1368,6 @@ function refreshDashboard() {
     // 周期指标卡（班级平均得分率 / 年级平均得分率 / 顽固薄弱项，随维度联动）
     const pStats = calcPeriodStats();
     El.valSummary4.innerText = pStats.pRate;
-    // 环比徽章：无环比数据（自定义区间前置窗口无任务）时隐藏，不展示误导性的 0%
-    if (pStats.dRate !== null) {
-        El.badgePeriodDelta.style.display = '';
-        El.badgePeriodDelta.innerText = `环比 ${pStats.dRate > 0 ? '+' : ''}${pStats.dRate}%`;
-        El.badgePeriodDelta.className = `badge ${pStats.dRate >= 0 ? 'badge-success' : 'badge-danger'}`;
-    } else {
-        El.badgePeriodDelta.style.display = 'none';
-    }
-    // 年级卡：徽章展示年级环比上一周期（与班级卡环比同口径：上升进步绿色 / 下降退步红色）
-    El.valSummary6.innerText = pStats.gRate;
-    if (pStats.gDRate !== null) {
-        El.badgeGradeDelta.style.display = '';
-        El.badgeGradeDelta.innerText = `环比 ${pStats.gDRate > 0 ? '+' : ''}${pStats.gDRate}%`;
-        El.badgeGradeDelta.className = `badge ${pStats.gDRate >= 0 ? 'badge-success' : 'badge-danger'}`;
-    } else {
-        El.badgeGradeDelta.style.display = 'none';
-    }
     syncSummaryCards();   // 班级卡显隐随班级筛选联动（全部班级时无单一班级口径）
     El.summaryTitle5.innerText = `顽固薄弱${label}`;
     El.valSummary5.innerText = pStats.stubSorted.length;
@@ -2304,35 +2222,8 @@ function initKnowledgeGraph() {
 
 /* ---------------- 周期分析渲染（整合自班级周期分析报告） ---------------- */
 
-// 环比基准：学年/月/周档取上一周期演示基准；自定义档取「起始日期前的等长前置窗口」（与自定义区间同天数），
-// 窗口内无任务时返回 null → 全链路不显示环比（KPI delta / 摘要徽章 / 结论文案）
-function currentPrevBase() {
-    const active = document.querySelector('#timeSegment .segment-btn.active');
-    const seg = active ? active.textContent.trim() : '月';
-    if (seg !== '自定义') return { rate: prevPeriodRate, gradeRate: prevPeriodGradeRate, label: '上一周期', tasks: null };
-    const sEl = document.getElementById('customDateStart'), eEl = document.getElementById('customDateEnd');
-    if (!sEl || !eEl || !sEl.value || !eEl.value) return null;
-    const s = new Date(sEl.value + 'T00:00:00'), e = new Date(eEl.value + 'T00:00:00');
-    if (isNaN(s.getTime()) || isNaN(e.getTime()) || e < s) return null;
-    const len = Math.round((e - s) / 86400000) + 1;                    // 自定义区间天数
-    const ps = new Date(s.getTime() - len * 86400000);                // 前置窗口起 = 起始日前推 len 天
-    const pe = new Date(s.getTime() - 86400000);                      // 前置窗口止 = 起始日前 1 天
-    const inWin = periodTasks.filter(t => {
-        const d = new Date(t.date + 'T00:00:00');
-        return d >= ps && d <= pe;
-    });
-    if (!inWin.length) return null;                                   // 环比窗口无任务 → 无环比数据
-    const r1 = v => Math.round(v * 10) / 10;
-    const fmt = d => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    return {
-        rate: r1(inWin.reduce((a, t) => a + t.classRate, 0) / inWin.length),
-        gradeRate: r1(inWin.reduce((a, t) => a + t.gradeRate, 0) / inWin.length),
-        label: `环比窗口${fmt(ps)}~${fmt(pe)}`,
-        tasks: inWin.length
-    };
-}
 
-// 周期指标计算：加权均值、稳定度、环比、趋势判定、顽固薄弱
+// 周期指标计算：加权均值、稳定度、趋势判定、顽固薄弱
 function calcPeriodStats() {
     ensurePeriodModel();
     const rates = periodTasks.map(t => t.classRate);
@@ -2342,9 +2233,6 @@ function calcPeriodStats() {
     const pRate = Math.round(mean * 10) / 10;
     // 年级平均得分率：与班级同口径（纳入统计任务的 gradeRate 均值）
     const gRate = Math.round(periodTasks.reduce((a, t) => a + t.gradeRate, 0) / n * 10) / 10;
-    const prevBase = currentPrevBase();
-    const dRate = prevBase ? Math.round((pRate - prevBase.rate) * 10) / 10 : null;          // 无环比基准 → null（不显示环比）
-    const gDRate = prevBase ? Math.round((gRate - prevBase.gradeRate) * 10) / 10 : null;   // 年级环比同链路
     const prog = Math.round((rates[n - 1] - rates[0]) * 10) / 10;
     const max = Math.max(...rates), min = Math.min(...rates);
     const winCnt = periodTasks.filter(t => t.classRate > t.gradeRate).length;
@@ -2352,11 +2240,11 @@ function calcPeriodStats() {
     const examWin = exams.filter(t => t.classRate > t.gradeRate).length;
 
     let trend;
-    const trendBase = dRate !== null ? dRate : prog;   // 环比缺失时趋势判定回退周期内首尾进步幅度
-    if (trendBase >= 3) trend = '显著回升';
-    else if (trendBase >= 1) trend = '缓慢回升';
-    else if (trendBase > -1) trend = '基本持平';
-    else if (trendBase > -3) trend = '缓慢下滑';
+    // 趋势判定：周期内最近一次较最早一次的变化幅度（不引入周期外基准）
+    if (prog >= 3) trend = '显著回升';
+    else if (prog >= 1) trend = '缓慢回升';
+    else if (prog > -1) trend = '基本持平';
+    else if (prog > -3) trend = '缓慢下滑';
     else trend = '明显下滑';
 
     // 顽固薄弱：该考核项失分率 ≥40% 的已考查场次 ≥3（结构性问题）
@@ -2368,7 +2256,7 @@ function calcPeriodStats() {
     const stubSorted = heatRows.filter(r => r.heavyCnt >= 3).sort((a, b) => b.avg - a.avg);
 
     return {
-        total: n, pRate, gRate, dRate, gDRate, prevBase, prog, sd, stable: Math.round((100 - sd) * 10) / 10,
+        total: n, pRate, gRate, prog, sd, stable: Math.round((100 - sd) * 10) / 10,
         max, min, range: Math.round((max - min) * 10) / 10,
         winCnt, examCnt: exams.length, examWin, assignCnt: n - exams.length,
         trend, stubSorted
@@ -2437,12 +2325,6 @@ function initPeriodTrendChart() {
                 label: {
                     show: true, position: 'top', fontSize: 11, fontWeight: 700, color: '#2563eb',
                     formatter: (p) => p.value + '%'
-                },
-                markLine: {
-                    silent: true, symbol: ['none', 'none'],
-                    lineStyle: { color: '#ef4444', type: 'dotted', width: 1.5 },
-                    label: { formatter: `上一周期 ${prevPeriodRate}%`, position: 'insideEndTop', color: '#ef4444', fontSize: 11 },
-                    data: [{ yAxis: prevPeriodRate }]
                 }
             },
             {
@@ -2462,14 +2344,12 @@ function initPeriodTrendChart() {
 const INSIGHT_RULES = [
     {
         id: 'trend', when: () => true, cls: () => 'i-blue',
-        build: s => s.dRate !== null
-            ? `班级平均得分率 <b>${s.pRate}%</b>，环比 <b class="${s.dRate >= 0 ? 'up' : 'down'}">${s.dRate > 0 ? '+' : ''}${s.dRate}%</b>；最近一次较最早一次 <b class="${s.prog >= 0 ? 'up' : 'down'}">${s.prog > 0 ? '+' : ''}${s.prog}%</b>，趋势判定为「<b>${s.trend}</b>」。`
-            : `班级平均得分率 <b>${s.pRate}%</b>，<b>无环比数据</b>（环比窗口内无任务）；周期内最近一次较最早一次 <b class="${s.prog >= 0 ? 'up' : 'down'}">${s.prog > 0 ? '+' : ''}${s.prog}%</b>，趋势判定为「<b>${s.trend}</b>」（环比缺失，按周期内首尾判定）。`
+        build: s => `班级平均得分率 <b>${s.pRate}%</b>；周期内最近一次较最早一次 <b class="${s.prog >= 0 ? 'up' : 'down'}">${s.prog > 0 ? '+' : ''}${s.prog}%</b>，趋势判定为「<b>${s.trend}</b>」。`,
     },
     {
         id: 'stable', when: () => true,
-        cls: s => s.sd >= 5 ? 'i-red' : (s.sd >= 3 ? 'i-amber' : 'i-green'),
-        build: s => `稳定度 <b>${s.stable}</b>（标准差 ${s.sd}），最高 <b>${s.max}%</b> / 最低 <b>${s.min}%</b>，极差 ${s.range}%，${s.sd >= 5 ? '波动偏大，提升尚未稳定' : (s.sd >= 3 ? '波动中等，需关注状态起伏' : '表现稳定')}。`
+        cls: () => 'i-blue',
+        build: s => `稳定度 <b>${s.stable}</b>（标准差 ${s.sd}），最高 <b>${s.max}%</b> / 最低 <b>${s.min}%</b>，极差 ${s.range}%，${s.sd >= 5 ? '波动偏大，提升尚未稳定' : (s.sd >= 3 ? '波动中等，起伏偏大' : '表现稳定')}。`
     },
     {
         id: 'grade', when: () => true,
@@ -2504,19 +2384,9 @@ function renderPeriodInsights() {
 
     // 区间说明按当前时间档位实时生成（与筛选栏胶囊同源），不写死「近一月」：档位切到周时文案必须同步
     El.periodStatHint.innerText =
-        `统计区间：${timeScopeText()} · 纳入 ${s.total} 次任务（作业 ${s.assignCnt} · 考试 ${s.examCnt}）· 对比基准：上一周期 ${prevPeriodRate}%`;
+        `统计区间：${timeScopeText()} · 纳入 ${s.total} 次任务（作业 ${s.assignCnt} · 考试 ${s.examCnt}）`;
 }
 
-/* ---------------- 学生阶段性学情状态判定（V3.0：得分率主轴 + 双轴标签；完整规则见 PRD XK-10） ----------------
-   原型阶段说明：暂无真实数据接入。任务序列（日期 / 满分 / 班级平均得分率）与个人逐次得分率由学号稳定生成，
-   但 L（长期基线）/ S（近期水平）/ Δ（变化量）与状态判定按 V3.0 口径「真实计算」，结果自洽、可手算复核。
-   V3.0 相对 V2.0 的六处改动：
-   ① 核心序列改为差值 d = 学生得分率 − 班级得分率（剥离试卷难度；取消留一法——它只是 n/(n−1) 常数缩放）；
-   ② 趋势用半衰期加权（H=30 天）替代前后半段硬切分，按次刷新，无窗口边界效应；
-   ③ 波动带改为固定常数 B（取消个人 MAD 估计——同一学生换窗口带宽抖动可达 40%）；
-   ④ 位置（相对班级）与趋势（相对自我）拆成两个独立维度，不再合成复合标签；
-   ⑤ 缺交 / 单场异常升级为独立硬标记，不再归入「数据不足」；
-   ⑥ 参数由 9 个压缩到 4 个（B / k / m / H），教师无需统计学背景即可复核。 */
 
 // 学生名册（按截图学号降序，刘鸿锦(40313) 为默认选中）；置于顶层供状态引擎与周期概览 KPI 卡共用
 const ST_STUDENTS = [
@@ -2545,294 +2415,6 @@ function stSeed(seed) {
     return x - Math.floor(x);
 }
 
-// V3.0 判定参数：只有 4 个，每个都能用一句话向教师解释
-const ST_STATUS_RULES = {
-    B: 10,   // 波动带（百分点）：偏离平时水平 ≥10 个百分点算异常
-    k: 2,    // 确认次数：近期连续 2 次越限才从「单次波动」升级为「预警」
-    m: 2,    // 缺交阈值：连续 2 次未交（缺考）触发缺交预警
-    H: 30    // 半衰期（天）：30 天前那次成绩的权重是最新那次的一半
-};
-
-// 派生量：全部由 B / H 推出，不占参数额度（位置分界 ±B/2、异常界 2B、近期窗 H/2、基线窗 4H、粗颗粒满分 200/B）
-const ST_STATUS_DERIVED = {
-    posEdge: ST_STATUS_RULES.B / 2,
-    anomalyEdge: ST_STATUS_RULES.B * 2,
-    nearDays: ST_STATUS_RULES.H / 2,
-    baseDays: ST_STATUS_RULES.H * 4,
-    coarseFull: 200 / ST_STATUS_RULES.B
-};
-
-// 模拟任务序列（班级口径，全班共用）：days = 距最新一次任务的天数
-// 口径说明：原型以最新任务日为基准日（真实接入后基准 = 当天）；学案 / 通用题卡 / 听写卡不纳入
-const ST_TASKS = [
-    { name: '阅读理解限时练', type: '作业', date: '2026-09-29', days: 0,  full: 40,  classRate: 76.5 },
-    { name: '语法填空专项',   type: '作业', date: '2026-09-22', days: 7,  full: 30,  classRate: 71.2 },
-    { name: '完形填空课时练', type: '作业', date: '2026-09-15', days: 14, full: 50,  classRate: 74.0 },
-    { name: '书面表达',       type: '作业', date: '2026-09-08', days: 21, full: 15,  classRate: 68.8 },
-    { name: '第一单元检测',   type: '考试', date: '2026-09-01', days: 28, full: 100, classRate: 72.6 },
-    { name: '词汇与语法周测', type: '考试', date: '2026-08-25', days: 35, full: 60,  classRate: 70.5 }
-];
-
-// 状态定义（V3.0：趋势 4 态 + 位置 3 档 + 硬标记 3 类，组合成 8 种徽章显示态；按显示优先级排序）
-// watch=true 计入「需关注」；hint = 教师语言的一句话判定口径（供图例浮层复用）；advice = 对应教学动作
-const ST_STATUS_DEFS = {
-    absent:  { label: '缺交预警',   cls: 'wtag-absent',  watch: true,  advice: '先联系学生 / 家长确认原因，再判断学业状态', hint: '连续 2 次没交作业或考试缺考（与「数据不足」是两回事）' },
-    anomaly: { label: '单场异常',   cls: 'wtag-anomaly', watch: false, advice: '先核实是否缺考、白卷或录入有误，再下结论', hint: '最近一次比平时低 20 个百分点以上，超出正常波动范围' },
-    pending: { label: '数据积累中', cls: 'wtag-pend',    watch: false, advice: '满 2 次有效任务后再判断趋势', hint: '近两周有效任务不足 2 次，暂不判断趋势' },
-    down:    { label: '下滑预警',   cls: 'wtag-down',    watch: true,  advice: '查看失分任务，生成前序补偿练习，安排个别辅导', hint: '近两周比平时低 10 个百分点以上，且连续 2 次都在平时水平下方' },
-    up:      { label: '进步',       cls: 'wtag-up',      watch: false, advice: '适度提高任务挑战度，保持当前节奏', hint: '近两周比平时高 10 个百分点以上，且连续 2 次都在平时水平上方' },
-    rise:    { label: '位置回升',   cls: 'wtag-up',      watch: false, advice: '保持节奏，滚动复测确认稳定', hint: '原来比班级平均低 5 个百分点以上，现在已经回到班内中位' },
-    lag:     { label: '持续落后',   cls: 'wtag-low',     watch: true,  advice: '系统性补基础：先做前置诊断，再安排同点巩固', hint: '平时就比班级平均低 5 个百分点以上，且趋势平稳' },
-    wave:    { label: '单次波动',   cls: 'wtag-wave',    watch: false, advice: '不进预警名单，下一次任务继续观察', hint: '只有 1 次偏离平时水平，还没形成趋势' },
-    flat:    { label: '平稳',       cls: '',             watch: false, advice: '按既有教学节奏推进', hint: '没有明显上涨或下跌' }
-};
-
-// 演示植入：只决定「生成哪一条模拟序列」，状态仍由 V3.0 规则真实算出（不是硬编码状态名单）
-// bias0 = 最早一次与班级平均的差（百分点），bias1 = 最近一次与班级平均的差
-const ST_STATUS_PLANT = {
-    40320: { mode: 'down',    bias0: 10,  bias1: -12 },  // 孙壮峰：从高 10 个百分点滑到低 12（下滑预警）
-    40316: { mode: 'down',    bias0: 9,   bias1: -12 },  // 马天翼
-    40315: { mode: 'lag',     bias0: -9,  bias1: -10 },  // 吕馨凝：长期落后
-    40305: { mode: 'lag',     bias0: -11, bias1: -8 },   // 杜新泽
-    40313: { mode: 'lagUp',   bias0: -14, bias1: 4 },    // 刘鸿锦：落后 → 赶上（默认选中学生，演示正向关注）
-    40319: { mode: 'up',      bias0: -12, bias1: 12 },   // 史津谊：明显进步
-    40311: { mode: 'up',      bias0: -11, bias1: 9 },    // 李世贤
-    40317: { mode: 'rise',    bias0: -9,  bias1: 1 },    // 马馨然：位置回升（趋势平稳，但位置追上来了）
-    40306: { mode: 'thin',    bias0: 3,   bias1: 4 },    // 甘子玉：新转入，近两周仅 1 次有效任务（数据积累中）
-    40307: { mode: 'anomaly', bias0: 3,   bias1: 2 },    // 韩冰月：最近一次骤降（缺考 / 白卷 / 录入待核实）
-    40308: { mode: 'none' },                             // 韩秉正：本周期全部未交（未学习 + 缺交预警）
-    40314: { mode: 'absent',  bias0: -3,  bias1: -5 },   // 刘星宇：最近连续 2 次未交
-    40312: { mode: 'wave',    bias0: 1,   bias1: 0 }     // 李梓轩：单次波动
-};
-
-// 单生状态（模拟输入 + 真实计算）：先按学号稳定生成 6 次任务的模拟序列，再按 V3.0 口径算出
-// L（长期基线差）/ S（近期水平差）/ Δ = S − L / 位置档 / 趋势态，最后按优先级决定徽章显示态。
-// 关键差别：不是「先定状态再造数字」，而是同一份序列既出状态又出数字，两者天然自洽、可手算复核。
-function stSimStatus(s) {
-    const R = ST_STATUS_RULES, D = ST_STATUS_DERIVED;
-    const plant = ST_STATUS_PLANT[s.id] || null;
-    const mode = plant ? plant.mode : 'auto';
-    const bias0 = plant && plant.bias0 !== undefined ? plant.bias0 : (stSeed(s.id * 5 + 17) - 0.5) * 8;
-    const bias1 = plant && plant.bias1 !== undefined ? plant.bias1 : bias0 + (stSeed(s.id * 7 + 3) - 0.5) * 5;
-    const noise = Math.max(2, Math.abs(bias1 - bias0) * 0.25);
-
-    // 1) 逐次记录：相对位置由 bias0（最早）线性走到 bias1（最近），叠加按学号稳定的噪声
-    const records = ST_TASKS.map((t, i) => {
-        const prog = i / (ST_TASKS.length - 1);            // 0 = 最近一次，1 = 最早一次
-        let d = bias1 + (bias0 - bias1) * prog + (stSeed(s.id * 41 + i * 13) - 0.5) * 2 * noise;
-        let missed = false, noData = false;
-        if (mode === 'none') missed = true;
-        else if (mode === 'absent' && i <= 1) missed = true;                             // 最近连续 2 次未交
-        else if (mode === 'thin' && i >= 1) noData = true;                               // 转入前无数据（不是缺交）
-        else if (mode === 'wave' && i === 1) d = -(R.B + 3) - stSeed(s.id * 3) * 3;      // 仅此一次骤降
-        else if (mode === 'anomaly' && i === 0) d = -R.B * 2 - 6 - stSeed(s.id * 3) * 4;  // 最近一次骤降（待核实）
-        const rate0 = Math.min(100, Math.max(0, t.classRate + d));
-        const score = missed ? null : Math.round(rate0 / 100 * t.full * 2) / 2;          // 得分按 0.5 分取整
-        const pRate = missed ? null : Math.round(score / t.full * 1000) / 10;            // 回算得分率：与「得分 ÷ 满分」完全一致
-        return {
-            name: t.name, type: t.type, date: t.date, days: t.days, full: t.full,
-            classRate: t.classRate, classAvg: Math.round(t.classRate / 100 * t.full * 10) / 10,
-            score, rate: pRate,
-            d: missed ? null : Math.round((pRate - t.classRate) * 10) / 10,
-            coarse: t.full <= D.coarseFull, missed, noData,
-            w: Math.pow(2, -t.days / R.H),                                                // 半衰期权重（趋势用）
-            w2: Math.pow(2, -t.days / (R.H * 2))                                         // 位置档权重（2H，衰减小）
-        };
-    });
-
-    const valid = records.filter(r => !r.missed && !r.noData);
-    const missedN = records.filter(r => r.missed).length;
-    const wMean = (list, get) => {
-        const sw = list.reduce((a, r) => a + r.w, 0);
-        return sw ? list.reduce((a, r) => a + r.w * get(r), 0) / sw : null;
-    };
-    const wMeanP = list => {                        // 位置档专用：半衰期取 2H（衰减小，反映「平时在班里哪一档」）
-        const sw = list.reduce((a, r) => a + r.w2, 0);
-        return sw ? list.reduce((a, r) => a + r.w2 * r.d, 0) / sw : null;
-    };
-
-    // 2) 单场骤降（偏离位置 ≥2B）先截尾：不参与任何基线计算，避免污染「平时水平」
-    const P0 = wMeanP(valid);
-    const extreme = P0 === null ? [] : valid.filter(r => r.d <= P0 - D.anomalyEdge);
-    const clean = valid.filter(r => extreme.indexOf(r) < 0);
-
-    // 3) 三个量：P = 全期位置（2H 弱衰减）、L = 近期窗口之前的平时水平、S = 近期水平（H/2 窗口）
-    //    Δ = S − L：前后两段互不重叠——若近期值同时进入基线，会把差值压平（这就是 V2.0 前后半段对比的连续化）
-    const P = wMeanP(clean);
-    const nearList = valid.filter(r => r.days <= D.nearDays);
-    const baseList = clean.filter(r => r.days > D.nearDays);
-    const S = wMean(nearList.filter(r => extreme.indexOf(r) < 0), r => r.d);
-    const L = wMean(baseList, r => r.d);
-    const delta = (S === null || L === null) ? null : Math.round((S - L) * 10) / 10;
-
-    // 4) 位置档（相对班级，与趋势解耦）：用 P 与 ±B/2 分界；位置回升 = 最早几次落后、而现在回到班内中位
-    const earlyAvg = valid.length >= R.k ? wMean(valid.slice(-R.k), r => r.d) : null;
-    const pos = P === null ? 'sync' : (P <= -D.posEdge ? 'lag' : (P >= D.posEdge ? 'lead' : 'sync'));
-    const posUp = earlyAvg !== null && P !== null && earlyAvg <= -D.posEdge && P > -D.posEdge;
-
-    // 5) 趋势判定：Δ 越 B 且最近 k 次同侧 → 趋势态；近期只有 1 次越限 → 单次波动
-    const recentValid = valid.slice(0, R.k);
-    const allBelow = recentValid.length >= R.k && recentValid.every(r => r.d < L);
-    const allAbove = recentValid.length >= R.k && recentValid.every(r => r.d > L);
-    let trend = 'flat';
-    if (delta !== null && L !== null) {
-        if (delta <= -R.B && allBelow) trend = 'down';
-        else if (delta >= R.B && allAbove) trend = 'up';
-        else if (nearList.filter(r => Math.abs(r.d - L) >= R.B).length === 1) trend = 'wave';
-    }
-
-    // 6) 一级指标：平均得分率（半衰期加权，绝对水平）；全未交 = 0（未学习），与位置轴（相对班级）互为补充
-    const avgRate = Math.round((wMean(valid, r => r.rate) || 0) * 10) / 10;
-    const allMissed = missedN === records.length;
-    const distLevel = allMissed ? '未学习' : (avgRate >= 85 ? '优秀' : avgRate >= 70 ? '良好' : avgRate >= 60 ? '合格' : '待合格');
-    const level = avgRate < 60 ? 'low' : avgRate < 85 ? 'mid' : 'high';
-
-    // 7) 硬标记与显示态优先级：缺交 > 单场异常 > 数据积累中 > 下滑 > 进步 > 位置回升 > 持续落后 > 单次波动 > 平稳
-    let consecutiveMiss = 0;
-    for (const r of records) { if (r.missed) consecutiveMiss++; else break; }
-    const isAbsent = consecutiveMiss >= R.m;
-    // 单场异常：最新一次跌破 2B，且「这一次相对上一次」本身就是陡降（也 ≥2B）
-    // 不用「上一次是否低于平时水平」作区分：渐进下滑的倒数第二次往往就只低一点点，判据会随噪声翻转（实测只差 0.1 个百分点）
-    const prevD = records[1] && records[1].d !== null ? records[1].d : null;
-    const isAnomaly = !isAbsent && records[0].d !== null && L !== null
-        && records[0].d <= L - D.anomalyEdge
-        && (prevD === null || prevD - records[0].d >= D.anomalyEdge);
-    const isThin = !isAbsent && !isAnomaly && (nearList.length < R.k || L === null);
-    const key = isAbsent ? 'absent'
-        : isAnomaly ? 'anomaly'
-            : isThin ? 'pending'
-                : trend === 'down' ? 'down'
-                    : trend === 'up' ? 'up'
-                        : posUp ? 'rise'
-                            : pos === 'lag' ? 'lag'
-                                : trend === 'wave' ? 'wave'
-                                    : 'flat';
-    const def = ST_STATUS_DEFS[key];
-
-    const rec = {
-        id: s.id, name: s.name,
-        assigned: records.length, missed: missedN, consecutiveMiss,
-        submitRate: Math.round((records.length - missedN) / records.length * 10000) / 100,
-        validN: valid.length, nearN: nearList.length,
-        avgRate, distLevel, level, thinLevel: valid.length < R.k,
-        L: L === null ? null : Math.round(L * 10) / 10,
-        S: S === null ? null : Math.round(S * 10) / 10,
-        P: P === null ? null : Math.round(P * 10) / 10,
-        delta, earlyAvg: earlyAvg === null ? null : Math.round(earlyAvg * 10) / 10,
-        pos, posUp, trend, key,
-        label: def.label, cls: def.cls, watch: def.watch, advice: def.advice, hint: def.hint,
-        tasks: records, reason: ''
-    };
-
-    // 8) 悬停说明（教师语言一句话）：只给关键的对比数字，不出现 B / k / L / Δ 等符号
-    const fmt = v => (v > 0 ? '+' : '') + v.toFixed(1);
-    const posTxt = pos === 'lag' ? '落后' : pos === 'lead' ? '领先' : '同步';
-    const lastR = records[0];
-    const devLast = lastR.d === null || L === null ? 0 : Math.abs(Math.round((lastR.d - L) * 10) / 10);
-    if (isAbsent) {
-        rec.reason = allMissed
-            ? `本周期 ${records.length} 次任务全部未交，先确认原因再判断学业状态。`
-            : `最近连续 ${consecutiveMiss} 次没交（${records.filter(r => r.missed).map(r => r.name).join('、')}），先确认原因再判断学业状态。`;
-    } else if (isAnomaly) {
-        rec.reason = `最近一次「${lastR.name}」比平时低 ${devLast} 个百分点，远超正常波动，建议先核实是否缺考、白卷或录入有误。`;
-    } else if (isThin) {
-        // 两种「数据不够」必须分开说：缺次数可以多交几次解决，缺基线只能等时间跨过近期窗——
-        // 合成一句会让教师以为「再交几次就能判」，而实际再交 5 次仍是 pending。
-        rec.reason = nearList.length < R.k
-            ? `近 ${D.nearDays} 天只有 ${nearList.length} 次有效任务，满 ${R.k} 次后再判断趋势。`
-            : `近 ${D.nearDays} 天有 ${nearList.length} 次任务，但还没有更早的记录作对照，本次不下趋势结论（首场满 ${D.nearDays} 天后自动判断）。`;
-    } else if (key === 'down') {
-        rec.reason = `近两周与班级的平均差是 ${fmt(S)} 个百分点，平时是 ${fmt(L)} 个，低了 ${Math.abs(delta)} 个，且最近连续 ${R.k} 次都在平时水平之下（整体位置相对班级：${posTxt}）。`;
-    } else if (key === 'up') {
-        rec.reason = `近两周与班级的平均差是 ${fmt(S)} 个百分点，平时是 ${fmt(L)} 个，高了 ${Math.abs(delta)} 个，且最近连续 ${R.k} 次都在平时水平之上（整体位置相对班级：${posTxt}）。`;
-    } else if (key === 'lag') {
-        rec.reason = `平时就比班级平均低 ${Math.abs(rec.L)} 个百分点，近两周没有明显变化。`;
-    } else if (key === 'wave') {
-        const wv = nearList.reduce((a, r) => (Math.abs(r.d - L) > Math.abs(a.d - L) ? r : a), nearList[0]);
-        rec.reason = `「${wv.name}」比平时${wv.d > L ? '高' : '低'} ${Math.abs(Math.round((wv.d - L) * 10) / 10)} 个百分点，但只有这 1 次，还没形成趋势。`;
-    } else if (key === 'rise') {
-        rec.reason = `原来比班级平均低 ${Math.abs(rec.earlyAvg)} 个百分点，现在回到 ${fmt(rec.P)}，已经追上班级中位。`;
-    } else {
-        rec.reason = `与班级平均的差稳定在 ${fmt(rec.P)} 个百分点左右，没有明显起伏。`;
-    }
-    return rec;
-}
-
-// 全部学生状态（模拟输入 + 真实计算，一次性生成并缓存）：周期概览 KPI 卡 / 需关注弹层 / 学生学情筛选 / 列表徽章 同源
-const ST_STATUS_LIST = ST_STUDENTS.map(s => stSimStatus(s));
-const ST_STATUS_BY_ID = {};
-ST_STATUS_LIST.forEach(r => { ST_STATUS_BY_ID[r.id] = r; });
-
-// 名单口径：需关注 = 缺交预警 ∪ 下滑预警 ∪ 持续落后；正向关注 = 进步 ∪ 位置回升（不计入需关注）；
-// 单场异常进「待核实」组，数据积累中与单次波动不进任何关注名单
-const WATCH_KEYS = ['absent', 'down', 'lag'];
-const WATCH_FOCUS_ID_SET = new Set(ST_STATUS_LIST.filter(r => WATCH_KEYS.indexOf(r.key) >= 0).map(r => r.id));
-const POSITIVE_ID_SET = new Set(ST_STATUS_LIST.filter(r => r.key === 'up' || r.posUp).map(r => r.id));
-const stCountByKey = k => ST_STATUS_LIST.filter(r => r.key === k).length;
-
-// 弹层分组：与名单口径一一对应，组内逐人给出判定依据（非硬编码名单）
-const WATCH_GROUPS = [
-    { key: 'absent', note: '', list: ST_STATUS_LIST.filter(r => r.key === 'absent') },
-    { key: 'down', note: '', list: ST_STATUS_LIST.filter(r => r.key === 'down') },
-    { key: 'lag', note: '', list: ST_STATUS_LIST.filter(r => r.key === 'lag') },
-    { key: 'anomaly', note: '待核实 · 不计入需关注', list: ST_STATUS_LIST.filter(r => r.key === 'anomaly') },
-    { key: 'pending', note: '数据积累中 · 不计入需关注', list: ST_STATUS_LIST.filter(r => r.key === 'pending') },
-    { key: 'up', note: '正向关注 · 不计入需关注', list: ST_STATUS_LIST.filter(r => r.key === 'up' || r.posUp) }
-].map(g => ({
-    key: g.key, note: g.note,
-    // 正向组同时包含「进步」与「位置回升」两类学生，组标题不能用单一状态名，否则会出现「标题写进步、名单里却是位置回升」的误读
-    label: g.key === 'up' ? ST_STATUS_DEFS.up.label + ' / ' + ST_STATUS_DEFS.rise.label : ST_STATUS_DEFS[g.key].label,
-    watch: ST_STATUS_DEFS[g.key].watch, advice: ST_STATUS_DEFS[g.key].advice, students: g.list
-}));
-
-// 「需关注学生」卡 hover 弹层：按状态分组 + 逐人判定依据（与算法同源，非硬编码名单）
-function watchStudentsPopHtml() {
-    return `<div class="pk-watch-pop">
-        <div class="wpg-head"><b>${WATCH_FOCUS_ID_SET.size}</b> 名需关注学生 · 点击卡片查看名单</div>
-        ${WATCH_GROUPS.map(g => `
-            <div class="wpg-group wpg-${g.key}">
-                <div class="wpg-label">${g.label} <b>${g.students.length}</b>${g.note ? `<span class="wpg-note">${g.note}</span>` : ''}</div>
-                <div class="wpg-names">${g.students.length ? g.students.map(r => `<span class="wpg-stu" title="${r.reason}">${r.name}</span>`).join('、') : '<span class="wpg-none">本周期无</span>'}</div>
-            </div>`).join('')}
-    </div>`;
-}
-
-// 「需关注学生」弹层定位：横向右侧放不下则右对齐；纵向上方空间不足则向下弹。
-// 弹层是 .content-body 滚动容器内的绝对定位元素，向上越界会被容器 overflow 裁切（表现为名单顶部被切）。
-function placeWatchPop(card, pop) {
-    if (!card || !pop) return;
-    const rect = card.getBoundingClientRect();
-    pop.classList.toggle('pk-pop-right', rect.left + 300 > window.innerWidth - 8);
-
-    // 未悬停时弹层为 display:none，读不到高度：临时可见测量一次后按元素缓存（宽度定值 300，高度仅随名单长度变化）
-    let h = Number(pop.dataset.popH || 0);
-    if (!h) {
-        const prevDisplay = pop.style.display;
-        const prevVisibility = pop.style.visibility;
-        const prevMaxHeight = pop.style.maxHeight;
-        pop.style.display = 'block';
-        pop.style.visibility = 'hidden';
-        pop.style.maxHeight = 'none';
-        h = pop.offsetHeight;
-        pop.style.display = prevDisplay;
-        pop.style.visibility = prevVisibility;
-        pop.style.maxHeight = prevMaxHeight;
-        pop.dataset.popH = String(h);
-    }
-
-    // 弹出方向：上方放得下优先向上（不遮卡片下方内容）；上方不足且下方更宽裕则向下；
-    // 两侧都放不下时按较大一侧限高 + 内部滚动，保证弹层头部（表头与首组名单）不被容器裁掉
-    const gap = 8;
-    const clipEl = document.querySelector('.content-body');
-    const clip = clipEl ? clipEl.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
-    const spaceAbove = rect.top - clip.top;
-    const spaceBelow = clip.bottom - rect.bottom;
-    const down = spaceAbove < h + gap && spaceBelow > spaceAbove;
-    pop.classList.toggle('pk-pop-down', down);
-    // 3px = 卡片 hover 上浮位移（.period-kpi:hover transform），向上弹时需从可用高度中扣除，否则弹层顶部会溢出 3px
-    const avail = (down ? spaceBelow : spaceAbove - 3) - gap;
-    pop.style.maxHeight = avail < h ? Math.max(140, avail) + 'px' : '';
-}
 
 // 周期指标卡：六项指标全部实时计算——分母 / 分子均来自题目挂接集合与作答数据，无硬编码结果
 function renderPeriodKpis() {
@@ -2851,63 +2433,38 @@ function renderPeriodKpis() {
     const weakCnt = nodes.filter(n => n.mastery >= lowLine && n.mastery < goodLine).length;
     const poorCnt = nodes.filter(n => n.mastery < lowLine).length;
     const reachRate = nodes.length ? Math.round(goodCnt / nodes.length * 1000) / 10 : 0;
-    // 上周期达标率按当前档位重算（档位切到 4 档时达标线仍为 80，不能用手写常量）
-    const prevGood = m.prev.rows.filter(r => r.mastery >= goodLine).length;
-    const prevReach = m.prev.rows.length ? Math.round(prevGood / m.prev.rows.length * 1000) / 10 : 0;
-    const reachDelta = Math.round((reachRate - prevReach) * 10) / 10;
-    const stubDelta = leafStubs.length - m.prev.stubs.length;
 
     // 年级均（与本页期间得分率同口径：各次得分率算术平均）
     const gradeAvg = Math.round(periodTasks.reduce((a, t) => a + t.gradeRate, 0) / s.total * 10) / 10;
 
     // 提交率由任务清单的实交人次求和得出（应交 = 班级人数 × 任务数）
     const submit = m.submit;
-    // 需关注学生与状态引擎 ST_STATUS_LIST 同源（学生学情「需关注」筛选同口径）
-    // 计数一律走 stCountByKey，不按 WATCH_GROUPS 下标取值：分组顺序调整后下标会静默错位且不报错
-    const focusDemo = {
-        total: WATCH_FOCUS_ID_SET.size,             // 需关注 = 缺交预警 ∪ 下滑预警 ∪ 持续落后
-        absent: stCountByKey('absent'),             // 缺交预警（需关注）
-        down: stCountByKey('down'),                 // 下滑预警（需关注）
-        lag: stCountByKey('lag'),                   // 持续落后（需关注）
-        anomaly: stCountByKey('anomaly'),           // 单场异常（待核实，不计入需关注）
-        pending: stCountByKey('pending'),           // 数据积累中（不计入需关注）
-        positive: POSITIVE_ID_SET.size              // 正向关注 = 进步 ∪ 位置回升（不计入需关注）
-    };
 
     const cards = [
         {
             label: '平均得分率', ic: 'fa-chart-line', value: s.pRate, unit: '%', tone: '',
-            delta: s.dRate !== null ? (s.dRate > 0 ? '+' : '') + s.dRate + '%' : null, deltaCls: s.dRate !== null && s.dRate < 0 ? 'down' : 'up',
-            deltaTip: '相较于年级得分率的差值百分点（本班 − 年级）',
             tip: '周期内各次任务得分率的算术平均（按任务次数平均，非按分值加权）',
-            sub: `年级均 <b>${gradeAvg}%</b>${s.prevBase ? ` · ${s.prevBase.label} <b>${s.prevBase.rate}%</b>` : ' · 无环比数据'} · 任务 ${s.total} 次`
+            sub: `年级均 <b>${gradeAvg}%</b> · 任务 ${s.total} 次`
         },
         {
-            label: '稳定度', ic: 'fa-balance-scale', value: s.stable, unit: '', tone: s.sd > 5 ? 'tone-warn' : '',
+            label: '稳定度', ic: 'fa-balance-scale', value: s.stable, unit: '', tone: '',
             tip: '100 − 周期内各次得分率的标准差；越高越稳',
             sub: `标准差 <b>${s.sd}</b> · 最高 <b>${s.max}%</b> · 最低 <b>${s.min}%</b>`
         },
         {
             label: '知识点达标率', ic: 'fa-compass', value: reachRate, unit: '%', tone: '', goto: 'analysis',
-            delta: (reachDelta > 0 ? '+' : '') + reachDelta + '%', deltaCls: reachDelta >= 0 ? 'up' : 'down',
-            deltaTip: `与上一周期（挂接 ${m.prev.n} 个节点 · 达标率 ${prevReach}%）的差值百分点`,
             tip: `题目挂接集合（mSet，${nodes.length} 个末级节点）中掌握度 ≥${goodLine}% 的节点数 ÷ 挂接节点总数；按作业/考试整体统计，不随维度切换`,
             sub: `挂接末级节点 <b>${nodes.length}</b> 个 · 达标 <b>${goodCnt}</b> · 薄弱 <b>${weakCnt}</b> · 未掌握 <b>${poorCnt}</b><span class="pk-goto-cta"><i class="fas fa-arrow-right"></i> 查看明细</span>`
         },
         {
             label: '顽固薄弱知识点', ic: 'fa-cubes', value: leafStubs.length, unit: '个', tone: 'tone-bad', goto: 'analysis-heat',
             tip: '题目挂接集合内，同一节点在 ≥3 次不同任务失分率 ≥40%（含能力维度）；按作业/考试整体统计，不随维度切换',
-            sub: `较上周期 <b>${stubDelta > 0 ? '+' : ''}${stubDelta}</b> 个 · 已改善 ${m.prev.improved.length} 个 · 新增 ${m.prev.added.length} 个<span class="pk-goto-cta"><i class="fas fa-arrow-right"></i> 查看顽固项</span>`
+            sub: `失分率 ≥40% 且命中 ≥3 次任务<span class="pk-goto-cta"><i class="fas fa-arrow-right"></i> 查看顽固项</span>`
         },
         {
             label: '提交率', ic: 'fa-inbox', value: submit.rate, unit: '%', tone: '',
             tip: '周期内任务实交人次 ÷ 应交人次（应交 = 班级人数 × 任务数；无迟交单列口径）',
             sub: `应交 <b>${submit.should}</b> 人次 · 已交 <b>${submit.done}</b> · 未交 <b>${submit.missing}</b>`
-        },
-        {
-            label: '需关注学生', ic: 'fa-exclamation-triangle', value: focusDemo.total, unit: '人', tone: 'tone-bad', watch: true,
-            tip: '本周期「缺交预警 + 下滑预警 + 持续落后」的学生合计；正向关注（进步 / 位置回升）、单场异常（待核实）、数据积累中均不计入。',
-            sub: `缺交预警 <b>${focusDemo.absent}</b> · 下滑预警 <b>${focusDemo.down}</b> · 持续落后 <b>${focusDemo.lag}</b><br>正向关注 <b>${focusDemo.positive}</b> · 待核实 <b>${focusDemo.anomaly}</b> · 数据积累中 <b>${focusDemo.pending}</b><span class="pk-watch-cta"><i class="fas fa-users"></i> 查看名单</span>`
         }
     ];
 
@@ -2919,48 +2476,6 @@ function renderPeriodKpis() {
             ${c.watch ? watchStudentsPopHtml() : ''}
         </div>`).join('');
 
-    // 需关注学生卡：点击下钻学生学情「需关注」筛选名单；弹层按视口位置选择对齐方向与弹出方向
-    const watchCard = el.querySelector('.pk-watch-card');
-    if (watchCard) {
-        watchCard.addEventListener('click', (e) => {
-            // 点标题问号只看口径说明，不下钻（与悬停名单弹层区分开）
-            if (e.target.closest('.kpi-tip')) return;
-            switchMainTab('students');
-            if (window.StudentBridge && typeof window.StudentBridge.gotoWatchStudents === 'function') {
-                window.StudentBridge.gotoWatchStudents();
-            }
-        });
-        const watchPop = watchCard.querySelector('.pk-watch-pop');
-        placeWatchPop(watchCard, watchPop);
-        // 悬停 / 聚焦标题问号时收起名单弹层（两套悬浮说明不同时弹）
-        watchCard.addEventListener('mouseover', (e) => {
-            const tip = e.target.closest('.kpi-tip');
-            const focusedTip = watchCard.querySelector('.kpi-tip:focus');
-            // 鼠标移出问号即释放焦点，避免 :focus 气泡常驻后又弹名单造成重叠
-            if (!tip && focusedTip) focusedTip.blur();
-            watchCard.classList.toggle('pk-watch-tip-hover', !!tip);
-        });
-        watchCard.addEventListener('focusin', (e) => {
-            if (e.target.closest('.kpi-tip')) watchCard.classList.add('pk-watch-tip-hover');
-        });
-        watchCard.addEventListener('focusout', (e) => {
-            if (e.target.closest('.kpi-tip')) watchCard.classList.remove('pk-watch-tip-hover');
-        });
-        watchCard.addEventListener('mouseleave', () => watchCard.classList.remove('pk-watch-tip-hover'));
-        // 悬停前重算：筛选 / 切周期 / 滚动后卡片位置变化，弹出方向随之调整；内部滚动位置重置到表头
-        watchCard.addEventListener('mouseenter', () => {
-            placeWatchPop(watchCard, watchPop);
-            watchPop.scrollTop = 0;
-        });
-        // resize 只注册一次，回调取当前卡片（本卡片随筛选多次重渲染，避免监听累积）
-        if (!window.__watchPopResizeBound) {
-            window.__watchPopResizeBound = true;
-            window.addEventListener('resize', () => {
-                const card = document.querySelector('.pk-watch-card');
-                if (card) placeWatchPop(card, card.querySelector('.pk-watch-pop'));
-            });
-        }
-    }
 
     // 达标率 / 顽固薄弱卡：下钻知识点分析页签（明细模块 / 热力演进视图，与摘要卡5 同口径）
     const gotoHandlers = {
@@ -3273,7 +2788,7 @@ function initCauseChart() {
 
     causeStackChart.setOption({
         // item 触发（与高亮口径一致）：hover 某错因段时 emphasis 高亮该错因全部任务段，
-        // tooltip 同步显示「该错因在各次任务的占比 + 周期均值 + 首尾环比」，而非该任务的错因构成
+        // tooltip 同步显示「该错因在各次任务的占比 + 周期均值 + 首尾变化」，而非该任务的错因构成
         tooltip: {
             trigger: 'item',
             formatter: (p) => {
@@ -3520,12 +3035,20 @@ function kgCollectFaults() {
         .map(n => ({ node: n, tr: kgTraceRoot(n.name) }));
 }
 
-/* ---------------- 顽固薄弱病型分类（XK-07B 规则 2：概念 → 基础 → 方法 → 习惯 → 孤立，顺序命中即止） ----------------
-   病型不改变顽固判定本身（顽固 = ≥3 次不同任务失分率 ≥40%），只决定处置动作：
-   概念型→成对辨析 / 基础型→前序补偿 / 方法型→方法专题 / 习惯型→审题规范 / 孤立型→补标注
-   判定红线：无证据节点不参与比较（未知 ≠ 薄弱）；命中即止，每个知识点只输出唯一病型 ---------------- */
+/* ---------------- 顽固薄弱处置（XK-07B 规则 2 · 本期口径） ----------------
+   本期不做病型五类判断：所有顽固薄弱项（≥3 次不同任务失分率 ≥40%）共用同一条建议，
+   不再按概念 / 基础 / 方法 / 习惯 / 孤立分派动作，界面也不出现病型徽章。
+   下方 KG_PATHOLOGY_DEFS / PARAMS / 索引 / kgClassifyPathology 整套算法本期无调用点，
+   保留供二期恢复；恢复时只改 renderKgStubList、TEACH_ADVICE_RULES.stub 两处读取 STUB_ADVICE 的位置。 ---------------- */
 
-// 病型定义：cls 复用 .kg-tag 语义色，action 为处置动作，tip 解释「为什么这个病型要这么处置」
+// 顽固薄弱统一建议（单一来源：四处展示同源，改这里即全局生效）
+const STUB_ADVICE = {
+    tag: '同点巩固',
+    short: '同点巩固 + 变式复测',
+    long: '先复盘该考核项各次失分题、归类错因，再用同知识点变式题连续 2 次复测，失分率降到 40% 以下即退出顽固名单'
+};
+
+// 病型定义（本期未启用：病型五类不做）：cls 复用 .kg-tag 语义色，action 为处置动作，tip 解释「为什么这个病型要这么处置」
 const KG_PATHOLOGY_DEFS = {
     concept: { label: '概念型', cls: 'kg-tag-purple', action: '成对辨析', tip: '学生不是不会，而是把两个概念用反了；成对对比讲解 + 学生互讲差异，刷题收益低' },
     basic: { label: '基础型', cls: 'kg-tag-orange', action: '前序补偿', tip: '本点并非难点，是前置地基不牢；先补最弱前置再回讲本点，直接讲后者学生会卡在前序步骤' },
@@ -3731,21 +3254,16 @@ function renderKgStubList() {
         box.innerHTML = '<div class="kg-diag-empty"><i class="fas fa-check-circle"></i> 本周期暂无顽固薄弱项（≥3 次失分率 ≥40%）</div>';
         return;
     }
-    // 病型判定共享一份「顽固 ∪ 断层」坏点集合，避免逐条诊断重复计算周期统计
-    const badSet = kgBuildBadSet();
     box.innerHTML = stub.map((k, i) => {
         const info = kgIndex.byName[k.name];
         const chap = k.path || (info ? info.path : '—');
         const lvCls = i === 0 ? 'lv1' : i === 1 ? 'lv2' : i === 2 ? 'lv3' : 'lv';
         const recent = k.values ? k.values.filter(v => v !== null).slice(-1)[0] : null;
-        const path = kgClassifyPathology(k.name, { badSet });
-        const pathTitle = '病型：' + path.label + '｜判定依据：' + path.reason + '｜处置：' + path.action + ' —— ' + path.tip;
         return `<div class="kg-stub-item" data-stub="${escapeHTML(k.name)}" title="点击在热力演进视图中定位该考核项">
             <span class="kg-stub-no ${lvCls}">${i + 1}</span>
             <div class="kg-stub-body">
                 <div class="kg-stub-title">
                     <b style="color:${kpHexOf(k.name)}">${escapeHTML(k.name)}</b>
-                    <span class="kg-tag ${path.cls}" title="${escapeHTML(pathTitle)}">${escapeHTML(path.label)}</span>
                     <span class="kg-tag kg-tag-red">顽固 · ${k.heavyCnt} 次</span>
                     ${i === 0 ? '<span class="kg-tag kg-tag-outline">优先专项</span>' : ''}
                 </div>
@@ -3754,7 +3272,7 @@ function renderKgStubList() {
                     <span>累计失分率 <b>${k.avg}%</b></span>
                     <span>· 命中 ${k.heavyCnt}/${periodTasks.length} 任务</span>
                     ${recent !== null && recent !== undefined ? `<span>· 最近一次 ${recent}%</span>` : ''}
-                    <span class="kg-stub-act" title="判定依据：${escapeHTML(path.reason)}">· 处置 <b>${escapeHTML(path.action)}</b></span>
+                    <span class="kg-stub-act" title="统一建议（本期不区分病型）：${escapeHTML(STUB_ADVICE.long)}">· 建议 <b>${STUB_ADVICE.tag}</b></span>
                     <span class="kg-stub-chap" title="${escapeHTML(chap)}">· ${escapeHTML(chap)}</span>
                 </div>
             </div>
@@ -4043,15 +3561,7 @@ const TEACH_ADVICE_RULES = [
     {
         id: 'stub', tone: 'red', title: '专项突破',
         when: c => c.stubs.length > 0,
-        why: c => {
-            const dist = c.stubPathology || {};
-            const order = ['concept', 'basic', 'method', 'habit', 'isolated'];
-            const distTxt = order.filter(t => dist[t]).map(t => `${KG_PATHOLOGY_DEFS[t].label} ${dist[t]}`).join(' / ');
-            const actTxt = order.filter(t => dist[t]).map(t => KG_PATHOLOGY_DEFS[t].action)
-                .filter((v, i, a) => a.indexOf(v) === i).join('、');
-            const pathTxt = distTxt ? `病型分布：<b>${distTxt}</b>；按病型分派的动作：<b>${actTxt}</b>。` : '';
-            return `${c.stubs.length} 个${dimensionLabel()}命中顽固薄弱（≥3 次失分率 ≥40%）：<b>${c.stubs.map(k => escapeHTML(k.name)).join('、')}</b>。${pathTxt}重复讲题对结构性问题无效，建议安排专项课时。`;
-        },
+        why: c => `${c.stubs.length} 个${dimensionLabel()}命中顽固薄弱（≥3 次失分率 ≥40%）：<b>${c.stubs.map(k => escapeHTML(k.name)).join('、')}</b>。统一建议：<b>${STUB_ADVICE.long}</b>；重复讲题对结构性问题无效，建议安排专项课时。`,
         actions: [{ label: '查看顽固薄弱', ghost: true, run: () => gotoDiagTab('stub') }]
     },
     {
@@ -4130,18 +3640,7 @@ function renderTeachAdvice() {
         relCov: kgRelationCoverage(),
         relGaps,
         confEmpty: !confusionData.length,
-        achCount: flattenTree(currentTree(), true).filter(n => masteryOf(n) >= masteryLevels[0].min).length,
-        // 病型分布：教学建议按病型分派动作（概念→辨析 / 基础→补偿 / 方法→专题 / 习惯→规范 / 孤立→补标注）
-        stubPathology: (() => {
-            const dist = {};
-            if (!s.stubSorted.length || !kgIndex.list.length) return dist;
-            const badSet = kgBuildBadSet();
-            s.stubSorted.forEach(k => {
-                const p = kgClassifyPathology(k.name, { badSet });
-                dist[p.type] = (dist[p.type] || 0) + 1;
-            });
-            return dist;
-        })()
+        achCount: flattenTree(currentTree(), true).filter(n => masteryOf(n) >= masteryLevels[0].min).length
     };
     const items = TEACH_ADVICE_RULES.filter(r => r.when(ctx));
     box.innerHTML = items.length ? items.map(r => `
@@ -4253,7 +3752,7 @@ function buildDefaultAdviceParts(items, ctx) {
             ? `先补 <b>${rootCnt}</b> 个前序根因，否则当前薄弱点讲不透`
             : `直接对 <b>${ctx.faults.length}</b> 个断层点做同点巩固（前置关系未建，暂不归因）`);
     }
-    if (items.find(r => r.id === 'stub')) parts.push(`再集中突破 <b>${ctx.stubs.length}</b> 个顽固薄弱`);
+    if (items.find(r => r.id === 'stub')) parts.push(`再对 <b>${ctx.stubs.length}</b> 个顽固薄弱做同点巩固 + 变式复测`);
     if (items.find(r => r.id === 'conf')) parts.push('课中穿插成对辨析，替代重复刷题');
     if (items.find(r => r.id === 'cause')) parts.push('课后限时短训压制上升错因');
     if (items.find(r => r.id === 'maintain')) parts.push(`已达标 <b>${ctx.achCount}</b> 项转为滚动复测，让出课时`);
@@ -5188,8 +4687,6 @@ function applyMasterySave(levelCount, operator) {
     renderMasteryAudit();
     // 档位变更后主面板配色、状态与统计实时刷新
     refreshDashboard();
-    // 全校共用档位：同步学生追踪-知识点分析（stKpStatus 委托 statusOf；视图隐藏时图表自跳过，切回由 stShowView/stKpActivate 补渲）
-    if (window.StudentBridge && typeof window.StudentBridge.onMasteryChanged === 'function') window.StudentBridge.onMasteryChanged();
 }
 
 // 冲突提示：打开弹窗后配置已被他人保存（不再静默覆盖）
@@ -5319,11 +4816,11 @@ function exportDetailsTable() {
     downloadCSV(`学科学情_${currentDetailItem.name}_作业考试明细.csv`, rows);
 }
 
-/* ---------------- 主页签切换：学情汇总 / 知识点分析 / 学生学情 ---------------- */
+/* ---------------- 主页签切换：学情汇总 / 知识点分析 ---------------- */
 
-// 学情汇总 = 周期学情概览；知识点分析 = 知识点/能力维度切换及其下方全部模块；学生学情 = 范围内学生作业考试情况列表
+// 学情汇总 / 知识点分析 = 选定学科后的两层下钻分析
 function switchMainTab(tab) {
-    if ((tab !== 'summary' && tab !== 'analysis' && tab !== 'students') || tab === currentMainTab) return;
+    if (!['summary', 'analysis'].includes(tab) || tab === currentMainTab) return;
     currentMainTab = tab;
 
     document.querySelectorAll('#subjectMainTabs .subject-main-tab').forEach(t => {
@@ -5331,7 +4828,6 @@ function switchMainTab(tab) {
     });
     document.getElementById('summaryTabPanel').hidden = tab !== 'summary';
     document.getElementById('analysisTabPanel').hidden = tab !== 'analysis';
-    document.getElementById('studentsTabPanel').hidden = tab !== 'students';
     updateDimGroupVisibility();   // 维度子导航随主页签展开 / 收起
 
     // 切页签回到顶部，避免停留在上一页签的滚动位置
@@ -5346,11 +4842,6 @@ function switchMainTab(tab) {
 function refreshActiveTabCharts() {
     if (currentMainTab === 'summary') {
         periodTrendChart ? periodTrendChart.resize() : initPeriodTrendChart();
-    } else if (currentMainTab === 'students') {
-        // 学生学情页签：分布图由学生追踪模块接管，挂载后触发补渲染
-        if (window.StudentBridge && typeof window.StudentBridge.onStudentsTabVisible === 'function') {
-            window.StudentBridge.onStudentsTabVisible();
-        }
     } else {
         myTreeChart ? myTreeChart.resize() : initTreeChart();
         causeStackChart ? causeStackChart.resize() : initCauseChart();
@@ -5358,9 +4849,6 @@ function refreshActiveTabCharts() {
     }
     window.dispatchEvent(new Event('resize'));
 }
-
-// 供学生追踪模块调用的主模块钩子（学科学情-学生学情列表 → 学生追踪-知识点分析联动）
-window.switchMainTab = switchMainTab;
 
 /* ---------------- 视图切换 ---------------- */
 
@@ -5444,7 +4932,7 @@ function applySubjectView(subject) {
     const section0b = document.getElementById('sourceEmptySection');
     if (!section2a || !section0b) return;
     const tabs = document.getElementById('subjectMainTabs');
-    const panels = ['summaryTabPanel', 'analysisTabPanel', 'studentsTabPanel']
+    const panels = ['summaryTabPanel', 'analysisTabPanel']
         .map(id => document.getElementById(id)).filter(Boolean);
     const offline = SUBJECT_OFFLINE_TASKS[subject];
 
@@ -5464,8 +4952,7 @@ function applySubjectView(subject) {
         if (tabs) tabs.style.display = '';
         const active = document.querySelector('.subject-main-tab.active');
         const key = active ? active.dataset.mainTab : 'summary';
-        const targetId = key === 'analysis' ? 'analysisTabPanel'
-            : (key === 'students' ? 'studentsTabPanel' : 'summaryTabPanel');
+        const targetId = key === 'analysis' ? 'analysisTabPanel' : 'summaryTabPanel';
         panels.forEach(p => { p.hidden = p.id !== targetId; });
         // 面板隐藏期间被 window resize 压成 0：必须补渲染当前页签图表（力导向 / 放射布局仅 resize 不够），
         // refreshActiveTabCharts 内部已广播一次 window resize
@@ -5586,10 +5073,10 @@ function bindEvents() {
                 btn.classList.add('active');
                 showPicker(btn.textContent.trim());
                 syncScopeEcho();      // 档位变化即时回显时间范围（弹窗内设定，外部胶囊同步）
-                refreshDashboard();   // 档位切换可能改变环比基准（自定义→等长前置窗口）→ 重算周期模块
+                refreshDashboard();   // 档位切换后重算周期模块
             };
         });
-        // 自定义区间 / 月 / 周 / 学年 picker 变更：环比窗口随日期变化 → 重算（无环比数据时全链路隐藏环比）
+        // 自定义区间 / 月 / 周 / 学年 picker 变更：统计区间变化 → 重算周期模块
         ['customDateStart', 'customDateEnd', 'monthPickInput', 'weekPickInput', 'yearPickSelect'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.onchange = () => {
@@ -5988,155 +5475,6 @@ init();
         return out;
     }
 
-    /* ---------------- 学生学情面板（学科学情-【学生学情】页签） ---------------- */
-
-    // 学情分布等级（对齐原型截图：优秀/良好/合格/待合格/未学习）
-    const ST_STU_LEVELS = ['优秀', '良好', '合格', '待合格', '未学习'];
-    const ST_STU_LEVEL_CLS = { '优秀': 'stu-lv-good', '良好': 'stu-lv-fine', '合格': 'stu-lv-pass', '待合格': 'stu-lv-weak', '未学习': 'stu-lv-none' };
-    const ST_STU_PAGE_SIZE = 10;
-    const stStuState = { level: 'all', search: '', page: 1 };
-    let stuDistChart = null;
-
-    // 学生作业画像：提交口径与状态判定同源（直接取状态引擎的 assigned / missed / submitRate / avgRate）
-    // 不再用独立伪随机生成「未提交次数」：与缺交预警、未学习两个口径互相矛盾（之前 未学习 学生提交率仍有 75%）
-    function stProfile(s) {
-        const st = ST_STATUS_BY_ID[s.id];
-        return { assigned: st.assigned, missed: st.missed, submitRate: st.submitRate, avgRate: st.avgRate, level: st.distLevel, validN: st.validN, thinLevel: st.thinLevel };
-    }
-
-    function stStuCounts() {
-        const counts = {};
-        ST_STU_LEVELS.forEach(l => counts[l] = 0);
-        ST_STUDENTS.forEach(s => { const p = stProfile(s); counts[p.level] = (counts[p.level] || 0) + 1; });
-        return counts;
-    }
-
-    function stStuRowsFiltered() {
-        const kw = stStuState.search.trim().toLowerCase();
-        let rows = ST_STUDENTS.map(s => ({ s, p: stProfile(s) }));
-        if (stStuState.level === 'watch') rows = rows.filter(r => WATCH_FOCUS_ID_SET.has(r.s.id));
-        else if (stStuState.level !== 'all') rows = rows.filter(r => r.p.level === stStuState.level);
-        if (kw) rows = rows.filter(r => r.s.name.toLowerCase().indexOf(kw) >= 0 || String(r.s.id).indexOf(kw) >= 0);
-        rows.sort((a, b) => b.p.avgRate - a.p.avgRate);
-        return rows;
-    }
-
-    // 等级口径说明（对齐 stProfile：≥85 优秀 / ≥70 良好 / ≥60 合格 / 否则待合格；未学习 = 全周期未提交）
-    const ST_STU_LEVEL_HINTS = { '优秀': '得分率 ≥85%', '良好': '得分率 70~85%', '合格': '得分率 60~70%', '待合格': '得分率 &lt;60%', '未学习': '区间内均未提交' };
-
-    // 左侧等级筛选按钮（全部学生/优秀/良好/合格/待合格/未学习 + 人数；等级按钮附口径说明）
-    function stRenderStuLevelBtns() {
-        const counts = stStuCounts();
-        // 「需关注」与周期概览 KPI 卡名单同源（状态引擎 WATCH_FOCUS_ID_SET：缺交预警 ∪ 下滑预警 ∪ 持续落后）
-        const items = [
-            { key: 'all', label: '全部学生', n: ST_STUDENTS.length },
-            { key: 'watch', label: '需关注', hint: '缺交 / 下滑 / 持续落后', n: WATCH_FOCUS_ID_SET.size, watch: true }
-        ].concat(ST_STU_LEVELS.map(l => ({ key: l, label: l, hint: ST_STU_LEVEL_HINTS[l] || '', n: counts[l] || 0 })));
-        st$('stuLevelBtns').innerHTML = items.map(it =>
-            '<button type="button" class="stu-level-btn' + (it.watch ? ' stu-level-watch' : '') + (stStuState.level === it.key ? ' active' : '') + '" data-level="' + it.key + '">' +
-            '<span class="stu-level-name">' + it.label + (it.hint ? ' <span class="stu-level-hint">' + it.hint + '</span>' : '') + '</span>' +
-            '<span class="stu-level-n">' + it.n + '</span>人</button>').join('');
-    }
-
-    // 等级柱色（与标题问号气泡 · 等级徽章同源配色）
-    const ST_STU_LEVEL_COLORS = { '优秀': '#10b981', '良好': '#3b82f6', '合格': '#d9822b', '待合格': '#ef4444', '未学习': '#64748b' };
-
-    // 左侧分布柱状图：各等级学生数（柱顶标人数，悬浮显示人数与占比；y 轴按人数自适应）
-    function stRenderStuDist() {
-        const dom = st$('stuDistChart');
-        if (!dom || dom.offsetWidth === 0) return;   // 页签隐藏期间跳过，切页签时补渲染
-        if (!window.echarts) { setTimeout(stRenderStuDist, 500); return; }
-        if (!stuDistChart) stuDistChart = echarts.getInstanceByDom(dom) || echarts.init(dom);
-        const counts = stStuCounts();
-        const values = ST_STU_LEVELS.map(l => counts[l] || 0);
-        const total = Math.max(1, values.reduce((a, b) => a + b, 0));
-        const max = Math.max(3, Math.max.apply(null, values) + 1);
-        stuDistChart.setOption({
-            tooltip: {
-                trigger: 'item',
-                confine: true,
-                formatter: p => `${p.name}：<b>${p.value}</b> 人（${Math.round(p.value / total * 100)}%）`
-            },
-            grid: { left: 28, right: 10, top: 24, bottom: 22 },
-            xAxis: {
-                type: 'category',
-                data: ST_STU_LEVELS,
-                axisTick: { show: false },
-                axisLine: { lineStyle: { color: '#e2e8f0' } },
-                axisLabel: { color: '#64748b', fontSize: 10, interval: 0 }
-            },
-            yAxis: {
-                type: 'value',
-                min: 0,
-                max,
-                minInterval: 1,
-                axisLabel: { color: '#94a3b8', fontSize: 10 },
-                splitLine: { lineStyle: { color: '#eef2f7' } }
-            },
-            series: [{
-                type: 'bar',
-                barWidth: 20,
-                label: { show: true, position: 'top', fontSize: 11, fontWeight: 700, color: '#334155' },
-                data: ST_STU_LEVELS.map((l, i) => ({
-                    value: values[i],
-                    itemStyle: { color: ST_STU_LEVEL_COLORS[l], borderRadius: [5, 5, 0, 0] }
-                }))
-            }]
-        }, true);
-    }
-
-    // 学生列表表格：标记/姓名/未提交次数/提交率/平均得分率/学情分布/操作
-    function stRenderStuTable() {
-        const rows = stStuRowsFiltered();
-        const pages = Math.max(1, Math.ceil(rows.length / ST_STU_PAGE_SIZE));
-        if (stStuState.page > pages) stStuState.page = 1;
-        const slice = rows.slice((stStuState.page - 1) * ST_STU_PAGE_SIZE, stStuState.page * ST_STU_PAGE_SIZE);
-
-        st$('stuTableBody').innerHTML = slice.length ? slice.map((r) => {
-            const s = r.s, p = r.p;
-            const rateCls = p.submitRate < 60 ? ' stu-num-danger' : '';
-            const avgCls = p.avgRate < 60 ? ' stu-num-danger' : '';
-            const st = ST_STATUS_BY_ID[s.id];
-            const watchTag = (st && st.key !== 'flat')
-                ? '<span class="stu-watch-tag ' + st.cls + '">' + st.label +
-                    '<span class="stu-watch-tip">' + stEsc(st.reason) + '</span></span>'
-                : '';
-            return '<tr>' +
-                '<td class="stu-col-star"><i class="' + (s.starred ? 'fas' : 'far') + ' fa-star stu-star-btn' + (s.starred ? ' starred' : '') + '" data-star="' + s.id + '" title="标记学生"></i></td>' +
-                '<td class="stu-th-name"><span class="st-name-link" data-gostudent="' + s.id + '">' + stEsc(s.name) + '</span>' + watchTag + '</td>' +
-                '<td class="stu-num' + (p.missed > 0 ? ' stu-num-under' : '') + '">' + (p.missed || '—') + '</td>' +
-                '<td class="stu-num' + rateCls + '">' + p.submitRate.toFixed(2) + '</td>' +
-                '<td class="stu-num' + avgCls + '">' + p.avgRate.toFixed(1) + '</td>' +
-                '<td><span class="stu-level-badge ' + (ST_STU_LEVEL_CLS[p.level] || '') + (p.thinLevel ? ' stu-lv-thin' : '') + '"' +
-                    (p.thinLevel ? ' title="有效任务仅 ' + p.validN + ' 次（不足 2 次），等级仅供参考"' : '') + '>' +
-                    stEsc(p.level) + '</span></td>' +
-                '<td><span class="st-op-link" data-gostudent="' + s.id + '">详情</span></td>' +
-                '</tr>';
-        }).join('') : '<tr><td colspan="7"><div class="st-empty">当前筛选条件下暂无学生</div></td></tr>';
-
-        st$('stuListTitle').textContent = '学生列表 (' + rows.length + '人)';
-
-        let pg = '<span class="st-page-arrow' + (stStuState.page <= 1 ? ' disabled' : '') + '" data-pg="prev"><i class="fas fa-angle-left"></i></span>';
-        for (let p = 1; p <= pages; p++) {
-            pg += '<span class="st-page-num' + (p === stStuState.page ? ' active' : '') + '" data-pg="' + p + '">' + p + '</span>';
-        }
-        pg += '<span class="st-page-arrow' + (stStuState.page >= pages ? ' disabled' : '') + '" data-pg="next"><i class="fas fa-angle-right"></i></span>';
-        st$('stuPagination').innerHTML = pg;
-    }
-
-    // 跳转联动：学生学情列表 → 学生追踪-知识点分析（切换学生并直接定位页签）
-    function stStuGoStudent(id) {
-        stShowView('track');   // 先显示学生追踪视图，保证知识点分析图表容器可测量
-        if (id !== stState.studentId) {
-            stState.studentId = id;
-            stState.hwPage = 1;
-        }
-        stState.tab = 'knowledge';
-        stRenderStudentList();
-        stRenderStudentHeader();
-        stRefreshData();
-        stToast('已跳转至学生追踪 · 知识点分析：' + stCurrentStudent().name);
-    }
 
     /* ---------------- 状态 ---------------- */
     const stState = {
@@ -6202,29 +5540,10 @@ init();
         st$('stViewHomework').hidden = stState.tab !== 'homework';
         st$('stViewExam').hidden = stState.tab !== 'exam';
         st$('stViewMistake').hidden = stState.tab !== 'mistake';
-        st$('stViewKnowledge').hidden = stState.tab !== 'knowledge';
         // 切到考试页签时激活图表渲染（容器此前 hidden，柱状图被 offsetWidth===0 跳过）
         if (stState.tab === 'exam') stRenderExamView();
         // 切到作业页签时补渲染趋势图（容器 hidden 期间 ECharts 无法测量尺寸）
         if (stState.tab === 'homework') stRenderTrendChart();
-        // 切到知识点分析页签时补渲染（容器 hidden 期间 ECharts 无法测量尺寸）
-        if (stState.tab === 'knowledge') stKpActivate();
-        // 状态徽章：仅知识点分析页签激活时显示于个人周期学情概览标题后（口径 = 该页签独立筛选范围，见 stRenderKpTabStatus）
-        stRenderKpTabStatus();
-    }
-
-    // 状态徽章（仅知识点分析页签激活时显示于个人周期学情概览标题后）：数据、文案与学情页列表徽章同源 ST_STATUS_BY_ID，
-    // 悬停为同一句话结论（不再叠印统计范围与判定口径）；切页签/切学生经 stRenderStudentHeader、筛选变化经 stKpRenderAll 刷新
-    function stRenderKpTabStatus() {
-        const slot = st$('stKpTabStatus');
-        if (!slot) return;
-        if (stState.tab !== 'knowledge') { slot.innerHTML = ''; return; }
-        const s = stCurrentStudent();
-        const st = ST_STATUS_BY_ID[s.id];
-        slot.innerHTML = (st && st.key !== 'flat')
-            ? '<span class="stu-watch-tag ' + st.cls + '">' + st.label +
-                '<span class="stu-watch-tip">' + stEsc(st.reason) + '</span></span>'
-            : '';
     }
 
     /* ---------------- 作业表格 ---------------- */
@@ -6458,2068 +5777,6 @@ init();
         ).join('') : '<div class="st-empty">当前筛选条件下暂无错题</div>';
     }
 
-    /* ---------------- 知识点分析视图（学生追踪-【知识点分析】数据页签） ----------------
-       分析范围：当前学生；结构与学科学情-知识点分析对齐（维度切换/摘要卡/章节目录/树状图/表格） */
-
-    // 默认时间档位 = 周（与学科学情顶部时间筛选一致）；week 默认取 2026-W38，该周内含 3 次数学任务，可支撑「≥3 次任务」类判定
-    const stKpState = { dimension: 'kp', view: 'tree', tableMode: 0, chapters: true, modules: {}, abilityModules: null, diagTab: 'stub',
-    time: { mode: 'week', month: '2026-09', week: '2026-W38', year: '2026-2027学年', customFrom: '2026-09-01', customTo: '2026-09-15', subject: '数学' } };
-    const stKpCache = { tree: null, byName: null };
-    let stKpTreeChart = null;
-    let stShowAllKp = false;   // 「查看全部知识点」范围开关（同步主模块 showAllKp；默认仅周期学情包含的模块，渲染层过滤，不动统计口径）
-
-    /* ---- 时间筛选 + 纳入统计的任务清单（同学科学情顶部时间筛选） ---- */
-
-    // 任务池：当前周期内各学科作业/考试（时间正序）；个人/班级得分率由学号种子稳定生成
-    // 知识点演示树（AppData.kpTree）仅覆盖数学，其他学科任务仅参与任务清单与已选份数口径
-    const ST_KP_TASKS = [
-        { type: 'assignment', name: '同步作业(三) · 集合与逻辑', subject: '数学', date: '2026-09-03' },
-        { type: 'assignment', name: '阅读理解限时练 · 现代文', subject: '语文', date: '2026-09-05' },
-        { type: 'assignment', name: '同步作业(五) · 函数概念', subject: '数学', date: '2026-09-08' },
-        { type: 'assignment', name: 'Unit 1 词汇检测', subject: '英语', date: '2026-09-10' },
-        { type: 'assignment', name: '同步作业(七) · 指数运算', subject: '数学', date: '2026-09-12' },
-        { type: 'assignment', name: '力学综合小测', subject: '物理', date: '2026-09-12' },
-        { type: 'assignment', name: '周测小卷(一) · 函数性质', subject: '数学', date: '2026-09-15' },
-        { type: 'exam', name: '九月月考(二)', subject: '数学', date: '2026-09-17' },
-        { type: 'assignment', name: '周末专项卷 · 三角恒等变换', subject: '数学', date: '2026-09-19' },
-        { type: 'assignment', name: '文言文基础巩固练', subject: '语文', date: '2026-09-19' },
-        { type: 'assignment', name: '书面表达限时练', subject: '英语', date: '2026-09-23' },
-        { type: 'assignment', name: '错题重练卷 · 期初易错点', subject: '数学', date: '2026-09-22' },
-        { type: 'exam', name: '0924测试1', subject: '数学', date: '2026-09-24' },
-        { type: 'assignment', name: '机械能专项检测', subject: '物理', date: '2026-09-26' }
-    ];
-
-    // 周字符串（YYYY-Www）→ [周一, 周日]（ISO 日期，同主模块周选控件算法）
-    function stKpWeekDates(weekStr) {
-        const m = /^(\d{4})-W(\d{1,2})$/.exec(weekStr || '');
-        if (!m) return null;
-        const jan4 = new Date(Number(m[1]), 0, 4);
-        const day = jan4.getDay() || 7;               // 周一=1 … 周日=7
-        const monday = new Date(jan4);
-        monday.setDate(jan4.getDate() - (day - 1) + (Number(m[2]) - 1) * 7);
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
-        const fmt = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-        return [fmt(monday), fmt(sunday)];
-    }
-
-    // 当前时间筛选档位对应的统计区间 [from, to]（yyyy-mm-dd，可直接字典序比较）
-    function stKpTimeRange() {
-        const t = stKpState.time;
-        if (t.mode === 'month') {
-            const [y, m] = (t.month || '2026-09').split('-').map(Number);
-            const last = new Date(y, m, 0).getDate();
-            return [t.month + '-01', y + '-' + String(m).padStart(2, '0') + '-' + String(last).padStart(2, '0')];
-        }
-        if (t.mode === 'week') return stKpWeekDates(t.week) || ['0000-01-01', '9999-12-31'];
-        if (t.mode === 'custom') {
-            const from = t.customFrom || '0000-01-01', to = t.customTo || '9999-12-31';
-            return from <= to ? [from, to] : [to, from];
-        }
-        const y1 = Number((t.year || '2025-2026学年').slice(0, 4));   // 2025-2026学年 → 2025-09-01 ~ 2026-08-31
-        return [y1 + '-09-01', (y1 + 1) + '-08-31'];
-    }
-
-    // 每任务个人/班级得分率：刘鸿锦 0924测试1 按考试 KPI 精确值 95%；其余按学号+池内索引种子稳定生成
-    function stKpTaskRates(student, idx, task) {
-        if (student.id === 40313 && task.name === '0924测试1') return { mine: 95, cls: 95 };
-        const r1 = stSeed(student.id * 3 + idx * 17 + (task.type === 'exam' ? 1 : 2));
-        const r2 = stSeed(student.id * 5 + idx * 23 + (task.type === 'exam' ? 3 : 4));
-        const cls = Math.round(55 + r2 * 25);
-        const mine = Math.max(30, Math.min(98, Math.round(cls + (r1 - 0.45) * 30)));
-        return { mine, cls };
-    }
-
-    // 时间范围内的任务列表（含个人/班级得分率）：先按学科筛选，再按时间范围过滤，最后剔除学情来源弹窗中取消勾选的任务
-    function stKpTaskList(student) {
-        const [from, to] = stKpTimeRange();
-        const subject = stKpState.time.subject;
-        return ST_KP_TASKS
-            .map((task, idx) => ({ task, idx, rates: stKpTaskRates(student, idx, task) }))
-            .filter(x => x.task.subject === subject && x.task.date >= from && x.task.date <= to && x.task.checked !== false)
-            .map(x => ({ type: x.task.type, name: x.task.name, subject: x.task.subject, date: x.task.date, mine: x.rates.mine, cls: x.rates.cls }));
-    }
-
-    // 时间范围回显文案（随当前档位与对应日期控件生成，格式与班级侧 timeScopeText 对齐）
-    function stKpTimeScopeText() {
-        const t = stKpState.time;
-        if (t.mode === 'year') return t.year || '—';
-        if (t.mode === 'month') {
-            const p = (t.month || '').split('-');
-            return p.length === 2 ? Number(p[0]) + '年' + Number(p[1]) + '月' : '—';
-        }
-        if (t.mode === 'week') {
-            const r = stKpWeekDates(t.week);
-            return t.week + (r ? '（' + r[0].slice(5) + ' ~ ' + r[1].slice(5) + '）' : '');   // 短格式对齐班级侧 weekPickHint
-        }
-        return t.customFrom && t.customTo ? t.customFrom + ' ~ ' + t.customTo : '—';
-    }
-
-    // 双处同源回显：筛选条胶囊 + 弹窗底栏（份数 = 池内已勾选任务数，与 stKpTaskList 的学科+时间+勾选三重过滤等价）
-    function stKSyncScopeEcho() {
-        const total = stKpModalPool().filter(stKpTaskOn).length;
-        const range = stKpTimeScopeText();
-        const count = '已选 ' + total + ' 份';
-        const set = (id, txt) => { const el = st$(id); if (el) el.textContent = txt; };
-        set('stKpRangeText', range);
-        set('stKpFilterCountText', count);
-        set('stKpModalRangeEcho', range);
-        set('stKpModalCountEcho', count);
-        const btn = st$('stKpFilterCount');
-        if (btn) btn.title = '统计范围 ' + range + ' · ' + count + '（点击设置时间范围与学情来源）';
-    }
-
-    // 已选份数回显（点击胶囊打开「学情来源与统计范围」弹窗；口径 = 当前学科 + 时间范围内且未取消勾选的任务数）
-    function stKpRenderTasks() {
-        stKSyncScopeEcho();
-    }
-
-    /* ---- 个人周期学情概览（参考班级周期学情概览：KPI + 周期结论；无独立趋势图，得分趋势并入学情来源弹窗） ---- */
-
-    // 个人周期统计：基于该生周期内任务序列（stKpTaskList 含个人/班级得分率，按日期升序）；
-    // 个人暂无上周期数据源 → 无环比，趋势判定按周期内首末进步（与班级「环比缺失回退首尾」同逻辑）
-    function stKpPeriodStats() {
-        const list = stKpTaskList(stCurrentStudent());
-        const mine = list.map(t => t.mine);
-        const n = mine.length;
-        const avgMine = n ? Math.round(mine.reduce((a, b) => a + b, 0) / n * 10) / 10 : 0;
-        const avgCls = n ? Math.round(list.reduce((a, t) => a + t.cls, 0) / n * 10) / 10 : 0;
-        const delta = Math.round((avgMine - avgCls) * 10) / 10;
-        const prog = n > 1 ? Math.round((mine[n - 1] - mine[0]) * 10) / 10 : null;
-        const sd = n ? Math.round(Math.sqrt(mine.reduce((a, v) => a + (v - avgMine) ** 2, 0) / n) * 10) / 10 : 0;
-        const max = n ? Math.max(...mine) : null;
-        const min = n ? Math.min(...mine) : null;
-        const range = n > 1 ? Math.round((max - min) * 10) / 10 : 0;
-        const winCnt = list.filter(t => t.mine > t.cls).length;
-        const assignCnt = list.filter(t => t.type === 'assignment').length;
-        let trend = '—';
-        if (prog !== null) {
-            if (prog >= 3) trend = '显著回升';
-            else if (prog >= 1) trend = '缓慢回升';
-            else if (prog > -1) trend = '基本持平';
-            else if (prog > -3) trend = '缓慢下滑';
-            else trend = '明显下滑';
-        }
-        const stub = stKpStubList();
-        return { list, n, avgMine, avgCls, delta, prog, sd, stable: Math.round((100 - sd) * 10) / 10, max, min, range, winCnt, assignCnt, examCnt: n - assignCnt, trend, stub };
-    }
-
-    // 个人周期结论规则表（when/cls/build 与班级 INSIGHT_RULES 同构；无环比 → prog 直接参与趋势判定）
-    const PERSON_INSIGHT_RULES = [
-        {
-            id: 'trend', when: s => s.n > 0, cls: () => 'i-blue',
-            build: s => `个人平均得分率 <b>${s.avgMine}%</b>（班级基准 <b>${s.avgCls}%</b>，差 <b class="${s.delta >= 0 ? 'up' : 'down'}">${s.delta > 0 ? '+' : ''}${s.delta}%</b>）；周期内最近一次较最早一次 <b class="${s.prog >= 0 ? 'up' : 'down'}">${s.prog > 0 ? '+' : ''}${s.prog}%</b>，趋势判定「<b>${s.trend}</b>」（个人暂无环比数据，按周期内首尾判定）。`
-        },
-        {
-            id: 'stable', when: s => s.n > 0,
-            cls: s => s.sd >= 5 ? 'i-red' : (s.sd >= 3 ? 'i-amber' : 'i-green'),
-            build: s => `稳定度 <b>${s.stable}</b>（标准差 ${s.sd}），最高 <b>${s.max}%</b> / 最低 <b>${s.min}%</b>，极差 ${s.range}%，${s.sd >= 5 ? '波动偏大，提升尚未稳定' : (s.sd >= 3 ? '波动中等，需关注状态起伏' : '表现稳定')}。`
-        },
-        {
-            id: 'vsClass', when: s => s.n > 0,
-            cls: s => s.winCnt >= s.n * 0.6 ? 'i-green' : (s.winCnt < s.n * 0.4 ? 'i-amber' : 'i-blue'),
-            build: s => {
-                const loseList = s.list.filter(t => t.mine <= t.cls).map(t => `「${stEsc(t.name)}」（${t.mine}% vs 班级 ${t.cls}%）`);
-                return `${s.n} 次任务中 <b>${s.winCnt} 次</b>高于班级均${loseList.length ? `，${loseList.join('、')} 落后` : '，全部领先班级'}；其中作业 ${s.assignCnt} 次 · 考试 ${s.examCnt} 次。`;
-            }
-        },
-        {
-            id: 'stub', when: s => s.stub.length > 0, cls: () => 'i-red',
-            build: s => `<b>${s.stub.length}</b> 个考核项命中个人顽固薄弱（≥3 次失分率 ≥40%）：<b>${s.stub.map(k => stEsc(k.node.name)).join('、')}</b>，建议安排个人专项加练而非随堂重复讲题。`
-        },
-        {
-            id: 'status', when: s => !!s.statusRec, cls: s => s.statusRec.watch ? 'i-red' : 'i-green',
-            build: s => `状态判定「<b>${s.statusRec.label}</b>」（有效场次 <b>${s.statusRec.validN}</b> · 平均得分率 <b>${s.statusRec.avgRate}%</b>${s.statusRec.thinLevel ? '，有效任务不足 2 次，绝对水平仅供参考' : ''}，与学生学情页徽章同源；完整规则见 PRD XK-10）：${stEsc(s.statusRec.advice)}。`
-        }
-    ];
-
-    // 学情状态通俗解读（趋势图下方说明条）：按状态 key 映射大白话，与学生学情页徽章同源（ST_STATUS_BY_ID）
-    // 按 key 而非文案取值：徽章文案允许调整，文案变了不应连累这张表默默失效（默认回退到 advice）
-    const ST_STATUS_PLAIN = {
-        'absent': '连续没交作业或考试缺考，先确认是不是请假、生病或家里有事，再判断学业状态',
-        'anomaly': '最近一次掉得异常陡，先核实是否缺考、白卷或录入有误，先别急着下结论',
-        'pending': '有效任务还不够，先不判断趋势，下一次任务后再看',
-        'down': '最近明显掉队了，建议尽快找学生了解原因、及时干预',
-        'up': '进步已经确认，可以适当提高任务挑战度',
-        'rise': '之前学得吃力、现在开始好转，保持当前节奏别放松',
-        'lag': '一直学得吃力，建议先补基础、适当降低任务难度',
-        'wave': '只是偶尔一次考砸，先不进预警名单，下一次任务继续看',
-        'flat': '成绩稳定但缺少变化，建议从顽固薄弱点找突破'
-    };
-
-    // 个人周期概览渲染：KPI 卡（复用班级 period-kpi 样式）+ 周期结论（insight-list）
-    function stKpRenderPeriodOverview() {
-        const s = stKpPeriodStats();
-        s.statusRec = ST_STATUS_BY_ID[stCurrentStudent().id] || null;
-        const noData = stKpCache.tree && stKpCache.tree.noData;
-
-        // 统计区间 hint（口径与知识点分析筛选一致：学科 + 时间范围 + 已勾选任务）
-        const [from, to] = stKpTimeRange();
-        st$('stKpPeriodHint').innerText = '统计区间：' + stKpState.time.subject + ' · ' + from + ' ~ ' + to + ' · 纳入 ' + s.n + ' 次任务（作业 ' + s.assignCnt + ' · 考试 ' + s.examCnt + '）';
-
-        // KPI 卡（4 张）：趋势进退步与状态判定已结论化（见 PERSON_INSIGHT_RULES trend/status 条目），不再单独设卡避免口径重复
-        const kpiCards = [
-            { label: '个人平均得分率', value: s.n ? s.avgMine : '—', unit: s.n ? '%' : '', tone: '', delta: s.n ? (s.delta > 0 ? '+' : '') + s.delta + '%' : null, deltaCls: s.delta >= 0 ? 'up' : 'down', tip: '该生周期内各次任务个人得分率的算术平均（按任务次数平均，非按分值加权）', sub: `班级基准 <b>${s.n ? s.avgCls + '%' : '—'}</b> · 任务 ${s.n} 次` },
-            { label: '稳定度', value: s.n ? s.stable : '—', unit: '', tone: s.sd > 5 ? 'tone-warn' : '', tip: '100 − 该生周期内各次得分率的标准差；越高越稳', sub: `标准差 <b>${s.n ? s.sd : '—'}</b> · 最高 <b>${s.max !== null ? s.max + '%' : '—'}</b> · 最低 <b>${s.min !== null ? s.min + '%' : '—'}</b>` },
-            { label: '个人顽固薄弱', value: noData ? '—' : s.stub.length, unit: noData ? '' : '个', tone: s.stub.length ? 'tone-bad' : '', tip: '该生同一考核项在 ≥3 次不同任务中失分率 ≥40%（与个人知识图谱诊断-顽固薄弱同源）', sub: noData ? '该学科演示知识体系未覆盖' : (s.stub.length ? `首位「<b>${stEsc(s.stub[0].node.name)}</b>」掌握度 <b>${s.stub[0].node.mastery}%</b>` : '本周期暂无顽固薄弱') },
-            { label: '高于班级场次', value: s.n ? s.winCnt + '/' + s.n : '—', unit: '', tone: '', tip: '该生个人得分率高于班级得分率的任务场次 / 周期内任务总数', sub: `落后场次 <b>${s.n - s.winCnt}</b> · 作业 ${s.assignCnt} · 考试 ${s.examCnt}` }
-        ];
-        st$('stKpPeriodKpiGrid').innerHTML = kpiCards.map((c, i) => `
-            <div class="period-kpi ${c.tone}">
-                <div class="pk-label"><span>${c.label}</span><span class="kpi-tip ${i === kpiCards.length - 1 ? 'tip-end' : ''}" tabindex="0" data-tip="${c.tip}">?</span></div>
-                <div class="pk-value">${c.value}<span class="pk-unit">${c.unit}</span>${c.delta ? `<span class="pk-delta ${c.deltaCls}">${c.delta}</span>` : ''}</div>
-                <div class="pk-sub">${c.sub}</div>
-            </div>`).join('');
-
-        const items = PERSON_INSIGHT_RULES.filter(r => r.when(s)).map(r => ({ cls: r.cls(s), html: r.build(s) }));
-        st$('stKpPeriodInsightList').innerHTML = items.length
-            ? items.map(it => `<div class="insight-item ${it.cls}"><div>${it.html}</div></div>`).join('')
-            : '<div class="insight-item i-blue"><div>当前筛选范围内暂无该生任务数据。</div></div>';
-
-        stKpRenderPeriodTrend();   // 该生周期得分趋势（口径与 KPI/结论同源；容器不可测量时由 stKpActivate 补渲染）
-
-        // 趋势图下方说明条：学情状态通俗解读（八种显示态大白话，与该生当前状态动态联动）
-        const note = st$('stKpPeriodStatusNote');
-        const plain = st$('stKpPeriodStatusPlain');
-        if (s.statusRec) {
-            note.classList.toggle('note-watch', !!s.statusRec.watch);
-            plain.innerHTML = `<span class="st-kp-status-plain-label">${stEsc(s.statusRec.label)}</span>${stEsc(ST_STATUS_PLAIN[s.statusRec.key] || s.statusRec.advice)}`;
-        } else {
-            note.classList.remove('note-watch');
-            plain.textContent = '当前筛选范围内暂无该生状态判定';
-        }
-    }
-
-    /* ---- 学情来源弹窗（交互同学科学情 filterModalOverlay：作业/考试双栏 + 栏头全选计数 + 确定/取消） ---- */
-
-    // 默认勾选：ST_KP_TASKS 无 checked 字段即为选中；弹窗内取消勾选写回 checked:false，由 stKpTaskList 过滤
-    const stKpTaskOn = (t) => t.checked !== false;
-
-    // 弹窗任务池：当前学科 + 时间范围（含取消勾选项；直接返回 ST_KP_TASKS 原始引用以写回勾选态）
-    function stKpModalPool() {
-        const [from, to] = stKpTimeRange();
-        const subject = stKpState.time.subject;
-        return ST_KP_TASKS.filter(t => t.subject === subject && t.date >= from && t.date <= to);
-    }
-
-    // 单栏渲染（同学科学情 renderSourceColumn：空列显示空态并清全选；列表项带日期）
-    function stKpModalColumn(list, containerId, checkAllId, emptyId) {
-        const container = st$(containerId);
-        const checkAll = st$(checkAllId);
-        const emptyEl = st$(emptyId);
-        if (list.length === 0) {
-            container.innerHTML = '';
-            checkAll.checked = false;
-            emptyEl.style.display = 'flex';
-            return;
-        }
-        emptyEl.style.display = 'none';
-        checkAll.checked = list.every(stKpTaskOn);
-        container.innerHTML = list.map(t => `
-            <label class="check-item">
-                <input type="checkbox" class="modal-item-checkbox" data-name="${stEsc(t.name)}" ${stKpTaskOn(t) ? 'checked' : ''}>
-                <i class="fas fa-folder"></i>
-                <span>${stEsc(t.name)}</span>
-                <span class="item-date">${t.date}</span>
-            </label>
-        `).join('');
-        container.querySelectorAll('.modal-item-checkbox').forEach(cb => {
-            cb.onchange = (e) => {
-                const t = list.find(x => x.name === e.target.dataset.name);
-                if (t) t.checked = e.target.checked;   // 勾选变更即时写回任务池（同学科学情：取消不回滚，确定后才重算口径）
-                stKpRenderFilterModal();
-            };
-        });
-    }
-
-    // 弹窗全量渲染：双栏列表 + 栏头计数「(已选/总数)」
-    function stKpRenderFilterModal() {
-        const pool = stKpModalPool();
-        const assigns = pool.filter(t => t.type === 'assignment');
-        const exams = pool.filter(t => t.type === 'exam');
-        stKpModalColumn(assigns, 'stKpModalAssignList', 'stKpCheckAllAssignments', 'stKpAssignEmpty');
-        stKpModalColumn(exams, 'stKpModalExamList', 'stKpCheckAllExams', 'stKpExamEmpty');
-        st$('stKpLabelAssignCount').innerText = '(' + assigns.filter(stKpTaskOn).length + '/' + assigns.length + ')';
-        st$('stKpLabelExamCount').innerText = '(' + exams.filter(stKpTaskOn).length + '/' + exams.length + ')';
-        stKSyncScopeEcho();   // 勾选/全选/时间变更任一入口都会落到本函数，回显统一在此收口
-    }
-
-    // 个人周期得分趋势（原学情来源弹窗趋势图迁入概览）：x = 当前学科+时间范围已勾选任务（stKpTaskList，日期升序）；
-    // 折线 = 个人得分率（蓝实线，考试▲/作业●）+ 班级得分率（灰虚线）；与 KPI/结论同口径，勾选变更经确定→stKpRenderAll 刷新；
-    // 无 pin 高亮（勾选联动语义属弹窗，概览仅呈现纳入统计任务的整体趋势）
-    function stKpRenderPeriodTrend() {
-        const dom = st$('stKpPeriodTrendChart');
-        if (!dom) return;
-        if (st$('stViewKnowledge').hidden || !dom.offsetWidth) return;   // 页签未激活/容器不可测量时跳过，stKpActivate 时补渲染
-        if (!window.echarts) { setTimeout(stKpRenderPeriodTrend, 150); return; }
-        const chart = echarts.getInstanceByDom(dom) || echarts.init(dom);
-        const items = stKpTaskList(stCurrentStudent());
-        const emptyEl = st$('stKpPeriodTrendEmpty');
-        if (!items.length) {
-            chart.clear();
-            emptyEl.style.display = 'flex';
-            return;
-        }
-        emptyEl.style.display = 'none';
-        chart.setOption({
-            animation: false,
-            tooltip: {
-                trigger: 'axis',
-                backgroundColor: 'rgba(48, 59, 86, 0.92)',
-                borderWidth: 0,
-                textStyle: { color: '#fff', fontSize: 12 },
-                formatter: (params) => {
-                    const x = items[params[0].dataIndex];
-                    return '<div style="font-weight:600;margin-bottom:2px">' + stEsc(x.name) + '</div>' +
-                        '<div style="color:#b8c0d4">' + x.date + ' · ' + (x.type === 'exam' ? '考试' : '作业') + '</div>' +
-                        params.map(p => p.marker + p.seriesName + '：<b>' + p.value + '%</b>').join('<br>');
-                }
-            },
-            grid: { left: 44, right: 24, top: 36, bottom: 52 },
-            xAxis: {
-                type: 'category', data: items.map(x => x.name), boundaryGap: false,
-                axisLabel: { interval: 0, fontSize: 10, color: '#64748b', lineHeight: 14, formatter: (v) => v.length > 8 ? v.slice(0, 8) + '…' : v },
-                axisTick: { show: false }, axisLine: { lineStyle: { color: '#e2e8f0' } }
-            },
-            yAxis: {
-                type: 'value', name: '得分率(%)', min: 0, max: 100,
-                nameTextStyle: { color: '#94a3b8', fontSize: 10 },
-                splitLine: { lineStyle: { color: '#f1f5f9' } },
-                axisLabel: { color: '#94a3b8', fontSize: 10 }
-            },
-            series: [
-                {
-                    name: '个人得分率', type: 'line', smooth: true, z: 3,
-                    data: items.map(x => ({ value: x.mine, symbol: x.type === 'exam' ? 'triangle' : 'circle', symbolSize: x.type === 'exam' ? 11 : 8 })),
-                    lineStyle: { width: 2.5, color: '#3b82f6' },
-                    itemStyle: { color: '#3b82f6', borderColor: '#fff', borderWidth: 1.5 },
-                    label: { show: true, position: 'top', fontSize: 10, fontWeight: 700, color: '#2563eb', formatter: (p) => p.value + '%' }
-                },
-                {
-                    name: '班级得分率', type: 'line', smooth: true,
-                    data: items.map(x => x.cls),
-                    symbol: 'circle', symbolSize: 5,
-                    lineStyle: { width: 2, type: 'dashed', color: '#94a3b8' },
-                    itemStyle: { color: '#94a3b8' }
-                }
-            ]
-        }, true);
-    }
-
-    // 周选控件 hint（复用主模块算法文案格式）
-    function stKpUpdateWeekHint() {
-        const hint = st$('stKpWeekHint');
-        const range = stKpWeekDates(stKpState.time.week);
-        // 周提示文本格式对齐学科学情周档（短横线，避免两处同义控件一边斜杠一边短横线）
-        hint.textContent = range ? range[0].slice(5) + ' ~ ' + range[1].slice(5) : '--';
-    }
-
-    // 时间筛选档位对应的日期控件显隐（同学科学情顶部 showPicker 逻辑）；切到学年档时同步下拉当前值防状态不一致
-    function stKpShowTimePicker(mode) {
-        const map = { year: 'stKpYearPicker', month: 'stKpMonthPicker', week: 'stKpWeekPicker', custom: 'stKpCustomRange' };
-        Object.keys(map).forEach(k => { st$(map[k]).style.display = k === mode ? 'flex' : 'none'; });
-        if (mode === 'week') stKpUpdateWeekHint();
-        if (mode === 'year') stKpState.time.year = st$('stKpYearSelect').value;
-    }
-
-    // 时间筛选变更统一出口：重渲染概览派生模块（内含胶囊回显），弹窗打开时同步刷新任务池列表与底栏回显
-    function stKpTimeChanged() {
-        stKpRenderAll();
-        if (st$('stKpFilterModalOverlay').classList.contains('show')) stKpRenderFilterModal();
-    }
-
-    // 学生个人树：克隆班级树，按学号种子重算个人掌握度（确定性，刷新不变）
-    // 任务数因子：范围内任务越少，个人偏移越收敛于班级基准（证据不足），频次/失分随任务数缩放
-    // 演示知识体系仅覆盖数学：其他学科返回 noData 空树，各模块进入空态（任务清单仍展示该学科任务）
-    function stKpTreeOf(student) {
-        const subject = stKpState.time.subject;
-        if (subject !== '数学') {
-            stKpCache.tree = { name: subject + '知识体系', level: 0, mastery: 0, classMastery: 0, children: [], nTasks: stKpTaskList(student).length, noData: true };
-            stKpCache.byName = {};
-            return stKpCache.tree;
-        }
-        const base = stKpState.dimension === 'kp' ? AppData.kpTree : AppData.abilityTree;
-        const nTasks = stKpTaskList(student).length;
-        const coverage = Math.max(0.35, Math.min(1, nTasks / 6));   // 证据覆盖度：<6 份任务时个人特征弱化
-        const freqScale = nTasks / 6;
-        const clone = (n) => {
-            const r = stSeed(student.id * 13 + n.name.length * 7 + n.level * 3);
-            const m = Math.max(4, Math.min(99, Math.round((n.mastery + (r - 0.42) * 30 * coverage) * 10) / 10));
-            const freq = Math.max(0, Math.round(((n.freq || 10) + Math.floor(stSeed(student.id + n.name.length) * 8)) * freqScale));
-            const c = { name: n.name, level: n.level, mastery: m, classMastery: n.mastery, freq, lostCnt: freq ? Math.max(1, Math.round(freq * (100 - m) / 100)) : 0, nTasks };
-            if (n.children) c.children = n.children.map(clone);
-            return c;
-        };
-        const tree = clone(base);
-        const byName = {};
-        (function walk(n, parent, chapter, path) {
-            byName[n.name] = { node: n, parent: parent ? parent.name : null, chapter, path: path.join(' / '), level: n.level };
-            (n.children || []).forEach(c => walk(c, n, n.level === 1 ? n.name : chapter, path.concat(n.name)));
-        })(tree, null, null, []);
-        stKpCache.tree = tree;
-        stKpCache.byName = byName;
-        return tree;
-    }
-
-    function stKpFlatten(tree, excludeRoot) {
-        const out = [];
-        (function walk(n) { if (!(excludeRoot && n.level === 0)) out.push(n); (n.children || []).forEach(walk); })(tree);
-        return out;
-    }
-
-    // 学生掌握档位：全校共用「设置掌握程度」档位配置——直接委托学科学情 statusOf（读 masteryLevels），
-    // 档位名称/颜色随档位切换（3 档：掌握/一般/未掌握；4 档：优秀/掌握/一般/未掌握）
-    function stKpStatus(m) {
-        const s = statusOf(m);
-        return { name: s.name, color: s.color, hex: s.hexColor, cls: s.cls };
-    }
-
-    // 个人知识点着色：按个人掌握档位取色（个人树内无该节点 → 灰），与个人图谱节点 / 目录色点同源
-    function stKpKpHexOf(name) {
-        const info = stKpCache.byName ? stKpCache.byName[name] : null;
-        return info ? stKpStatus(info.node.mastery).hex : '#94a3b8';
-    }
-
-    function stKpIcon(level) {
-        return stKpState.dimension === 'kp' ? (LEVEL_ICONS[level] || LEVEL_ICONS[1]) : ABILITY_ICON;
-    }
-
-    function stKpLabel() {
-        return stKpState.dimension === 'kp' ? '知识点' : '能力';
-    }
-
-    // 摘要卡：考核项数量 / 未掌握 / 个人失分题次 / 个人均分率（对比班级）/ 顽固薄弱项
-    function stKpRenderCards() {
-        const student = stCurrentStudent();
-        const label = stKpLabel();
-        const nodes = stKpFlatten(stKpCache.tree, true);
-        const unmastered = nodes.filter(n => n.mastery < unmasteredThreshold()).length;
-        const lostTotal = nodes.reduce((a, n) => a + n.lostCnt, 0);
-        const avgM = nodes.length ? Math.round(nodes.reduce((a, n) => a + n.mastery, 0) / nodes.length * 10) / 10 : 0;
-        const avgC = nodes.length ? Math.round(nodes.reduce((a, n) => a + n.classMastery, 0) / nodes.length * 10) / 10 : 0;
-        const delta = Math.round((avgM - avgC) * 10) / 10;
-        const stub = stKpStubList();
-
-        st$('stKpTitleText').textContent = label + '分析明细';
-        // 卡1：知识点维度覆盖率口径「周期已检测 x / 全体系总数」（同学科学情 XK-05 卡1 逻辑，证据判定
-        // stKpEvidenceStateOf 的 period + history；不随「查看全部知识点」范围开关变化——统计红线）；能力维度 = 非根节点总数
-        const card1UnitEl = st$('stKpCard1').querySelector('.value-unit');
-        const b4 = st$('stKpBadge4');
-        if (stKpCache.tree.noData) {
-            // 演示知识体系未覆盖该学科：卡片置 '--'，避免误读为 0 个知识点（覆盖率口径不适用，恢复单位）
-            st$('stKpTitle1').textContent = label + '数量';
-            st$('stKpVal1').textContent = '--';
-            if (card1UnitEl) card1UnitEl.style.display = '';
-            st$('stKpVal2').textContent = '--';
-            st$('stKpVal3').textContent = '--';
-            st$('stKpVal4').textContent = '--';
-            st$('stKpVal5').textContent = '--';
-            b4.textContent = '该学科演示数据未覆盖';
-            b4.className = 'badge';
-        } else {
-            if (stKpState.dimension === 'kp') {
-                const covered = nodes.filter(n => {
-                    const evidence = stKpEvidenceStateOf(n.name).state;
-                    return evidence === 'period' || evidence === 'history';
-                }).length;
-                st$('stKpTitle1').textContent = '周期已检测知识点';
-                st$('stKpVal1').textContent = covered;   // 仅显示已检测数量（覆盖率分母不再并列展示）
-                if (card1UnitEl) card1UnitEl.style.display = '';   // 恢复单位「个」
-            } else {
-                st$('stKpTitle1').textContent = label + '数量';
-                st$('stKpVal1').textContent = nodes.length;
-                if (card1UnitEl) card1UnitEl.style.display = '';
-            }
-            st$('stKpTitle2').textContent = '未掌握数量';
-            st$('stKpVal2').textContent = unmastered;
-            st$('stKpBadge2').innerText = '得分率 < ' + unmasteredThreshold() + '%';   // 徽章随「设置掌握程度」档位联动（同学科学情 badgeMasteryThreshold）
-            st$('stKpVal3').textContent = lostTotal;
-            // 卡4 = 节点掌握度均值（非任务得分率均值；任务口径得分率见 ST-13 卡1，两者不得同卡混称）
-            st$('stKpTitle4').textContent = label + '平均掌握度';
-            st$('stKpVal4').textContent = avgM;
-            b4.textContent = '与班级 ' + (delta > 0 ? '+' : '') + delta + '%';
-            b4.className = 'badge ' + (delta >= 0 ? 'badge-success' : 'badge-danger');
-        }
-        st$('stKpTitle5').textContent = '顽固薄弱' + label;
-        if (!stKpCache.tree.noData) st$('stKpVal5').textContent = stub.length;
-
-        // 维度标签（计数与班级树一致，节点结构相同）；演示未覆盖学科不带计数
-        const isKp = stKpState.dimension === 'kp';
-        const tabKp = st$('stKpTabKp'), tabAb = st$('stKpTabAbility');
-        tabKp.textContent = stKpCache.tree.noData ? '知识点' : '知识点 (' + stKpFlatten(AppData.kpTree, true).length + ')';
-        tabAb.textContent = stKpCache.tree.noData ? '能力' : '能力 (' + stKpFlatten(AppData.abilityTree, true).length + ')';
-        tabKp.classList.toggle('active', isKp);
-        tabAb.classList.toggle('active', !isKp);
-        tabKp.style.color = isKp ? 'var(--primary)' : 'var(--text-muted)';
-        tabAb.style.color = !isKp ? 'var(--primary)' : 'var(--text-muted)';
-
-        // 层级页签文案
-        const tabs = st$('stKpTableTabs').querySelectorAll('span');
-        const labels = ['全部', '一级' + label, '二级' + label, '三级' + label];
-        tabs.forEach((t, i) => { t.textContent = labels[i] || t.textContent; });
-    }
-
-    // 目录数据源：图谱视图固定知识点树（同步主模块 kgRenderModules 的 useKpDir 逻辑），其余视图跟随当前维度
-    function stKpDirTreeOf() {
-        return stKpState.view === 'graph' ? stKpGraphTreeOf().tree : stKpCache.tree;
-    }
-
-    // 目录开关状态：kp 维度与图谱视图共用 modules，ability 维度独立记忆（对齐主模块 dirStateOf）
-    function stKpDirStateOf() {
-        if (stKpState.dimension === 'kp' || stKpState.view === 'graph') return stKpState.modules;
-        if (!stKpState.abilityModules) stKpState.abilityModules = {};
-        return stKpState.abilityModules;
-    }
-
-    // 目录/范围开关是否按知识点证据口径消费（知识点维度或图谱固定知识点树；能力维度无证据状态概念，同步主模块 useKpDir）
-    function stKpUseKpDir() { return stKpState.dimension === 'kp' || stKpState.view === 'graph'; }
-
-    // 范围开关保留过滤（同步主模块 kpScopeKeep）：未勾选时零覆盖一级模块整棵隐藏、有覆盖模块内 none 节点隐藏
-    // （history/unlearned 保留：历史线索 + 结构完备）；勾选后全量；仅渲染层，统计口径不随开关变化
-    function stKpScopeKeep(n) {
-        if (stShowAllKp || !stKpUseKpDir()) return true;
-        if (n.level === 0) return true;
-        if (n.level === 1) return kpModuleCoverage(n.name).covered > 0;
-        return evidenceStateOf(n.name).state !== 'none';
-    }
-
-    // 目录过滤变化后刷新当前视图（渲染层过滤，统计口径不受影响，对齐主模块 refreshViewsForDir）
-    function stKpRefreshViewsForDir() {
-        if (stKpState.view === 'tree') stKpInitTreeChart();
-        else if (stKpState.view === 'table') stKpRenderTable(stKpState.tableMode);
-        else if (stKpState.view === 'graph') stKpRenderGraph();
-    }
-
-    // 左侧统一目录（同步学科学情 kgRenderModules）：色点 + 名称 + 该生得分率徽章 + 覆盖/计数徽章，点击开关过滤；范围开关联动显隐
-    function stKpRenderChapters() {
-        const listEl = st$('stKpModuleList');
-        if (!listEl) return;
-        const useKpDir = stKpUseKpDir();
-        const tree = stKpDirTreeOf();
-        const state = stKpDirStateOf();
-        const modules = (tree && tree.children) || [];
-        // 范围开关联动目录（同步主模块）：默认仅显示周期学情包含的知识点模块（零覆盖模块行隐藏，计数随可见集合）；
-        // 勾选后显示全部（零覆盖模块琥珀警示 + 可开关）；隐藏模块的开关状态字典保留，恢复显示不丢
-        const dirModules = (useKpDir && !stShowAllKp)
-            ? modules.filter(m => kpModuleCoverage(m.name).covered > 0)
-            : modules;
-        listEl.innerHTML = dirModules.map(m => {
-            const on = state[m.name] !== false;
-            const count = stKpFlatten(m, false).length;
-            const st = stKpStatus(m.mastery);
-            // 知识点目录：覆盖徽章「已考x/y」（有检测证据 period+history / 子树总数，学科级资产与班级同口径）；
-            // 零覆盖模块降饱和 + 得分率徽章替换为「未检测」（未知 ≠ 未掌握）
-            const cov = useKpDir ? kpModuleCoverage(m.name) : null;
-            const zeroCov = !!cov && cov.covered === 0;
-            // 目录色点 = 该模块（或能力）的个人掌握度档位色（无证据灰），不再按模块类型取色
-            const dotColor = zeroCov ? '#94a3b8' : st.hex;
-            const countHtml = cov
-                ? '<span class="kg-mod-cov' + (zeroCov ? ' zero' : '') + '" title="本期已检测 ' + cov.covered + ' / 共 ' + cov.total + ' 个知识点（含周期外历史证据）">已考' + cov.covered + '/' + cov.total + '</span>'
-                : '<span class="kg-mod-count">' + count + '</span>';
-            const scoreHtml = zeroCov
-                ? '<span class="kg-mod-score kg-mod-none" title="本期任务未覆盖该模块，暂无作答证据（未知 ≠ 未掌握）">未检测</span>'
-                : '<span class="kg-mod-score" style="color:' + st.hex + ';background:' + st.hex + '1a" title="该生周期汇总得分率">' + Math.round(m.mastery) + '%</span>';
-            return '<div class="kg-module-item' + (on ? '' : ' off') + (zeroCov ? ' zero-coverage' : '') + '" data-module="' + stEsc(m.name) + '" title="点击在视图中' + (on ? '隐藏' : '显示') + '该模块">' +
-                '<i class="kg-mod-dot" style="background:' + dotColor + '"></i>' +
-                '<span class="kg-mod-name">' + stEsc(m.name) + '</span>' +
-                scoreHtml +
-                countHtml + '</div>';
-        }).join('');
-        listEl.querySelectorAll('.kg-module-item').forEach(item => {
-            item.onclick = () => {
-                state[item.dataset.module] = state[item.dataset.module] === false;
-                stKpRenderChapters();
-                stKpRefreshViewsForDir();
-            };
-        });
-        const onCnt = dirModules.filter(m => state[m.name] !== false).length;
-        const cntEl = st$('stKpModuleCount');
-        if (cntEl) cntEl.innerText = onCnt + '/' + dirModules.length;
-        const titleEl = st$('stKpDirTitle');
-        if (titleEl) titleEl.innerText = useKpDir ? '知识模块' : '核心素养';
-        // 「查看全部知识点」复选框：仅知识点目录显示（能力树无证据状态概念；noData 学科无模块不渲染）；勾选态与 stShowAllKp 同步
-        const showAllWrap = st$('stKpShowAllWrap');
-        const showAllBox = st$('stKpShowAll');
-        if (showAllWrap) {
-            // 用 inline-flex 而非 ''（.kg-check 基类 display:flex 会覆盖 <label> 默认隐藏语义）；能力维度直接隐藏复选框本体
-            showAllWrap.style.display = (useKpDir && modules.length) ? 'inline-flex' : 'none';
-            if (showAllBox) showAllBox.checked = stShowAllKp;
-        }
-    }
-
-    // 个人树状图底部图例：随「设置掌握程度」3/4 档实时生成（色块与节点着色同源 stKpStatus→statusOf/masteryLevels，全校共用档位配置）+ 灰色无证据标识
-    function stKpRenderTreeLegend() {
-        const el = st$('stKpTreeLegend');
-        if (!el) return;
-        const n = masteryLevels.length;
-        const items = masteryLevels.map((lv, i) => {
-            const hex = i >= n - 1 ? '#ef4444' : (i === n - 2 ? '#f59e0b' : '#10b981');
-            const range = i === 0 ? `≥${lv.min}%` : (i === n - 1 ? `<${lv.max}%` : `${lv.min}~${lv.max}%`);
-            return `<span class="tl-item"><i class="tl-sw" style="background:${hex}"></i>${lv.name} ${range}</span>`;
-        }).join('');
-        el.innerHTML = `<span class="tl-title">掌握程度：</span>${items}`
-            + '<span class="tl-item"><i class="tl-sw" style="background:#94a3b8"></i>无作答证据 / 未覆盖</span>'
-            + '<span class="legend-note">档位随「设置掌握程度」联动 · 灰色节点不展示个人掌握度（未知 ≠ 未掌握）</span>';
-    }
-
-    // 个人树状图：结构与班级版一致，节点色随个人掌握度
-    function stKpInitTreeChart() {
-        const dom = st$('stKpTreeChart');
-        if (!dom || st$('stViewKnowledge').hidden) return;   // 视图隐藏期间跳过，切页签时补渲染
-        if (dom.offsetWidth === 0) return;   // 学生追踪视图整体隐藏时容器不可测量，跳过（切回时由 stKpActivate 补渲染）
-        if (!window.echarts) { setTimeout(stKpInitTreeChart, 500); return; }
-        if (!stKpTreeChart) stKpTreeChart = echarts.getInstanceByDom(dom) || echarts.init(dom);
-        // 渲染层过滤：剔除统一目录中关闭的一级模块与范围开关外节点（数据源与统计口径不受影响，对齐主模块 initTreeChart）
-        const shown = stKpDirStateOf();
-        const fullTree = stKpCache.tree;
-        const tree = Object.assign({}, fullTree, { children: (fullTree.children || []).filter(c => shown[c.name] !== false) });
-        // 证据四态灰色编码（仅知识点维度，同步主模块）：none/unlearned 恒灰（勾选「查看全部知识点」后仍灰）；
-        // 范围开关仅控制 none 显隐（stKpScopeKeep），不影响配色；无证据节点不展示个人掌握度（未知 ≠ 未掌握）
-        const useKpEv = stKpState.dimension === 'kp';
-        const process = (n) => {
-            const ev = (useKpEv && n.level > 0 && !n.noData) ? evidenceStateOf(n.name) : null;
-            const gray = !!ev && (ev.state === 'none' || ev.state === 'unlearned');
-            const item = {
-                name: n.name,
-                evState: ev ? ev.state : null,
-                value: n.noData ? '--' : (gray ? null : n.mastery.toFixed(1)),
-                itemStyle: { color: (n.noData || gray) ? '#94a3b8' : stKpStatus(n.mastery).hex },   // 未覆盖学科/无证据节点置灰，避免红色节点误导为低掌握
-                children: n.children ? n.children.filter(stKpScopeKeep).map(process) : []
-            };
-            if (gray) item.label = { color: '#94a3b8' };
-            return item;
-        };
-        const data = process(tree);
-        // 末级节点行距保障：同主模块 initTreeChart，按可见叶子数动态增高容器（每叶 18px，保底 460px）
-        const leafCount = (function cnt(n) {
-            return (n.children && n.children.length) ? n.children.reduce((s, c) => s + cnt(c), 0) : 1;
-        })(data);
-        dom.style.height = Math.max(460, Math.ceil(leafCount * 18)) + 'px';
-        stKpTreeChart.setOption({
-            tooltip: {
-                formatter: (p) => {
-                    const pd = p.data || {};
-                    if (pd.evState === 'none') return stEsc(p.name) + '<br>已学 · 本期暂无作答证据（未知 ≠ 未掌握）';
-                    if (pd.evState === 'unlearned') return stEsc(p.name) + '<br>教学进度未到 · 未学（仅衔接，不布置加练）';
-                    const info = stKpCache.byName[p.name];
-                    const n = info ? info.node : null;
-                    const cm = n ? n.classMastery : '--';
-                    return stEsc(p.name) + '：个人 ' + p.value + '% · 班级 ' + cm + '%';
-                }
-            },
-            series: [{
-                type: 'tree',
-                orient: 'LR',
-                data: [data],
-                left: '13%', right: '24%', top: '2%', bottom: '2%',
-                symbolSize: 9,
-                label: { position: 'left', align: 'right', verticalAlign: 'middle', fontSize: 12, distance: 8, color: '#334155' },
-                leaves: { label: { position: 'right', align: 'left', verticalAlign: 'middle', distance: 8 } },
-                lineStyle: { color: '#cbd5e1', width: 1.5, curveness: 0.5 },
-                itemStyle: { borderWidth: 1.5, borderColor: '#ffffff' },
-                initialTreeDepth: -1,
-                expandAndCollapse: true,
-                animationDuration: 400
-            }]
-        }, true);
-        dom.classList.add('loaded');
-        stKpRenderTreeLegend();   // 底部图例不依赖重渲染，紧随图表渲染同步刷新
-        stKpTreeChart.resize();
-    }
-
-    // 表格：个人得分率 / 班级得分率 / 与班级差值 / 个人失分次数 / 掌握程度
-    function stKpRenderTable(mode) {
-        const label = stKpLabel();
-        st$('stKpTableHead').innerHTML = '<tr>' +
-            '<th>' + label + '</th>' +
-            '<th>考察频次 (次)</th>' +
-            '<th>个人得分率 (%)</th>' +
-            '<th>班级得分率 (%)</th>' +
-            '<th>与班级差值 (%)</th>' +
-            '<th>个人失分次数</th>' +
-            '<th>掌握程度</th>' +
-            '<th>操作</th></tr>';
-
-        const isAll = mode === 0;
-        // 渲染层过滤：目录中关闭的一级模块整棵子树不进表格 + 范围开关同口径（与树状图/图谱一致，对齐主模块 currentTableRows）
-        const shown = stKpDirStateOf();
-        let nodes = [];
-        ((stKpCache.tree && stKpCache.tree.children) || []).filter(c => shown[c.name] !== false)
-            .forEach(c => stKpFlatten(c, true).forEach(n => nodes.push(n)));
-        if (stKpUseKpDir()) nodes = nodes.filter(stKpScopeKeep);
-        if (mode > 0) nodes = nodes.filter(n => n.level === mode);
-
-        if (!nodes.length) {
-            const emptyMsg = (stKpCache.tree && stKpCache.tree.noData)
-                ? '该学科知识点演示数据未覆盖，仅任务清单与已选份数可用'
-                : '暂无符合条件的数据';
-            st$('stKpTableBody').innerHTML = '<tr><td colspan="8" style="padding: 40px; color: var(--text-muted);">' + emptyMsg + '</td></tr>';
-            return;
-        }
-        st$('stKpTableBody').innerHTML = nodes.map(d => {
-            const m = d.mastery, cm = d.classMastery;
-            const diff = Math.round((m - cm) * 10) / 10;
-            const diffColor = diff < 0 ? 'var(--danger)' : (diff > 0 ? 'var(--success)' : 'var(--text-main)');
-            const diffText = diff > 0 ? '+' + diff : diff;
-            const st = stKpStatus(m);
-            const icon = stKpIcon(d.level);
-            const paddingLeft = isAll ? (24 + (d.level - 1) * 24) : 24;
-            // 无证据节点（none 已学未考 / unlearned 未学，仅知识点维度）：数值列置「—」（未知 ≠ 未掌握，与主模块表格同口径）
-            const ev = stKpUseKpDir() && d.level > 0 && !treeNoData() ? evidenceStateOf(d.name) : null;
-            const noEv = !!ev && (ev.state === 'none' || ev.state === 'unlearned');
-            const cellsHtml = noEv
-                ? '<td>—</td><td style="color:#94a3b8">—</td><td>—</td><td>—</td><td>—</td>' +
-                  '<td><span class="status-label" style="color:#94a3b8;background:#f1f5f9">' + (ev.state === 'unlearned' ? '未学·仅衔接' : '本期未检测') + '</span></td>'
-                : '<td>' + d.freq + '</td>' +
-                  '<td style="font-weight:700; color:' + st.color + '">' + m.toFixed(1) + '%</td>' +
-                  '<td>' + cm + '%</td>' +
-                  '<td style="font-weight:700; color:' + diffColor + '">' + diffText + '%</td>' +
-                  '<td style="color: var(--danger); font-weight: 600;">' + d.lostCnt + '</td>' +
-                  '<td><span class="status-label ' + st.cls + '">' + st.name + '</span></td>';
-            return '<tr>' +
-                '<td style="text-align:left; padding-left: ' + paddingLeft + 'px;">' +
-                '<span class="tree-node-icon ' + icon.c + '">' + icon.t + '</span>' +
-                '<span style="' + (isAll && d.level === 1 ? 'font-weight: 700;' : '') + '">' + stEsc(d.name) + '</span></td>' +
-                cellsHtml +
-                '<td><span class="action-link" style="justify-content:center;" data-stkp-detail="' + stEsc(d.name) + '">查看详情</span></td>' +
-                '</tr>';
-        }).join('');
-    }
-
-    // 当前个人树是否为未覆盖学科（表格无证据判定门控）
-    function treeNoData() { return !!(stKpCache.tree && stKpCache.tree.noData); }
-
-    function stKpSwitchView(view) {
-        stKpState.view = view;
-        st$('stKpBtnTree').classList.toggle('active', view === 'tree');
-        st$('stKpBtnTable').classList.toggle('active', view === 'table');
-        st$('stKpBtnGraph').classList.toggle('active', view === 'graph');
-        st$('stKpTreeView').style.display = view === 'tree' ? 'block' : 'none';
-        st$('stKpTableView').style.display = view === 'table' ? 'block' : 'none';
-        st$('stKpGraphView').style.display = view === 'graph' ? 'block' : 'none';
-        // 图谱专属控件（布局切换 / 适应画布 / 工具栏 / 详情面板）与三栏布局随视图切换（同步学科学情 .graph-view 机制）
-        st$('stKpAnalysisSection').classList.toggle('graph-view', view === 'graph');
-        st$('stKpLayout').classList.toggle('view-graph', view === 'graph');
-        stKpRenderChapters();   // 目录数据源随视图变化（图谱视图固定知识点目录，同步主模块 switchView 内 kgRenderModules 调用）
-        if (view === 'tree') {
-            stKpInitTreeChart();
-            // ECharts 在隐藏容器（学生追踪视图整体隐藏 / 树状视图刚切回）上 resize 会把 canvas 回退到 100×dpr，需门控
-            if (st$('stKpTreeChart').offsetWidth > 0) stKpTreeChart?.resize();
-        } else if (view === 'graph') {
-            stKpRenderGraph();   // 力导向 / 放射布局依赖画布实际尺寸，从隐藏恢复必须整体重渲染
-            if (stKpGraphChart) stKpGraphChart.resize();
-        } else {
-            stKpRenderTable(stKpState.tableMode);
-        }
-        window.dispatchEvent(new Event('resize'));
-    }
-
-    function stKpSetChapters(expanded) {
-        stKpState.chapters = expanded;
-        st$('stKpChapterSidebar').hidden = !expanded;
-        const btn = st$('stKpToggleChapters');
-        btn.setAttribute('aria-expanded', String(expanded));
-        btn.setAttribute('aria-label', expanded ? '收起目录' : '展开目录');
-        btn.querySelector('span').textContent = expanded ? '收起目录' : '展开目录';
-        btn.querySelector('i').className = expanded ? 'fas fa-outdent' : 'fas fa-indent';
-        st$('stKpLayout').classList.toggle('chapters-collapsed', !expanded);
-        requestAnimationFrame(() => { if (stKpState.view === 'tree') stKpTreeChart?.resize(); });
-    }
-
-    function stKpSwitchDimension(dim) {
-        if (stKpState.dimension === dim) return;
-        stKpState.dimension = dim;
-        stKpRenderAll();
-    }
-
-    /* ---- 个人知识图谱诊断 ---- */
-
-    // 顽固薄弱：个人掌握度低于未掌握阈值（unmasteredThreshold，随「设置掌握程度」档位联动，默认 <60）的二/三级节点，按掌握度升序取前 5（命中次数种子生成）
-    // 判定前提：范围内 ≥3 次不同任务失分——任务不足时无顽固薄弱
-    function stKpStubList() {
-        const student = stCurrentStudent();
-        const nTasks = (stKpCache.tree && stKpCache.tree.nTasks) || 0;
-        if (nTasks < 3) return [];
-        return stKpFlatten(stKpCache.tree, true)
-            .filter(n => n.level >= 2 && n.mastery < unmasteredThreshold())
-            .map(n => ({ node: n, heavyCnt: 3 + Math.floor(stSeed(student.id * 17 + n.name.length * 3) * 3) }))
-            .sort((a, b) => a.node.mastery - b.node.mastery)
-            .slice(0, 5);
-    }
-
-    // 个人口径病型判定：掌握度取个人树节点，坏点集合取「个人顽固 ∪ 个人薄弱」；
-    // 不得复用班级 kgBuildBadSet（会把班级薄弱点算进个人病型）
-    function stKpPathologyRate(nm) {
-        const info = stKpCache.byName[nm];
-        return info ? Math.round(info.node.mastery) : null;
-    }
-
-    function stKpPathologyBadSet(stub) {
-        const set = new Set(stub.map(k => k.node.name));
-        const thr = unmasteredThreshold();
-        (function walk(n) {
-            if (n.level >= 2 && n.mastery < thr) set.add(n.name);
-            (n.children || []).forEach(walk);
-        })(stKpCache.tree);
-        return set;
-    }
-
-    function stKpRenderStub() {
-        const stub = stKpStubList();
-        st$('stKpStubCount').textContent = stub.length;
-        const box = st$('stKpStubList');
-        if (stKpCache.tree && stKpCache.tree.noData) {
-            box.innerHTML = '<div class="kg-diag-empty"><i class="fas fa-info-circle"></i> ' + stEsc(stKpState.time.subject) + '知识体系演示数据未覆盖，暂无个人知识图谱诊断</div>';
-            return;
-        }
-        if (!stub.length) {
-            box.innerHTML = '<div class="kg-diag-empty"><i class="fas fa-check-circle"></i> 该生本周期暂无顽固薄弱项（≥3 次失分率 ≥40%）</div>';
-            return;
-        }
-        const badSet = stKpPathologyBadSet(stub);
-        box.innerHTML = stub.map((k, i) => {
-            const info = stKpCache.byName[k.node.name];
-            const lvCls = i === 0 ? 'lv1' : (i === 1 ? 'lv2' : (i === 2 ? 'lv3' : 'lv'));
-            const lostRate = Math.round(100 - k.node.mastery);
-            // 病型：与班级侧同一套算法，口径换成个人树（掌握度 + 坏点集合）
-            const path = kgClassifyPathology(k.node.name, { rateOf: stKpPathologyRate, hasNode: nm => !!stKpCache.byName[nm], badSet: badSet });
-            const pathTitle = '病型：' + path.label + '｜判定依据：' + path.reason + '｜处置：' + path.action + ' —— ' + path.tip;
-            return '<div class="kg-stub-item">' +
-                '<span class="kg-stub-no ' + lvCls + '">' + (i + 1) + '</span>' +
-                '<div class="kg-stub-body">' +
-                '<div class="kg-stub-title"><b style="color:' + stKpStatus(k.node.mastery).hex + '">' + stEsc(k.node.name) + '</b>' +
-                '<span class="kg-tag ' + path.cls + '" title="' + stEsc(pathTitle) + '">' + stEsc(path.label) + '</span>' +
-                '<span class="kg-tag kg-tag-red">顽固 · ' + k.heavyCnt + ' 次</span>' +
-                (i === 0 ? '<span class="kg-tag kg-tag-outline">优先专项</span>' : '') + '</div>' +
-                '<div class="kg-stub-track"><i style="width:' + lostRate + '%"></i></div>' +
-                '<div class="kg-stub-meta">' +
-                '<span>个人掌握度 <b>' + k.node.mastery + '%</b></span>' +
-                '<span>· 班级 ' + k.node.classMastery + '%</span>' +
-                '<span class="kg-stub-act" title="判定依据：' + stEsc(path.reason) + '">· 处置 <b>' + stEsc(path.action) + '</b></span>' +
-                '<span class="kg-stub-chap" title="' + stEsc(info ? info.path : '') + '">· ' + stEsc(info ? info.path : '—') + '</span>' +
-                '</div></div>' +
-                '<span class="kg-stub-pct">' + lostRate + '%</span>' +
-                '</div>';
-        }).join('');
-    }
-
-    // 前序断层：目标低于未掌握阈值（随「设置掌握程度」档位联动，默认 <60）且树内祖先链存在 <70 节点 → 根因在前序；无前置关系条目 → noRel（关系未建，不归因）
-    function stKpCollectFaults() {
-        const faults = [];
-        (function walk(n, ancestors) {
-            const next = ancestors.concat(n.level >= 1 ? [n] : []);
-            if (n.level >= 2 && n.mastery < unmasteredThreshold()) {
-                const chain = next.slice(0, -1);   // 目标之前的祖先链
-                const weak = chain.filter(a => a.mastery < 70);
-                // 无前置关系条目时祖先链仅为目录顺序，不得当作依赖归因——root 强制置 null，与断层卡第四态同口径
-                const noRel = !((kpRelations[n.name] && kpRelations[n.name].prerequisite) || []).length;
-                faults.push({ node: n, chain, root: noRel ? null : (weak.length ? weak[weak.length - 1] : null), noRel });
-            }
-            (n.children || []).forEach(c => walk(c, next));
-        })(stKpCache.tree, []);
-        return faults.sort((a, b) => a.node.mastery - b.node.mastery).slice(0, 5);
-    }
-
-    function stKpRenderFault() {
-        const faults = stKpCollectFaults();
-        // 判定口径脚注随「设置掌握程度」档位联动（未掌握阈值动态渲染；<70% 前置薄弱线为教研常量）
-        const footEl = st$('stKpFaultFoot');
-        if (footEl) footEl.innerHTML = '判定规则：该生目标知识点掌握度 &lt;' + unmasteredThreshold() + '%，且其前置中存在 &lt;70% 的节点 → 根因在前序，沿最弱前置回溯（最多 5 层、跨一级模块停止、环路跳过）至达标节点为止；近 5 层无 &lt;70% 前置则改判本点自身问题。<b>直接讲薄弱点会无效，需先补前序。</b>';
-        const rootCnt = faults.filter(x => x.root).length;
-        st$('stKpFaultCount').textContent = rootCnt + '/' + faults.length;
-        const box = st$('stKpFaultList');
-        if (stKpCache.tree && stKpCache.tree.noData) {
-            box.innerHTML = '<div class="kg-diag-empty"><i class="fas fa-info-circle"></i> ' + stEsc(stKpState.time.subject) + '知识体系演示数据未覆盖，暂无前序断层归因</div>';
-            return;
-        }
-        if (!faults.length) {
-            box.innerHTML = '<div class="kg-diag-empty"><i class="fas fa-check-circle"></i> 该生无掌握度 <' + unmasteredThreshold() + '% 且有作答证据的知识点，无需前序回溯</div>';
-            return;
-        }
-        box.innerHTML = faults.map((x, i) => {
-            const n = x.node, root = x.root;
-            const m = Math.round(n.mastery * 10) / 10;
-            const chainHtml = x.chain.slice().reverse().map((cn, ci) => {
-                const cm = Math.round(cn.mastery * 10) / 10;
-                const isRoot = root && cn.name === root.name;
-                const cls = isRoot ? 'root' : (cm < 70 ? 'weak' : 'ok');
-                return (ci ? '<span class="kg-fault-arrow"><i class="fas fa-arrow-right-long"></i></span>' : '') +
-                    '<span class="kg-fault-node ' + cls + '" title="掌握度 ' + cm + '%">' + stEsc(cn.name) + '<em>' + cm + '%</em></span>';
-            }).join('');
-            const tagHtml = x.noRel
-                ? '<span class="kg-tag kg-tag-slate">前置关系未建 · 无法归因</span><span class="kg-tag kg-tag-slate">待标注</span>'
-                : (root
-                    ? '<span class="kg-tag kg-tag-purple">根因在前序：' + stEsc(root.name) + '</span><span class="kg-tag kg-tag-purple">前置补练</span>'
-                    : '<span class="kg-tag kg-tag-cyan">前序已达标 · 本点自身问题</span><span class="kg-tag kg-tag-blue">同点巩固</span>');
-            const action = x.noRel
-                ? '处置：<b>可直接针对 ' + stEsc(n.name) + ' 做个人专项加练</b>；前置归因待题库补充标注后自动升级。'
-                : (root
-                    ? '处置：<b>先补 ' + stEsc(root.name) + '（' + Math.round(root.mastery) + '%）</b>，再讲 ' + stEsc(n.name) + '。直接讲后者，该生会卡在前序步骤上。'
-                    : '处置：<b>可直接针对 ' + stEsc(n.name) + ' 做个人专项加练</b>，前置节点均已达标。');
-            return '<div class="kg-fault-item" data-kp="' + stEsc(n.name) + '" role="button" tabindex="0" title="点击查看知识点详情">' +
-                '<div class="kg-fault-hd">' +
-                '<span class="kg-fault-rank">' + (i + 1) + '</span>' +
-                '<b>' + stEsc(n.name) + '</b>' +
-                '<span class="kg-tag kg-tag-red">' + m + '%</span>' +
-                tagHtml + '</div>' +
-                '<div class="kg-fault-chain">' + (x.noRel ? '<span class="kg-fault-node brk">前置关系未建 · 无法回溯</span>' : (chainHtml || '<span class="kg-fault-node ok">无前置链</span>')) + '</div>' +
-                '<div class="kg-fault-meta">' + action + '</div>' +
-                '<div class="kg-fault-cta">点击查看知识点详情 <i class="fas fa-chevron-right"></i></div>' +
-                '</div>';
-        }).join('');
-        box.querySelectorAll('.kg-fault-item').forEach(item => {
-            item.onclick = () => stKpModalDetail(item.dataset.kp);
-        });
-    }
-
-    function stKpRenderConf() {
-        const student = stCurrentStudent();
-        const box = st$('stKpConfList');
-        if (stKpCache.tree && stKpCache.tree.noData) {
-            st$('stKpConfCount').textContent = 0;
-            box.innerHTML = '<div class="kg-diag-empty"><i class="fas fa-info-circle"></i> ' + stEsc(stKpState.time.subject) + '知识体系演示数据未覆盖，暂无易混淆分析</div>';
-            return;
-        }
-        const top = confusionData.slice(0, 3).map(c => ({
-            a: c.a, b: c.b, kp: c.kp, expr: c.expr, fix: c.fix,
-            hits: 1 + Math.floor(stSeed(student.id * 19 + c.a.length + c.b.length) * 4)
-        }));
-        st$('stKpConfCount').textContent = top.length;
-        st$('stKpConfList').innerHTML = top.map(c =>
-            '<div class="kg-conf-pair">' +
-            '<div class="kg-conf-hd">' +
-            '<span class="kg-conf-vs"><span>' + stEsc(c.a) + '</span><i>易混</i><span>' + stEsc(c.b) + '</span></span>' +
-            '<span class="kg-conf-hits">' +
-            '<span class="kg-tag kg-tag-red">该生 ' + c.hits + ' 次</span>' +
-            '<span class="kg-tag" style="color:' + stKpKpHexOf(c.kp) + ';background:' + stKpKpHexOf(c.kp) + '14" title="知识点颜色 = 个人掌握情况">关联：' + stEsc(c.kp) + '</span>' +
-            '</span></div>' +
-            '<div class="kg-conf-body"><b>典型混淆表现：</b>' + stEsc(c.expr) + '</div>' +
-            '<div class="kg-conf-fix"><i class="fas fa-check"></i> 辨析建议：' + stEsc(c.fix) + '</div>' +
-            '</div>').join('');
-    }
-
-    /* ---- 个人易错点（同步学科学情 kgPitList：结构复用全局 pitfallHitData，命中次数按学号种子个人化派生） ---- */
-    function stKpRenderPit() {
-        const student = stCurrentStudent();
-        const box = st$('stKpPitList');
-        if (!box) return;
-        if (stKpCache.tree && stKpCache.tree.noData) {
-            st$('stKpPitCount').textContent = 0;
-            box.innerHTML = '<div class="kg-diag-empty"><i class="fas fa-info-circle"></i> ' + stEsc(stKpState.time.subject) + '知识体系演示数据未覆盖，暂无个人易错点分析</div>';
-            return;
-        }
-        const nTasks = (stKpCache.tree && stKpCache.tree.nTasks) || 0;
-        if (!nTasks) {
-            st$('stKpPitCount').textContent = 0;
-            box.innerHTML = '<div class="kg-diag-empty"><i class="fas fa-check-circle"></i> 本周期无该生任务记录，暂无易错点统计</div>';
-            return;
-        }
-        const list = pitfallHitData.map(p => ({
-            qt: p.qt, pit: p.pit, kp: p.kp,
-            hits: Math.min(nTasks, 1 + Math.floor(stSeed(student.id * 23 + p.pit.length) * 3)),   // 该生命中 1~3 次，封顶任务数（短周期 nTasks<3 时不得超出）
-            tot: nTasks
-        })).sort((a, b) => (b.hits / b.tot) - (a.hits / a.tot)).slice(0, 7);
-        st$('stKpPitCount').textContent = list.length;
-        box.innerHTML = list.map(p => {
-            const pct = Math.round(p.hits / p.tot * 100);
-            const tone = pct >= 40 ? 'hi' : (pct >= 25 ? 'mid' : 'lo');
-            return '<div class="kg-pit-row">' +
-                '<span class="kg-pit-qt">' + stEsc(p.qt) + '</span>' +
-                '<span class="kg-pit-name" title="关联知识点：' + stEsc(p.kp) + '">' + stEsc(p.pit) + '</span>' +
-                '<span class="kg-pit-hit ' + tone + '">该生 ' + p.hits + '/' + p.tot + ' 次</span>' +
-                '<span class="kg-pit-pct ' + tone + '">' + pct + '%</span>' +
-                '<span class="kg-pit-track"><i class="' + tone + '" style="width:' + Math.min(100, pct) + '%"></i></span>' +
-                '<span class="kg-pit-kp">关联：<b style="color:' + stKpKpHexOf(p.kp) + '">' + stEsc(p.kp) + '</b></span>' +
-                '</div>';
-        }).join('');
-    }
-
-    /* ---- 个人前后序证据（同步学科学情 renderKgEvidenceOverview：例外表为全局结构性数据共享，周期内考查以该生 freq 判定） ---- */
-    function stKpEvidenceStateOf(name) {
-        const ex = KG_EVIDENCE_EXCEPTIONS[name];
-        if (ex) {
-            if (ex.state === 'history') return { state: 'history', rate: ex.rate, source: ex.source };
-            return { state: ex.state, rate: null };
-        }
-        const info = stKpCache.byName ? stKpCache.byName[name] : null;
-        if (!info || !info.node.freq) return { state: 'none', rate: null };
-        return { state: 'period', rate: Math.round(info.node.mastery), count: info.node.freq };
-    }
-
-    function stKpRenderEvidence() {
-        const chipsEl = st$('stKpEvidenceChips'), listEl = st$('stKpEvidenceList'), cntEl = st$('stKpEvidenceCount');
-        if (!chipsEl || !listEl) return;
-        if (stKpCache.tree && stKpCache.tree.noData) {
-            cntEl.textContent = 0;
-            chipsEl.innerHTML = '';
-            listEl.innerHTML = '<div class="kg-diag-empty"><i class="fas fa-info-circle"></i> ' + stEsc(stKpState.time.subject) + '知识体系演示数据未覆盖，暂无前后序证据总览</div>';
-            return;
-        }
-        const nodes = stKpFlatten(stKpCache.tree, true);
-        const stats = { period: 0, history: 0, none: 0, unlearned: 0 };
-        nodes.forEach(n => { stats[stKpEvidenceStateOf(n.name).state]++; });
-        cntEl.textContent = stats.none;
-        chipsEl.innerHTML = [
-            ['period', '周期内考查 ' + stats.period],
-            ['history', '历史证据 ' + stats.history],
-            ['none', '暂无证据 ' + stats.none],
-            ['unlearned', '未学 ' + stats.unlearned]
-        ].map(([k, label]) => '<span class="kg-ev-chip ' + REL_EVIDENCE_DEFS[k].cls + '"><i style="background:' + REL_EVIDENCE_DEFS[k].color + '"></i>' + label + '</span>').join('');
-
-        // 待诊断清单：暂无证据节点 + 引用它的知识点（谁的前置），点击打开该知识点详情
-        const noneNodes = nodes.filter(n => stKpEvidenceStateOf(n.name).state === 'none');
-        const refs = {};
-        nodes.forEach(n => {
-            ((kpRelations[n.name] && kpRelations[n.name].prerequisite) || []).forEach(p => {
-                if (stKpEvidenceStateOf(p).state === 'none') (refs[p] = refs[p] || []).push(n.name);
-            });
-        });
-        const withRefs = noneNodes.filter(n => refs[n.name]);
-        const orphans = noneNodes.length - withRefs.length;
-        let html = withRefs.map(n => '<div class="kg-ev-item" data-kp="' + stEsc(n.name) + '" role="button" tabindex="0" title="查看「' + stEsc(n.name) + '」知识点详情">' +
-            '<span class="kg-ev-badge ev-none">暂无证据</span>' +
-            '<b>' + stEsc(n.name) + '</b>' +
-            '<span class="kg-ev-ref">「' + stEsc(refs[n.name].join('、')) + '」的前置 · 该生周期内与历史均未独立考查</span>' +
-            '<i class="fas fa-chevron-right"></i>' +
-            '</div>').join('');
-        html += '<div class="kg-ev-note">另有 ' + orphans + ' 个暂无证据知识点未被薄弱目标前置引用，暂不进入待诊断清单；未学 ' + stats.unlearned + ' 个仅课堂衔接，不诊断、不加练。单次作业无法获取前后序作答数据，上述证据来自该生周期内多任务汇总（原型模拟）。</div>';
-        listEl.innerHTML = html;
-        listEl.querySelectorAll('.kg-ev-item').forEach(item => {
-            item.onclick = () => stKpModalDetail(item.dataset.kp);
-        });
-    }
-
-    /* ---- 个人已达标与进步（同步学科学情 renderKgAch：达标线共享 masteryLevels；正向变化首末场按学号种子确定性派生） ---- */
-    function stKpRenderAch() {
-        const sumEl = st$('stKpAchSummary');
-        if (!sumEl) return;
-        const cntEl = st$('stKpAchCount');
-        if (stKpCache.tree && stKpCache.tree.noData) {
-            cntEl.textContent = 0;
-            sumEl.innerHTML = '';
-            st$('stKpAchNote').innerText = stKpState.time.subject + '知识体系演示数据未覆盖';
-            st$('stKpAchTrend').innerHTML = '<div class="kg-diag-empty"><i class="fas fa-info-circle"></i> 暂无已达标统计</div>';
-            st$('stKpAchSkilledChips').innerHTML = '';
-            st$('stKpAchPassedChips').innerHTML = '';
-            // 清空上一学科残留的计数徽章 / 组标题 / 展开按钮与折叠态
-            st$('stKpAchTrendCnt').innerText = '';
-            st$('stKpAchSkilledCnt').innerText = '';
-            st$('stKpAchPassedCnt').innerText = '';
-            st$('stKpAchSkilledTitle').innerText = '熟练掌握';
-            st$('stKpAchPassedTitle').innerText = '达标';
-            st$('stKpAchSkilledChips').classList.remove('collapsed');
-            st$('stKpAchPassedChips').classList.remove('collapsed');
-            st$('stKpAchSkilledMore').hidden = true;
-            st$('stKpAchPassedMore').hidden = true;
-            return;
-        }
-        const line = masteryLevels[0].min;            // 达标线（默认 3 档 = 80，与学科学情同一配置联动）
-        const skilledLine = Math.max(90, line);       // 熟练线
-        const nodes = stKpFlatten(stKpCache.tree, true);
-        const good = nodes.filter(n => n.mastery >= line).sort((a, b) => b.mastery - a.mastery);
-        const skilled = good.filter(n => n.mastery >= skilledLine);
-        const passed = good.filter(n => n.mastery < skilledLine);
-        cntEl.textContent = good.length;
-        st$('stKpAchNote').innerText = '达标线 ≥' + line + '%（随「设置掌握程度」档位联动）· 该生个人口径，统计为全量知识点';
-        sumEl.innerHTML = [
-            '<b>' + good.length + '</b> 个已达标',
-            '占全部 ' + nodes.length + ' 个的 <b>' + (nodes.length ? Math.round(good.length / nodes.length * 100) : 0) + '%</b>',
-            '其中熟练掌握 <b>' + skilled.length + '</b> 个'
-        ].map(t => '<span>' + t + '</span>').join('<span class="kg-diag-ov-sep">·</span>');
-
-        // 本周期正向变化：该生有效考查（freq>=2）节点，首末场得分率（首场 = 末场 − 种子扰动，确定性）
-        const student = stCurrentStudent();
-        const stable = [], newly = [], rising = [];
-        nodes.filter(n => n.freq >= 2).forEach(n => {
-            const last = Math.round(n.mastery * 10) / 10;
-            const first = Math.round(Math.max(4, Math.min(99, last - stSeed(student.id * 31 + n.name.length) * 14)) * 10) / 10;
-            const item = { name: n.name, first, last };
-            if (first >= line && last >= line) stable.push(item);
-            else if (last >= line) newly.push(item);
-            else if (last - first >= 8) rising.push(item);
-        });
-        const trendTotal = stable.length + newly.length + rising.length;
-        const trendCntEl = st$('stKpAchTrendCnt');
-        if (trendCntEl) trendCntEl.innerText = trendTotal ? trendTotal + ' 项' : '';
-        const trendRow = (it, badge, cls) => '<div class="kg-ach-trend-item" data-kp="' + stEsc(it.name) + '" role="button" tabindex="0" title="查看「' + stEsc(it.name) + '」详情">' +
-            '<span class="kg-ach-badge ' + cls + '">' + badge + '</span>' +
-            '<b>' + stEsc(it.name) + '</b>' +
-            '<span class="kg-ach-track">首场 ' + it.first + '% <i class="fas fa-arrow-right"></i> 末场 ' + it.last + '%' + (it.last > it.first ? '（+' + Math.round((it.last - it.first) * 10) / 10 + '%）' : '') + '</span>' +
-            '<i class="fas fa-chevron-right"></i>' +
-            '</div>';
-        const shown = stable.slice(0, 3).map(it => trendRow(it, '稳定达标', 'ach-stable')).join('')
-            + newly.slice(0, 3).map(it => trendRow(it, '新晋达标', 'ach-newly')).join('')
-            + rising.slice(0, 3).map(it => trendRow(it, '明显进步', 'ach-rising')).join('');
-        const shownCnt = Math.min(stable.length, 3) + Math.min(newly.length, 3) + Math.min(rising.length, 3);
-        st$('stKpAchTrend').innerHTML = trendTotal
-            ? shown + (trendTotal > shownCnt ? '<div class="kg-rel-more">… 及另外 ' + (trendTotal - shownCnt) + ' 项</div>' : '')
-            : '<div class="kg-diag-empty"><i class="fas fa-seedling"></i>该生本周期暂未出现达标或明显进步项</div>';
-        st$('stKpAchTrend').querySelectorAll('.kg-ach-trend-item').forEach(item => {
-            item.onclick = () => stKpModalDetail(item.dataset.kp);
-        });
-
-        // 已达标清单（chips 云，超过 12 个截断 + 展开全部）
-        const renderChips = (listId, moreId, arr, emptyText) => {
-            const listEl = st$(listId), moreEl = st$(moreId);
-            if (!listEl) return;
-            if (!arr.length) {
-                listEl.classList.remove('collapsed');
-                listEl.innerHTML = '<div class="kg-diag-empty">' + emptyText + '</div>';
-                if (moreEl) moreEl.hidden = true;
-                return;
-            }
-            listEl.innerHTML = arr.map(n => {
-                const icon = LEVEL_ICONS[n.level] || LEVEL_ICONS[1];
-                return '<span class="kg-ach-chip" data-kp="' + stEsc(n.name) + '" role="button" tabindex="0" title="查看「' + stEsc(n.name) + '」详情">' +
-                    '<span class="tree-node-icon ' + icon.c + '">' + icon.t + '</span>' + stEsc(n.name) + ' <b>' + Math.round(n.mastery) + '%</b>' +
-                    '</span>';
-            }).join('');
-            listEl.querySelectorAll('.kg-ach-chip').forEach(chip => {
-                chip.onclick = () => stKpModalDetail(chip.dataset.kp);
-            });
-            const needMore = arr.length > 12;
-            listEl.classList.toggle('collapsed', needMore);
-            if (moreEl) {
-                moreEl.hidden = !needMore;
-                moreEl.innerText = '展开全部 ' + arr.length + ' 个';
-                moreEl.onclick = () => { listEl.classList.remove('collapsed'); moreEl.hidden = true; };
-            }
-        };
-        renderChips('stKpAchSkilledChips', 'stKpAchSkilledMore', skilled, '暂无 ≥' + skilledLine + '% 的知识点');
-        renderChips('stKpAchPassedChips', 'stKpAchPassedMore', passed, '暂无 ' + line + '%–' + skilledLine + '% 的知识点');
-        const setText = (id, text) => { const el = st$(id); if (el) el.innerText = text; };
-        setText('stKpAchSkilledTitle', '熟练掌握（≥' + skilledLine + '%）');
-        setText('stKpAchPassedTitle', '达标（' + line + '%–' + skilledLine + '%）');
-        setText('stKpAchSkilledCnt', skilled.length ? skilled.length + ' 个' : '');
-        setText('stKpAchPassedCnt', passed.length ? passed.length + ' 个' : '');
-    }
-
-    /* ---- 个人错因结构分析（同步学科学情 causeSection：CAUSE_DEFS 共享；该生矩阵 = 班级基准行 + 学号种子偏移 + 特征增益，行内归一） ---- */
-    let stKpCauseChart = null;
-
-    function stKpCauseMatrixOf(student, tasks) {
-        const feat = student.id % CAUSE_DEFS.length;   // 该生特征错因（占比系统性偏高，确定性）
-        return tasks.map((t, i) => {
-            const base = causeMatrix[i % causeMatrix.length];
-            const vals = CAUSE_DEFS.map((_, ci) => {
-                let v = base[ci] + (stSeed(student.id * 37 + i * 7 + ci) - 0.5) * 10;
-                if (ci === feat) v += 7;
-                return Math.max(2, v);
-            });
-            const sum = vals.reduce((s, v) => s + v, 0);
-            return vals.map(v => Math.round(v / sum * 1000) / 10);
-        });
-    }
-
-    function stKpRenderCauseFindings(rows) {
-        const box = st$('stKpCauseFindingList');
-        if (!box) return;
-        if (stKpCache.tree && stKpCache.tree.noData) {
-            box.innerHTML = '<div class="insight-item i-blue"><div>' + stEsc(stKpState.time.subject) + '知识体系演示数据未覆盖，暂无该生错因分析</div></div>';
-            return;
-        }
-        if (rows.length < 2) {
-            box.innerHTML = '<div class="insight-item i-blue"><div>该生本周期任务不足 2 份，无法对比错因迁移</div></div>';
-            return;
-        }
-        const first = rows[0], last = rows[rows.length - 1];
-        const diffs = CAUSE_DEFS.map((c, i) => ({ def: c, from: first[i], to: last[i], delta: Math.round((last[i] - first[i]) * 10) / 10 }));
-        const significant = diffs.filter(d => Math.abs(d.delta) >= 3).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-        const stable = diffs.filter(d => Math.abs(d.delta) < 3);
-        let html = significant.map(d => {
-            const up = d.delta > 0;
-            return '<div class="insight-item ' + (up ? 'i-red' : 'i-green') + '">' +
-                '<div><b>' + d.def.name + '</b>：' + d.from + '% → <b>' + d.to + '%</b>' +
-                '<span class="cause-delta ' + (up ? 'up' : 'down') + '">' + (up ? '+' : '') + d.delta + '%</span><br>' +
-                '<span class="insight-advice">' + causeAdviceOf(d.def, up) + '</span></div></div>';
-        }).join('');
-        if (stable.length) {
-            html += '<div class="insight-item i-blue"><div><b>基本稳定</b>：' + stable.map(d => d.def.name).join('、') + ' 的占比变化均在 ±3% 以内，该生错因结构未发生明显迁移。</div></div>';
-        }
-        box.innerHTML = html;
-    }
-
-    function stKpRenderCause() {
-        const student = stCurrentStudent();
-        const tasks = stKpTaskList(student);
-        const rows = stKpCauseMatrixOf(student, tasks);
-        stKpRenderCauseFindings(rows);
-        // 图表：视图隐藏期间跳过（ECharts 无法测量尺寸），切回知识页签时由 stKpActivate 补渲染
-        if (st$('stViewKnowledge').hidden) return;
-        const dom = st$('stKpCauseStackChart');
-        if (!dom || dom.offsetWidth === 0) return;
-        if (!window.echarts) { setTimeout(stKpRenderCause, 500); return; }
-        if (!stKpCauseChart) stKpCauseChart = echarts.getInstanceByDom(dom) || echarts.init(dom);
-        const legendEl = st$('stKpCauseLegend');
-        if (stKpCache.tree && stKpCache.tree.noData) {
-            stKpCauseChart.clear();
-            stKpCauseChart.setOption({ graphic: [{ type: 'text', left: 'center', top: 'middle', style: { text: stKpState.time.subject + '知识体系演示数据未覆盖，暂无错因结构分析', fill: '#94a3b8', fontSize: 13 } }] });
-            if (legendEl) legendEl.innerHTML = '';
-            return;
-        }
-        if (!tasks.length) {
-            stKpCauseChart.clear();
-            stKpCauseChart.setOption({ graphic: [{ type: 'text', left: 'center', top: 'middle', style: { text: '本周期无该生智批作业任务，暂无错因结构分析', fill: '#94a3b8', fontSize: 13 } }] });
-            if (legendEl) legendEl.innerHTML = '';
-            return;
-        }
-        stKpCauseChart.setOption({
-            // item 触发（与班级版错因结构分析同口径）：hover 某错因段时高亮该错因全部任务段，
-            // 悬浮显示该错因在各次任务的占比 + 周期均值 + 首尾环比（tooltip 与高亮同口径）
-            tooltip: {
-                trigger: 'item',
-                formatter: (p) => {
-                    const ci = p.seriesIndex, def = CAUSE_DEFS[ci];
-                    const rowIdx = rows.length - 1 - p.dataIndex; // series data 已 reverse（最新在上）
-                    const delta = Math.round((rows[rows.length - 1][ci] - rows[0][ci]) * 10) / 10;
-                    const avg = Math.round(rows.reduce((s, r) => s + r[ci], 0) / rows.length * 10) / 10;
-                    const list = rows.map((row, ri) => ({ t: tasks[ri], v: row[ci], cur: ri === rowIdx })).reverse();
-                    return '<div class="cause-tip">' +
-                        '<div class="cause-tip-hd"><i class="legend-dot" style="background:' + causeColorOf(def, ci) + '"></i><b>' + stEsc(def.name) + '</b>' +
-                        '<span class="cause-tip-avg">周期均值 ' + avg + '%</span>' +
-                        '<span class="cause-delta ' + (delta > 0 ? 'up' : 'down') + '">' + (delta > 0 ? '+' : '') + delta + '%</span></div>' +
-                        list.map(r => '<div class="cause-tip-row' + (r.cur ? ' cur' : '') + '"><span>' + stEsc(r.t.name) + '</span><b>' + r.v + '%</b></div>').join('') +
-                        '</div>';
-                }
-            },
-            grid: { left: 156, right: 40, top: 12, bottom: 34 },   // 个人任务名较长（如「周末专项卷 · 三角恒等变换」），加宽左区防裁切
-            xAxis: {
-                type: 'value', max: 100,
-                axisLabel: { formatter: '{value}%', color: '#94a3b8' },
-                splitLine: { lineStyle: { color: '#f1f5f9' } }
-            },
-            yAxis: {
-                type: 'category',
-                data: tasks.map(t => t.name).reverse(),
-                axisLabel: { fontSize: 12, color: '#475569', width: 146, overflow: 'truncate' },
-                axisTick: { show: false }, axisLine: { lineStyle: { color: '#e2e8f0' } }
-            },
-            series: CAUSE_DEFS.map((c, ci) => ({
-                name: c.name, type: 'bar', stack: 'total', barWidth: 18,
-                itemStyle: { color: causeColorOf(c, ci), borderRadius: ci === CAUSE_DEFS.length - 1 ? [0, 3, 3, 0] : 0 },
-                emphasis: { focus: 'series' },
-                data: rows.map(row => row[ci]).reverse()
-            }))
-        }, true);
-        stKpCauseChart.resize();
-        if (legendEl) {
-            legendEl.innerHTML = CAUSE_DEFS.map((c, ci) =>
-                '<span class="legend-item"><i class="legend-dot" style="background:' + causeColorOf(c, ci) + '"></i>' + c.name + '</span>').join('');
-        }
-    }
-
-    /* ---- 诊断标签切换与状态同步（同步学科学情 KG_DIAG_TAB_DEFS 机制；fault 计数为「根因数/断层总数」格式，断层总数取第二段） ---- */
-    const ST_KP_DIAG_TAB_DEFS = [
-        { key: 'stub', countId: 'stKpStubCount', label: '顽固' },
-        { key: 'fault', countId: 'stKpFaultCount', label: '断层', parse: v => v.split('/')[1] },
-        { key: 'conf', countId: 'stKpConfCount', label: '混淆' },
-        { key: 'pit', countId: 'stKpPitCount', label: '易错' },
-        { key: 'evidence', countId: 'stKpEvidenceCount', label: '待诊断' },
-        { key: 'ach', countId: 'stKpAchCount', label: '已达标' }
-    ];
-
-    function stKpSwitchDiagTab(key) {
-        stKpState.diagTab = key;
-        document.querySelectorAll('#stKpDiagTabs .kg-diag-tab').forEach(t => {
-            const on = t.dataset.diag === key;
-            t.classList.toggle('active', on);
-            t.setAttribute('aria-selected', String(on));
-        });
-        document.querySelectorAll('#stKpDiagSection .kg-diag-panel').forEach(p => {
-            p.classList.toggle('active', p.dataset.diag === key);
-        });
-    }
-
-    // 渲染后同步：计数为 0 的标签灰显（仍可点击查看空态）+ 右侧诊断摘要（点击直跳对应标签）
-    function stKpUpdateDiagTabStates() {
-        const overview = st$('stKpDiagOverview');
-        const parts = [];
-        ST_KP_DIAG_TAB_DEFS.forEach(d => {
-            const cntEl = st$(d.countId);
-            if (!cntEl) return;
-            const raw = (cntEl.textContent || '0').trim();
-            const num = parseInt(d.parse ? d.parse(raw) : raw, 10) || 0;
-            const tab = document.querySelector('#stKpDiagTabs .kg-diag-tab[data-diag="' + d.key + '"]');
-            if (tab) tab.classList.toggle('is-empty', num === 0);
-            parts.push('<span class="kg-diag-ov-item" data-diag="' + d.key + '" title="查看' + d.label + '类诊断"><b>' + num + '</b> ' + d.label + '</span>');
-        });
-        if (overview) {
-            overview.innerHTML = parts.join('<span class="kg-diag-ov-sep">·</span>');
-            overview.querySelectorAll('.kg-diag-ov-item').forEach(item => {
-                item.onclick = () => stKpSwitchDiagTab(item.dataset.diag);
-            });
-        }
-    }
-
-    function stKpRenderDiag() {
-        stKpRenderStub();
-        stKpRenderFault();
-        stKpRenderConf();
-        stKpRenderPit();
-        stKpRenderEvidence();
-        stKpRenderAch();
-        stKpUpdateDiagTabStates();
-    }
-
-    /* ---- 个人失分明细（摘要卡 3 下钻：与卡片同源 lostCnt 聚合，一期仅保留历史数据） ---- */
-    let stKpLostSel = new Set();
-
-    // 失分清单数据源：周期树内 lostCnt>0 的考核项，按个人得分率升序（最薄弱在前）
-    function stKpLostList() {
-        if (!stKpCache.tree || stKpCache.tree.noData) return [];
-        return stKpFlatten(stKpCache.tree, true)
-            .filter(n => n.lostCnt > 0)
-            .sort((a, b) => a.mastery - b.mastery);
-    }
-
-    function stKpRenderLost() {
-        const body = st$('stKpLostBody');
-        if (!body) return;
-        const label = stKpLabel();
-        st$('stKpLostTh').textContent = '失分' + label;
-        st$('stKpLostLabel').textContent = label;
-        const list = stKpLostList();
-        // 维度 / 学生 / 周期切换后按当前清单过滤勾选，防止跨口径串选
-        stKpLostSel = new Set([...stKpLostSel].filter(name => list.some(n => n.name === name)));
-        if (stKpCache.tree && stKpCache.tree.noData) {
-            body.innerHTML = '<tr><td colspan="8" class="m-empty">' + stEsc(stKpState.time.subject) + '知识体系演示数据未覆盖，暂无失分明细</td></tr>';
-        } else {
-            body.innerHTML = list.map(n => {
-                const info = stKpCache.byName[n.name];
-                const st = stKpStatus(n.mastery);
-                return '<tr>' +
-                    '<td class="ck-cell"><input type="checkbox" class="st-kp-lost-ck" data-name="' + stEsc(n.name) + '"' + (stKpLostSel.has(n.name) ? ' checked' : '') + '></td>' +
-                    '<td class="m-title-cell" title="' + stEsc(n.name) + '"><b>' + stEsc(n.name) + '</b></td>' +
-                    '<td class="m-title-cell muted" title="' + stEsc(info ? info.path : '') + '">' + stEsc(info ? info.path : '—') + '</td>' +
-                    '<td>' + n.freq + '</td>' +
-                    '<td><span style="color:' + st.hex + ';font-weight:700">' + n.mastery + '</span></td>' +
-                    '<td class="muted">' + n.classMastery + '</td>' +
-                    '<td class="td-down">' + n.lostCnt + '</td>' +
-                    '<td><span class="task-link" data-act="detail" data-name="' + stEsc(n.name) + '">查看详情</span></td>' +
-                    '</tr>';
-            }).join('') || '<tr><td colspan="8" class="m-empty">本周期该生无失分记录，全部达标</td></tr>';
-        }
-        const ckAll = st$('stKpLostCheckAll');
-        ckAll.checked = list.length > 0 && stKpLostSel.size === list.length;
-        ckAll.indeterminate = stKpLostSel.size > 0 && stKpLostSel.size < list.length;
-        stKpUpdateLostSelInfo();
-    }
-
-    function stKpUpdateLostSelInfo() {
-        st$('stKpLostSelInfo').textContent = '已选 ' + stKpLostSel.size + ' 项';
-    }
-
-    /* ---- 个人教学建议（规则表驱动：汇总该生各诊断结论为可执行动作，与学科学情-教学建议同构） ---- */
-    const ST_KP_ADVICE_RULES = [
-        {
-            id: 'stub', tone: 'red', title: '个人专项突破',
-            when: c => c.stubs.length > 0,
-            why: c => `<b>${c.stubs.length}</b> 个${c.label}命中顽固薄弱（≥3 次失分率 ≥40%）：<b>${c.stubs.map(k => stEsc(k.node.name)).join('、')}</b>。建议安排个人专项讲练与针对性辅导。`,
-            actions: [{ label: '查看顽固薄弱', ghost: true, run: () => stKpGoto('stKpDiagSection') }]
-        },
-        {
-            id: 'fault', tone: 'orange', title: '前序补偿',
-            when: c => c.faults.length > 0,
-            why: c => {
-                if (c.faultRoots.length) return `<b>${c.faults.length}</b> 个${c.label}掌握度 &lt;${unmasteredThreshold()}%，其中 <b>${c.faultRoots.length}</b> 个根因在前序（如「<b>${stEsc(c.faultRoots[0])}</b>」）。须先补前序再讲当前。`;
-                const cov = c.relCov === null ? '' : `（前置关系标注覆盖 <b>${c.relCov}%</b>）`;
-                return `<b>${c.faults.length}</b> 个${c.label}掌握度 &lt;${unmasteredThreshold()}%，前置关系尚未建立${cov}，暂按同点巩固处理；题库补充标注后自动升级为前序归因。`;
-            },
-            actions: [{ label: '查看断层归因', ghost: true, run: () => stKpGoto('stKpDiagSection') }]
-        },
-        {
-            id: 'conf', tone: 'amber', title: '成对辨析',
-            when: c => !c.noData && c.confTop.length > 0,
-            why: c => `${c.confTop.length} 对易混淆最高「<b>${stEsc(c.confTop[0].a)} vs ${stEsc(c.confTop[0].b)}</b>」该生 ${c.confTop[0].hits} 次。建议成对辨析并让其自己讲出差别。`,
-            actions: [{ label: '查看易混淆', ghost: true, run: () => stKpGoto('stKpDiagSection') }]
-        },
-        {
-            id: 'gap', tone: 'cyan', title: '追赶班级',
-            when: c => !c.noData && c.delta <= -5,
-            why: c => `个人平均得分率 <b>${c.avgM}%</b> 低于班级平均 <b>${c.avgC}%</b>（<b>${c.delta}%</b>）。建议结合失分明细定位拖分${c.label}，优先补齐低于班级 10% 以上的差距项。`,
-            actions: [
-                { label: '导出个人学情单', run: () => stKpExport() },
-                { label: '查看失分明细', ghost: true, run: () => stKpGoto('stKpLostSection') }
-            ]
-        },
-        {
-            id: 'maintain', tone: 'green', title: '达标维持',
-            when: c => !c.noData && c.achCount > 0,
-            why: c => `<b>${c.achCount}</b> 个${c.label}已达达标线（≥${masteryLevels[0].min}%）。建议转为每周 1 次滚动复测防回退，把练习时间让给薄弱项。`,
-            actions: [{ label: '查看达标项', ghost: true, run: () => stKpSwitchView('table') }]
-        },
-        {
-            id: 'relbuild', tone: 'slate', title: '关系建设引导',
-            when: c => c.relGaps.length > 0,
-            why: c => {
-                const top = c.relGaps.slice(0, 3).map(k => `<b>${stEsc(k.name)}</b>`).join('、');
-                const confTxt = c.confEmpty ? '；易混淆对数据为空，建议同步补充' : '';
-                return `<b>${c.relGaps.length}</b> 个薄弱${c.label}尚无前置关系标注，前序归因能力受限。建议题库优先标注：${top}${confTxt}。`;
-            },
-            actions: [{ label: '查看断层归因', ghost: true, run: () => stKpGoto('stKpDiagSection') }]
-        }
-    ];
-
-    // 直达入口：个人教学建议 / 摘要卡 → 对应模块滚动定位 + 脉冲高亮
-    function stKpGoto(id) {
-        const sec = st$(id);
-        if (!sec) return;
-        sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        sec.classList.remove('pulse-flash');
-        void sec.offsetWidth;
-        sec.classList.add('pulse-flash');
-    }
-
-    function stKpRenderAdvice() {
-        const box = st$('stKpAdviceList');
-        if (!box) return;
-        const student = stCurrentStudent();
-        const sBox = document.getElementById('stKpAdviceSummary');
-        if (stKpCache.tree && stKpCache.tree.noData) {
-            box.innerHTML = '<div class="kg-diag-empty"><i class="fas fa-info-circle"></i> ' + stEsc(stKpState.time.subject) + '知识体系演示数据未覆盖，暂无个人教学建议</div>';
-            if (sBox) { sBox.innerHTML = ''; sBox.style.display = 'none'; }
-            return;
-        }
-        const nodes = stKpFlatten(stKpCache.tree, true);
-        const avgM = nodes.length ? Math.round(nodes.reduce((a, n) => a + n.mastery, 0) / nodes.length * 10) / 10 : 0;
-        const avgC = nodes.length ? Math.round(nodes.reduce((a, n) => a + n.classMastery, 0) / nodes.length * 10) / 10 : 0;
-        const faults = stKpCollectFaults();
-        const stubs = stKpStubList();
-        // 冷启动引导：该生薄弱（顽固 ∪ 断层）且无前置关系条目的知识点，按失分热度排序供题库优先标注
-        const relGaps = [...new Set([
-            ...stubs.map(k => k.node.name),
-            ...faults.map(f => f.node.name)
-        ])].filter(n => !((kpRelations[n] && kpRelations[n].prerequisite) || []).length)
-            .map(n => {
-                const node = nodes.find(x => x.name === n);
-                return { name: n, hot: node ? 100 - node.mastery : 0 };
-            }).sort((a, b) => b.hot - a.hot);
-        const ctx = {
-            studentName: student.name,
-            label: stKpLabel(),
-            noData: false,
-            stubs,
-            faults,
-            faultRoots: [...new Set(faults.filter(f => f.root).map(f => f.root.name))],
-            // hits 种子算法与 stKpRenderConf 同源，保证诊断卡与建议条数字一致
-            confTop: confusionData.slice(0, 3).map(c => ({ a: c.a, b: c.b, hits: 1 + Math.floor(stSeed(student.id * 19 + c.a.length + c.b.length) * 4) })),
-            avgM, avgC,
-            delta: Math.round((avgM - avgC) * 10) / 10,
-            achCount: nodes.filter(n => n.mastery >= masteryLevels[0].min).length,   // 达标线随「设置掌握程度」档位联动（同学科学情 maintain 规则口径）
-            // 冷启动口径（关系为学科级资产，与班级版同源）
-            relCov: kgRelationCoverage(),
-            relGaps,
-            confEmpty: !confusionData.length,
-            // 综合方案数据：差距项（低于班级 10%）/ 已达标项名单（个人口径）
-            gapNames: nodes.filter(n => n.classMastery - n.mastery >= 10).map(n => n.name),
-            achNames: nodes.filter(n => n.mastery >= masteryLevels[0].min).map(n => n.name)
-        };
-        const items = ST_KP_ADVICE_RULES.filter(r => r.when(ctx));
-        box.innerHTML = items.length ? items.map(r => `
-            <div class="advice-item tone-${r.tone}">
-                <div class="advice-bd">
-                    <div class="advice-title">${r.title}</div>
-                    <div class="advice-why">${r.why(ctx)}</div>
-                </div>
-                <div class="advice-actions">${r.actions.map((a, i) =>
-                    `<button type="button" class="advice-btn${a.ghost ? ' ghost' : ''}" data-adv="${r.id}" data-act="${i}">${a.label}</button>`).join('')}
-                </div>
-            </div>`).join('')
-            : '<div class="kg-diag-empty"><i class="fas fa-circle-check"></i> 该生本周期各项诊断均无异常，按既有节奏推进即可</div>';
-        box.querySelectorAll('.advice-btn').forEach(b => {
-            b.onclick = () => {
-                const rule = ST_KP_ADVICE_RULES.find(r => r.id === b.dataset.adv);
-                if (rule) rule.actions[Number(b.dataset.act)].run(ctx);
-            };
-        });
-        stKpRenderAdviceSummary(items, ctx);
-    }
-
-    // 个人综合教学建议：复用班级版渲染器，关注范围与文案为该生口径
-    function stKpRenderAdviceSummary(items, ctx) {
-        renderTeachAdviceSummary(items, ctx, {
-            boxId: 'stKpAdviceSummary',
-            title: '个人综合教学建议',
-            scopeOf: id => ({
-                stub: ctx.stubs.map(k => k.node.name),
-                fault: ctx.faultRoots.length ? ctx.faultRoots : ctx.faults.map(f => f.node.name),
-                conf: ctx.confTop.map(x => `${x.a} vs ${x.b}`),
-                gap: ctx.gapNames,
-                maintain: ctx.achNames
-            }[id] || []),
-            parts: [
-                ctx.faults.length ? (ctx.faultRoots.length
-                    ? `先补 <b>${ctx.faultRoots.length}</b> 个前序根因，否则该生会卡在薄弱点的前序步骤`
-                    : `直接对 <b>${ctx.faults.length}</b> 个断层点做个人专项巩固（前置关系未建，暂不归因）`) : null,
-                ctx.stubs.length ? `再安排个人专项加练突破 <b>${ctx.stubs.length}</b> 个顽固薄弱` : null,
-                ctx.confTop.length ? '易混淆项用成对辨析 + 互讲差异，替代无效刷题' : null,
-                ctx.delta <= -5 ? `个人平均低于班级 <b>${Math.abs(ctx.delta)}%</b>，优先补齐拖分差距项` : null,
-                ctx.achCount ? `已达标 <b>${ctx.achCount}</b> 项转为滚动复测，让出练习时间` : null
-            ].filter(Boolean)
-        });
-    }
-
-    /* ---- 导出 / 详情弹窗 ---- */
-
-    function stKpExport() {
-        const student = stCurrentStudent();
-        const label = stKpLabel();
-        const rows = [[label, '考察频次(次)', '个人得分率(%)', '班级得分率(%)', '与班级差值(%)', '个人失分次数', '掌握程度']];
-        // 与表格同口径：目录中关闭的一级模块整棵子树不导出 + 范围开关同口径；无证据行数值列置「—」（对齐主模块 exportCurrentTable）
-        const shown = stKpDirStateOf();
-        const useKp = stKpUseKpDir();
-        const noData = !!(stKpCache.tree && stKpCache.tree.noData);
-        ((stKpCache.tree && stKpCache.tree.children) || []).filter(c => shown[c.name] !== false)
-            .forEach(c => stKpFlatten(c, true).forEach(n => {
-                if (useKp && !stKpScopeKeep(n)) return;
-                const ev = useKp && n.level > 0 && !noData ? evidenceStateOf(n.name) : null;
-                const noEv = !!ev && (ev.state === 'none' || ev.state === 'unlearned');
-                if (noEv) {
-                    rows.push([n.name, '—', '—', '—', '—', '—', ev.state === 'unlearned' ? '未学·仅衔接' : '本期未检测']);
-                    return;
-                }
-                const diff = Math.round((n.mastery - n.classMastery) * 10) / 10;
-                rows.push([n.name, n.freq, n.mastery, n.classMastery, diff, n.lostCnt, stKpStatus(n.mastery).name]);
-            }));
-        stExportCsv(student.name + '-' + label + '个人分析.csv', rows);
-    }
-
-    // 作答证据（演示数据）：该考点在各次任务（作业/考试）中的作答记录——题号/分值/题面、作答原文节选、我的/班级/年级得分率与失分标注
-    // 任务选取：对范围内任务做确定性种子覆盖（覆盖概率随考察频次上升），兜底至少最近 1 次，最多展示最近 4 次（按任务时间倒序）
-    function stKpEvidenceHtml(student, n) {
-        const tasks = stKpTaskList(student);
-        if (!tasks.length) return '<div class="st-mb-essay">当前筛选范围内暂无该考点的作答记录（原型演示）。</div>';
-        const ratio = Math.min(0.8, Math.max(0.3, (n.freq || 3) / 30));
-        const picked = [];
-        tasks.forEach((t, i) => {
-            if (stSeed(student.id * 7 + i * 31 + n.name.length * 13) < ratio) picked.push({ t, i });
-        });
-        if (!picked.length) picked.push({ t: tasks[tasks.length - 1], i: tasks.length - 1 });
-        const shown = picked.slice(-4).reverse();   // 最新在前
-        const cards = shown.map(({ t, i }) => {
-            const sd = k => stSeed(student.id * 11 + i * 41 + n.name.length * 7 + k);
-            const qNo = 1 + Math.floor(sd(1) * 18);
-            const full = [5, 8, 10, 12, 15][Math.floor(sd(2) * 5)];
-            const mine = Math.max(6, Math.min(100, Math.round(n.mastery + (sd(3) - 0.5) * 18)));
-            const cls = Math.max(10, Math.min(98, Math.round(n.classMastery + (sd(4) - 0.5) * 8)));
-            const grade = Math.max(8, Math.min(96, cls - 2 - Math.round(sd(5) * 6)));
-            const stem = ['完成求解，并写出必要的推理过程。', '判断结论并说明依据，标注关键步骤。', '完成计算与检验，说明所用的定义或运算法则。'][Math.floor(sd(6) * 3)];
-            const lost = mine < unmasteredThreshold();
-            const ans = lost
-                ? '解：① 直接套用公式完成求解；② 结果得出但未注明适用条件与检验步骤。（原型演示：作答原文节选）'
-                : '解：依据「' + stEsc(n.name) + '」的定义与性质逐步推导：① 明确题设条件；② 关键步骤化简与代入；③ 得出结果并检验，过程完整。（原型演示：作答原文节选）';
-            const ci = Math.floor(sd(7) * CAUSE_DEFS.length);
-            const lossPiece = ['第②步化简符号处理有误', '关键判断依据混淆（相近概念用反）', '遗漏题干限定条件', '解法选择不当，中途换法', '关键步骤未写出，跳步失分', '末问空白未作答'][ci];
-            return '<div class="st-mb-ev-card">' +
-                '<div class="st-mb-ev-head"><span class="st-mb-ev-no">第' + qNo + '题</span>' +
-                '<span class="st-mb-ev-task">（' + (t.type === 'exam' ? '考试' : '作业') + ' · ' + stEsc(t.name) + '）</span></div>' +
-                '<div class="st-mb-ev-stem">（' + full + '分）结合「' + stEsc(n.name) + '」：' + stem + '</div>' +
-                '<div class="st-mb-ev-ans">' + ans + '</div>' +
-                (lost ? '<div class="st-mb-ev-loss"><i class="fas fa-triangle-exclamation"></i><b>失分步骤：</b>' + lossPiece + ' · <b>错因：</b><span style="color:' + CAUSE_DEFS[ci].color + '">' + CAUSE_DEFS[ci].name + '</span></div>' : '') +
-                '<div class="st-mb-ev-foot">' +
-                '<div class="st-mb-ev-stats">' +
-                '<span class="st-mb-ev-stat"><span class="st-mb-ev-lb">我的得分率：</span><b style="color:' + statusOf(mine).hexColor + '">' + mine + '%</b></span>' +
-                '<span class="st-mb-ev-stat"><span class="st-mb-ev-lb">班级得分率：</span><b>' + cls + '%</b></span>' +
-                '<span class="st-mb-ev-stat"><span class="st-mb-ev-lb">年级得分率：</span><b>' + grade + '%</b></span>' +
-                '</div>' +
-                '<div class="st-mb-ev-mine"><button type="button" class="st-mb-ev-mine-btn" data-stkp-answer="1" data-no="' + qNo + '" data-task="' + stEsc(t.name) + '" data-kp="' + stEsc(n.name) + '" data-full="' + full + '" data-type="' + t.type + '"><i class="fas fa-pen"></i> 我的作答</button></div>' +
-                '</div></div>';
-        }).join('');
-        const total = picked.length;
-        const note = total > shown.length
-            ? '按任务时间倒序 · 仅展示最近 ' + shown.length + ' 次（共 ' + total + ' 条记录，演示数据）'
-            : '按任务时间倒序 · 演示数据';
-        return '<div class="st-mb-ev-list">' + cards + '</div>' +
-            '<div class="st-mb-ev-footbar"><span>' + note + '</span><span>共 ' + total + ' 条</span></div>';
-    }
-
-    function stKpModalDetail(name) {
-        const info = stKpCache.byName[name];
-        if (!info) return;
-        const n = info.node;
-        const st = stKpStatus(n.mastery);
-        const student = stCurrentStudent();
-        // 断层判定：与「前序断层归因」诊断卡同口径（stKpCollectFaults）；四态：关系未建 / 根因在前序 / 前序已达标
-        const fault = n.mastery < unmasteredThreshold() ? stKpCollectFaults().find(f => f.node.name === name) : null;
-        const faultHtml = fault
-            ? (fault.noRel
-                ? '<div class="st-mb-okpre"><i class="fas fa-circle-info"></i>本点前置关系未建立，暂无法归因；可直接针对本点做专项巩固，题库补充标注后自动升级为前序归因。</div>'
-                : (fault.root
-                    ? '<div class="st-mb-fault"><i class="fas fa-link-slash"></i><b>前序断层</b>：根因「<b>' + stEsc(fault.root.name) + '</b>」（掌握度 ' + Math.round(fault.root.mastery) + '%）未牢固，直接讲本点该生会卡在前序步骤，建议先补前序。</div>'
-                    : '<div class="st-mb-okpre"><i class="fas fa-circle-check"></i>前置链均已达标（≥70%），本点为自身薄弱，可直接针对本点做专项巩固。</div>'))
-            : '';
-        const practiceBtn = '';
-        stOpenModal(stKpLabel() + '个人明细 · ' + n.name,
-            '<div class="st-mb-meta">' +
-            '<span>学生：<b>' + stEsc(student.name) + ' (' + student.id + ')</b></span>' +
-            '<span>层级：<b>' + '一二三'.charAt(n.level - 1) + '级</b></span>' +
-            '<span>路径：<b>' + stEsc(info.path) + '</b></span>' +
-            '<span>个人得分率：<b style="color:' + st.hex + '">' + n.mastery + '%</b></span>' +
-            '<span>班级得分率：<b>' + n.classMastery + '%</b></span>' +
-            '<span>掌握程度：<b style="color:' + st.hex + '">' + st.name + '</b></span>' +
-            '</div>' +
-            faultHtml +
-            '<div class="st-mb-section-title">作答证据（历次作答 · 演示数据）</div>' +
-            stKpEvidenceHtml(student, n) +
-            '<div class="st-mb-op-row"><button class="st-mb-btn ghost" data-st-close="1">关闭</button><button class="st-mb-btn primary" data-st-close="1">查看错题本</button>' + practiceBtn + '</div>');
-    }
-
-    /* ---- 关联图谱（同步学科学情：多关系 + 力导向/放射 + 断层警示 + 关联详情，掌握度为该生个人口径） ---- */
-    const stKpGraphState = {
-        layout: 'force',          // force | radial
-        depth: 3,                 // 展示深度：1/2/3 级知识点
-        labelMode: 'compact',     // all | compact | none
-        onlyRelated: false,       // 仅看有关联的知识点（与学科学情同口径）
-        // 关系开关只保留画布可见的三类，四类关联节点池关系仅在详情面板呈现
-        rels: { prerequisite: true, confusable: false, structure: true },
-        selected: null
-    };
-    let stKpGraphChart = null;
-
-    // 图谱固定知识点维度（kpRelations 仅维护知识点关系，与学科学情行为一致）；个人树独立缓存，随学生/周期/学科惰性重建
-    const stKpGraphCache = { key: null, tree: null, byName: {} };
-
-    function stKpGraphTreeOf() {
-        const student = stCurrentStudent();
-        const t = stKpState.time;
-        const key = [student.id, t.subject, t.mode, t.month, t.week, t.year, t.customFrom, t.customTo].join('|');
-        if (stKpGraphCache.key === key) return stKpGraphCache;
-        if (t.subject !== '数学') {
-            stKpGraphCache.key = key;
-            stKpGraphCache.tree = { name: t.subject + '知识体系', level: 0, children: [], noData: true };
-            stKpGraphCache.byName = {};
-            return stKpGraphCache;
-        }
-        // 个人掌握度算法与 stKpTreeOf 同源（学号种子 + 证据覆盖度收敛），base 固定知识点树
-        const nTasks = stKpTaskList(student).length;
-        const coverage = Math.max(0.35, Math.min(1, nTasks / 6));
-        const clone = (n) => {
-            const r = stSeed(student.id * 13 + n.name.length * 7 + n.level * 3);
-            const m = Math.max(4, Math.min(99, Math.round((n.mastery + (r - 0.42) * 30 * coverage) * 10) / 10));
-            const c = { name: n.name, level: n.level, mastery: m, classMastery: n.mastery };
-            if (n.children) c.children = n.children.map(clone);
-            return c;
-        };
-        const tree = clone(AppData.kpTree);
-        const byName = {};
-        (function walk(n, parent, chapter, path) {
-            byName[n.name] = { node: n, parent: parent ? parent.name : null, chapter, path: path.join(' / '), level: n.level };
-            (n.children || []).forEach(c => walk(c, n, n.level === 1 ? n.name : chapter, path.concat(n.name)));
-        })(tree, null, null, []);
-        stKpGraphCache.key = key;
-        stKpGraphCache.tree = tree;
-        stKpGraphCache.byName = byName;
-        return stKpGraphCache;
-    }
-
-    // 图谱断层：目标个人低于未掌握阈值（随「设置掌握程度」档位联动，默认 <60）且祖先链存在 <70（与该生「前序断层归因」诊断卡同算法，跑在图谱个人树上）
-    function stKpGraphFaults() {
-        const faults = [];
-        (function walk(n, ancestors) {
-            const next = ancestors.concat(n.level >= 1 ? [n] : []);
-            if (n.level >= 2 && n.mastery < unmasteredThreshold()) {
-                const chain = next.slice(0, -1);
-                const weak = chain.filter(a => a.mastery < 70);
-                faults.push({ node: n, chain, root: weak.length ? weak[weak.length - 1] : null });
-            }
-            (n.children || []).forEach(c => walk(c, next));
-        })(stKpGraphTreeOf().tree, []);
-        return faults.sort((a, b) => a.node.mastery - b.node.mastery).slice(0, 5);
-    }
-
-    function stKpGraphVisibleKpNodes() {
-        // 渲染层过滤：目录中关闭的一级模块整棵子树不进图谱 + 范围开关同口径（零覆盖整棵/none 隐藏，对齐主模块 kgRender 的 modules 过滤）；
-        // 根节点不进图谱集合（对齐主模块无根口径，否则统计条/结构边数与班级基线不一致）
-        const shown = stKpDirStateOf();
-        const tree = stKpGraphTreeOf().tree;
-        const out = [];
-        ((tree && tree.children) || []).filter(c => shown[c.name] !== false && stKpScopeKeep(c))
-            .forEach(c => stKpFlatten(c, true).forEach(n => { if (stKpScopeKeep(n)) out.push(n); }));
-        return out.filter(n => n.level <= stKpGraphState.depth);
-    }
-
-    // 收集关联边（同步主模块 kgCollectEdges）：只收知识点 ↔ 知识点，
-    // 能力 / 题型 / 方法 / 易错点类关系不上画布，仅在知识点详情面板可见
-    function stKpGraphCollectEdges(kpSet) {
-        const edges = [];
-        Object.keys(kpRelations).forEach(name => {
-            if (!kpSet[name]) return;
-            const e = kpRelations[name];
-            (e.prerequisite || []).forEach(p => { if (kpSet[p] && stKpGraphState.rels.prerequisite) edges.push({ rel: 'prerequisite', source: p, target: name }); });
-            (e.confusable || []).forEach(c => { if (kpSet[c] && stKpGraphState.rels.confusable) edges.push({ rel: 'confusable', source: name, target: c }); });
-        });
-        return { edges };
-    }
-
-    function stKpGraphBuildGraph() {
-        const visible = {};
-        stKpGraphVisibleKpNodes().forEach(n => { visible[n.name] = n; });
-        let kpSet = visible;
-        if (stKpGraphState.onlyRelated) {
-            const first = stKpGraphCollectEdges(visible);
-            const linked = new Set();
-            first.edges.forEach(e => { linked.add(e.source); linked.add(e.target); });
-            kpSet = {};
-            Object.keys(visible).forEach(nm => { if (linked.has(nm)) kpSet[nm] = visible[nm]; });
-        }
-        const { edges } = stKpGraphCollectEdges(kpSet);
-        if (stKpGraphState.rels.structure) {
-            Object.keys(kpSet).forEach(name => {
-                const parent = stKpGraphCache.byName[name].parent;
-                if (parent && kpSet[parent]) edges.push({ rel: 'structure', source: parent, target: name });
-            });
-        }
-        return { kpSet, edges };
-    }
-
-    // 放射布局坐标（同步学科学情：知识点按模块扇区径向排布）
-    function stKpGraphRadialPositions(nodes, kpSet, dom) {
-        const W = dom.clientWidth || 900, H = dom.clientHeight || 600;
-        const cx = W / 2, cy = H / 2;
-        const R = Math.min(W, H) * 0.42;
-        const radius = { 1: R * 0.30, 2: R * 0.62, 3: R * 0.92 };
-        const maxL = Math.max(1, ...Object.values(kpSet).map(n => n.level));
-        const leavesOf = (n) => {
-            let c = 0;
-            const walk = (m) => { if (m.level === maxL) c++; (m.children || []).forEach(walk); };
-            walk(n);
-            return Math.max(c, 1);
-        };
-        const inSet = (n) => !!kpSet[n.name];
-        const pos = {};
-        const modules = (stKpGraphTreeOf().tree.children || []).filter(inSet);
-        const assign = (n, a0, a1) => {
-            const mid = (a0 + a1) / 2;
-            pos[n.name] = { x: cx + Math.cos(mid) * (radius[n.level] || R), y: cy + Math.sin(mid) * (radius[n.level] || R), angle: mid };
-            const kids = (n.children || []).filter(inSet);
-            if (!kids.length) return;
-            const tot = kids.reduce((s, k) => s + leavesOf(k), 0) || 1;
-            let cur = a0;
-            kids.forEach(k => { const sp = (leavesOf(k) / tot) * (a1 - a0); assign(k, cur, cur + sp); cur += sp; });
-        };
-        if (modules.length) {
-            const totalLeaves = modules.reduce((s, m) => s + leavesOf(m), 0) || 1;
-            let acc = -Math.PI / 2;
-            modules.forEach(m => { const span = (leavesOf(m) / totalLeaves) * Math.PI * 2; assign(m, acc, acc + span); acc += span; });
-        } else {
-            const names = Object.keys(kpSet);
-            names.forEach((nm, i) => {
-                const ang = -Math.PI / 2 + (i / names.length) * Math.PI * 2;
-                pos[nm] = { x: cx + Math.cos(ang) * R * 0.6, y: cy + Math.sin(ang) * R * 0.6, angle: ang };
-            });
-        }
-        nodes.forEach(nd => { if (nd.kp && pos[nd.name]) { nd.x = pos[nd.name].x; nd.y = pos[nd.name].y; } });
-    }
-
-    // 渲染图谱（力导向 / 放射；红节点 = 该生断层薄弱，红边 = 诊断卡根因链）
-    function stKpRenderGraph() {
-        const dom = st$('stKpGraphChart');
-        if (!dom) return;
-        if (st$('stViewKnowledge').hidden) return;   // 视图隐藏期间跳过，切回时再渲染
-        if (stKpState.view !== 'graph') return;       // 图谱视图未激活时跳过
-        if (!window.echarts) { setTimeout(stKpRenderGraph, 500); return; }
-        if (!stKpGraphChart) {
-            stKpGraphChart = echarts.getInstanceByDom(dom) || echarts.init(dom);
-            stKpGraphChart.on('click', (params) => {
-                if (params.dataType === 'node' && params.data && params.data.kp) stKpGraphSelectNode(params.data.name);
-            });
-        }
-
-        const cache = stKpGraphTreeOf();
-        const { kpSet, edges } = stKpGraphBuildGraph();
-        const statEl = st$('stKpKgStat');
-        const kpCount = Object.keys(kpSet).length;
-        // 范围内无证据节点计数（none + unlearned）：统计条后缀「含未检测 N」，灰色编码可辨（同步主模块）
-        const noEvCount = Object.values(kpSet).filter(n => { const s = evidenceStateOf(n.name).state; return s === 'none' || s === 'unlearned'; }).length;
-        if (statEl) statEl.innerHTML = `知识点 <b>${kpCount}</b> · 关联边 <b>${edges.length}</b>` +
-            (noEvCount ? `<span style="color:#94a3b8">（含未检测 ${noEvCount}）</span>` : '');
-
-        if (cache.tree.noData || !kpCount) {
-            stKpGraphChart.clear();
-            stKpGraphChart.setOption({
-                graphic: [{ type: 'text', left: 'center', top: 'middle', style: { text: cache.tree.noData ? '该学科知识点演示数据未覆盖' : '请至少开启一类关系或调整深度', fill: '#94a3b8', fontSize: 13 } }]
-            });
-            stKpGraphSelectNode(null);
-            return;
-        }
-
-        // 断层警示：节点角标与该生「前序断层归因」诊断卡同源
-        const faultNames = new Set(stKpGraphFaults().map(f => f.node.name));
-
-        const nodes = [];
-        Object.values(kpSet).forEach(n => {
-            const info = stKpGraphCache.byName[n.name];
-            // 节点四态灰色编码（同步主模块）：none/unlearned 恒灰 + 降透明度，不展示个人掌握度，也不参与断层着色（未知 ≠ 未掌握）
-            const ev = n.level > 0 && !cache.tree.noData ? evidenceStateOf(n.name) : null;
-            const noEv = !!ev && (ev.state === 'none' || ev.state === 'unlearned');
-            const isFault = !noEv && faultNames.has(n.name);
-            const size = stKpGraphState.layout === 'radial' ? [0, 24, 13, 8][n.level] : [0, 28, 15, 9][n.level];
-            nodes.push({
-                name: n.name, kp: true, level: n.level, module: info.chapter, path: info.path,
-                value: noEv ? null : Math.round(n.mastery * 10) / 10, cls: n.classMastery, fault: isFault,
-                noEvTip: noEv ? (ev.state === 'unlearned' ? '教学进度未到 · 未学（仅衔接）' : '已学 · 本期暂无作答证据') : null,
-                symbol: 'circle', symbolSize: size,
-                itemStyle: {
-                    // 节点填充色 = 个人掌握度档位色（与主模块同口径）；无证据灰，断层点另加红描边
-                    color: noEv ? '#94a3b8' : stKpStatus(n.mastery).hex,
-                    opacity: noEv ? 0.55 : 1,
-                    borderColor: isFault ? '#b91c1c' : '#fff',
-                    borderWidth: isFault ? 3 : (n.level === 1 ? 2 : 1),
-                    shadowColor: isFault ? 'rgba(239, 68, 68, 0.5)' : 'transparent',
-                    shadowBlur: isFault ? 12 : 0
-                },
-                label: {
-                    show: stKpGraphState.labelMode === 'all' || (stKpGraphState.labelMode === 'compact' && n.level <= 2),
-                    position: 'right', distance: 4,
-                    color: noEv ? '#94a3b8' : (n.level === 1 ? '#1e293b' : '#475569'),
-                    fontSize: n.level === 1 ? 11.5 : 10.5,
-                    fontWeight: n.level === 1 ? 700 : 500
-                }
-            });
-        });
-
-        if (stKpGraphState.layout === 'radial') stKpGraphRadialPositions(nodes, kpSet, dom);
-
-        const links = edges.map(e => {
-            const def = KP_RELATION_DEFS[e.rel];
-            // 断层边：指向断层节点(与诊断卡同口径) 且前置个人掌握度 <70 的前置边，红色加粗警示
-            let broken = false;
-            if (e.rel === 'prerequisite' && faultNames.has(e.target)) {
-                const sInfo = stKpGraphCache.byName[e.source];
-                // 无证据前置不算断层（未知 ≠ 未掌握），与主模块 kgRender 红边口径一致
-                const sEv = sInfo ? evidenceStateOf(e.source).state : null;
-                const sNoEv = sEv === 'none' || sEv === 'unlearned';
-                broken = !!(sInfo && !sNoEv && sInfo.node.mastery < 70);
-            }
-            return {
-                source: e.source, target: e.target, rel: e.rel, broken,
-                lineStyle: {
-                    color: broken ? '#ef4444' : def.color,
-                    width: broken ? 2.5 : def.width,
-                    type: def.lineType,
-                    curveness: e.rel === 'structure' ? 0 : 0.18,
-                    opacity: broken ? 1 : (e.rel === 'structure' ? 0.55 : 0.85),
-                    shadowColor: broken ? 'rgba(239, 68, 68, 0.35)' : 'transparent',
-                    shadowBlur: broken ? 6 : 0
-                }
-            };
-        });
-
-        const series = {
-            type: 'graph',
-            roam: true,
-            draggable: true,
-            scaleLimit: { min: 0.25, max: 4 },
-            edgeSymbol: ['none', 'arrow'],
-            edgeSymbolSize: 6,
-            labelLayout: { hideOverlap: true },
-            emphasis: { focus: 'adjacency', scale: 1.15 },
-            lineStyle: { curveness: 0.18 },
-            data: nodes,
-            links: links
-        };
-        if (stKpGraphState.layout === 'force') {
-            series.layout = 'force';
-            series.force = { repulsion: 170, edgeLength: [40, 120], gravity: 0.15, friction: 0.2 };
-        } else {
-            series.layout = 'none';
-        }
-
-        stKpGraphChart.setOption({
-            tooltip: {
-                confine: true,
-                formatter: (p) => {
-                    if (p.dataType === 'edge') {
-                        const d = KP_RELATION_DEFS[p.data.rel];
-                        const warn = p.data.broken ? '<br><span style="color:#ef4444;font-weight:700">⚠ 前置未牢固、后续已脱节，疑似该生学习断层</span>' : '';
-                        return `<b>${d.name}</b><br>${stEsc(p.data.source)} → ${stEsc(p.data.target)}${warn}`;
-                    }
-                    const d = p.data;
-                    const faultTip = d.fault ? '<br><span style="color:#ef4444;font-weight:700">⚠ 断层薄弱（个人掌握度 <' + unmasteredThreshold() + '%），点击查看关联详情</span>' : '';
-                    if (d.noEvTip) {
-                        return `<b>${stEsc(d.name)}</b><br>${['', '一级', '二级', '三级'][d.level]}知识点 · ${stEsc(d.module)}<br><span style="color:#94a3b8">${d.noEvTip}（未知 ≠ 未掌握）</span>`;
-                    }
-                    return `<b>${stEsc(d.name)}</b><br>${['', '一级', '二级', '三级'][d.level]}知识点 · ${stEsc(d.module)}<br>个人掌握度：${d.value}% · 班级：${d.cls}%${faultTip}`;
-                }
-            },
-            series: [series]
-        }, true);
-
-        // 学生/周期切换后选中节点的个人掌握度已变化：详情面板随数据联动刷新
-        if (stKpGraphState.selected && stKpGraphCache.byName[stKpGraphState.selected]) {
-            stKpRenderGraphDetail(stKpGraphState.selected);
-            stKpGraphChart.dispatchAction({ type: 'highlight', seriesIndex: 0, name: stKpGraphState.selected });
-        } else {
-            stKpGraphSelectNode(null);
-        }
-    }
-
-    // 选中知识点：图谱高亮 + 个人关联详情面板
-    function stKpGraphSelectNode(name) {
-        stKpGraphState.selected = name;
-        stKpRenderGraphDetail(name);
-        if (stKpGraphChart && name && stKpGraphCache.byName[name]) {
-            stKpGraphChart.dispatchAction({ type: 'downplay', seriesIndex: 0 });
-            stKpGraphChart.dispatchAction({ type: 'highlight', seriesIndex: 0, name });
-        }
-    }
-
-    function stKpRenderGraphDetail(name) {
-        const panel = st$('stKpKgDetailPanel');
-        if (!panel) return;
-        if (!name || !stKpGraphCache.byName[name]) {
-            panel.innerHTML = `<div class="kg-detail-empty"><i class="fas fa-hand-pointer"></i><p>点击图谱中的节点<br>查看该知识点的个人关联详情</p></div>`;
-            return;
-        }
-        const info = stKpGraphCache.byName[name];
-        const n = info.node;
-        const children = n.children || [];
-        const descCount = stKpFlatten(n, false).length - 1;
-        const mastery = n.mastery;
-        const st = stKpStatus(mastery);
-        const entry = kgEntryOf(name);   // 全局：关系结构数据（kpRelations/kgIndex），与学生无关
-
-        const GROUPS = [
-            { key: 'prerequisite', title: '前置知识', color: KP_RELATION_DEFS.prerequisite.color, kp: true },
-            { key: 'followUps', title: '后续知识', color: KP_RELATION_DEFS.prerequisite.color, kp: true },
-            { key: 'confusable', title: '易混淆知识点', color: KP_RELATION_DEFS.confusable.color, kp: true },
-            { key: 'examAbility', title: '考查能力', color: KP_RELATION_DEFS.examAbility.color, tag: '能力' },
-            { key: 'requireAbility', title: '依赖能力', color: KP_RELATION_DEFS.requireAbility.color, tag: '能力' },
-            { key: 'questionType', title: '考查题型', color: KP_RELATION_DEFS.questionType.color, tag: '题型' },
-            { key: 'methods', title: '常用方法', color: KP_RELATION_DEFS.method.color, tag: '方法' },
-            { key: 'errorPoints', title: '易错点', color: KP_RELATION_DEFS.errorPoint.color, tag: '易错点' }
-        ];
-
-        const relRow = (target, tag, dotColor, count, kMastery, brokenRow) => `
-            <div class="kg-rel-row${brokenRow ? ' kg-rel-broken' : ''}" data-target="${stEsc(target)}">
-                <span class="kg-rel-dot" style="background:${dotColor}"></span>
-                <span class="kg-rel-name">${stEsc(target)}</span>
-                <span class="kg-rel-tag">${tag}</span>
-                ${kMastery !== null && kMastery !== undefined ? `<span class="kg-rel-mastery" style="color:${stKpStatus(kMastery).hex}" title="个人掌握度">${kMastery.toFixed(0)}%</span>` : ''}
-                ${brokenRow ? '<span class="kg-rel-break">断层</span>' : ''}
-                ${count ? `<span class="kg-rel-count">${count} 个知识点</span>` : ''}
-            </div>`;
-
-        let relHtml = '';
-        let relTotal = 0;
-        GROUPS.forEach(g => {
-            const map = entry[g.key] || {};
-            const keys = Object.keys(map);
-            if (!keys.length) return;
-            relTotal += keys.length;
-            const shown = keys.slice(0, 8);
-            relHtml += `<div class="kg-rel-group">
-                <div class="kg-rel-title" style="color:${g.color}">${g.title} <span>${keys.length}</span></div>` +
-                shown.map(k => {
-                    const tag = g.kp
-                        ? (stKpGraphCache.byName[k] ? ['一级', '二级', '三级'][stKpGraphCache.byName[k].level - 1] + '知识点' : '知识点')
-                        : g.tag;
-                    // 掌握度徽标：个人口径；前置行命中断层链（当前个人低于未掌握阈值且前置 <70）红底警示
-                    const kInfo = g.kp ? stKpGraphCache.byName[k] : null;
-                    const kMastery = kInfo ? kInfo.node.mastery : null;
-                    const brokenRow = g.key === 'prerequisite' && kMastery !== null && mastery < unmasteredThreshold() && kMastery < 70;
-                    // 行首色点 = 目标知识点的个人掌握度档位色（无证据灰），不再按关系类型取色
-                    const dotColor = g.kp ? (kMastery === null ? '#94a3b8' : stKpStatus(kMastery).hex) : g.color;
-                    return relRow(k, tag, dotColor, g.kp ? 0 : map[k].length, kMastery, brokenRow);
-                }).join('') +
-                (keys.length > 8 ? `<div class="kg-rel-more">… 及另外 ${keys.length - 8} 项</div>` : '') +
-                `</div>`;
-        });
-
-        const diff = Math.round((mastery - n.classMastery) * 10) / 10;
-        // 个人与班级差值：带名称标签 + 正负着色（与表格「与班级差值」列同口径：正绿负红零中性）
-        const diffColor = diff < 0 ? 'var(--danger)' : (diff > 0 ? 'var(--success)' : 'var(--text-main)');
-        const diffText = (diff > 0 ? '+' : '') + diff + '%';
-        panel.innerHTML = `
-            <div class="kg-detail-head">
-                <span class="kg-detail-level">${['', '一级', '二级', '三级'][n.level]}知识点</span>
-                <span class="kg-detail-mastery" style="color:${st.hex}">${mastery.toFixed(1)}%</span>
-            </div>
-            <h4 class="kg-detail-title">${stEsc(name)}</h4>
-            <div class="kg-detail-path">${stEsc(info.path)}</div>
-            <div class="kg-detail-stats">
-                <span>个人<b style="color:${st.hex}">${mastery.toFixed(0)}%</b></span>
-                <span>班级<b>${n.classMastery}%</b></span>
-                <span class="kg-detail-diff" title="与班级差值（个人 − 班级）">差值<b style="color:${diffColor}">${diffText}</b></span>
-                <span>关联<b>${relTotal}</b></span>
-                <span>子孙<b>${descCount}</b></span>
-            </div>
-            <button type="button" class="kg-detail-diag-btn" id="stKpKgDiagBtn" title="查看该知识点的前后序证据与分目的加练建议（个人视角横幅 + 班级证据链）">
-                <i class="fas fa-diagram-project"></i> 前后序关联诊断
-            </button>
-            <div class="kg-detail-scroll">
-                ${relHtml || '<div class="kg-detail-none">该知识点暂未维护关联关系</div>'}
-            </div>`;
-
-        // 点击关系行 → 跳转选中目标知识点 / 高亮关联节点
-        panel.querySelectorAll('.kg-rel-row').forEach(row => {
-            row.onclick = () => {
-                const t = row.dataset.target;
-                if (stKpGraphCache.byName[t]) {
-                    stKpGraphSelectNode(t);
-                } else if (stKpGraphChart) {
-                    stKpGraphChart.dispatchAction({ type: 'downplay', seriesIndex: 0 });
-                    stKpGraphChart.dispatchAction({ type: 'highlight', seriesIndex: 0, name: t });
-                }
-            };
-        });
-
-
-        // F14 迁移：前后序关联诊断入口（与主模块同源抽屉；个人视角上下文用 resolve 闭包实时取个人值，抽屉内切换目标点后横幅同步）
-        const diagBtn = st$('stKpKgDiagBtn');
-        if (diagBtn) diagBtn.onclick = () => openRelDiagDrawer(name, null, {
-            student: stCurrentStudent().name,
-            resolve: (kpName) => {
-                const kInfo = stKpGraphCache.byName[kpName];
-                if (!kInfo) return null;
-                const kFault = stKpGraphFaults().find(f => f.node.name === kpName);
-                return {
-                    mastery: kInfo.node.mastery,
-                    classMastery: kInfo.node.classMastery,
-                    faultRoot: kFault && kFault.root ? kFault.root.name : null
-                };
-            }
-        });
-    }
-
-    // 底部图例：节点掌握度色阶 + 画布可见关系线型（与学科学情同源，能力/题型/方法/易错点类关系不入图例）
-    function stKpRenderKgLegend() {
-        const el = st$('stKpKgLegend');
-        if (!el) return;
-        const relItems = KG_CANVAS_RELATIONS.map(k => {
-            const d = KP_RELATION_DEFS[k];
-            return `<span class="legend-item" title="${stEsc(d.name)}">` +
-                `<i class="kg-leg-line" style="border-color:${d.color};border-top-style:${d.lineType}"></i>${d.short}</span>`;
-        }).join('');
-        // 节点颜色 = 个人掌握程度（全校共用档位），不再按模块类型着色
-        el.innerHTML = `<span class="legend-item kg-leg-title">节点掌握度</span>` + masteryLegendItemsHtml(true) +
-            '<i class="kg-leg-sep"></i>' + relItems +
-            `<span class="legend-item" style="margin-left:auto;color:#94a3b8">红描边 = 断层薄弱 · 箭头表示关联方向 · 能力/题型/方法/易错点关系见节点详情</span>`;
-    }
-
-    /* ---- 汇总渲染 / 激活 ---- */
-
-    function stKpRenderAll() {
-        stKpRenderTasks();   // 时间筛选任务清单与已选份数先行（树数据依赖范围内任务数）
-        stKpTreeOf(stCurrentStudent());
-        stKpRenderPeriodOverview();   // 个人周期学情概览（顽固薄弱口径依赖 stKpCache.tree，须在 stKpTreeOf 之后）
-        stRenderKpTabStatus();        // 状态徽章范围说明随筛选刷新（仅知识点分析页签激活时可见于概览标题后）
-        stKpRenderKgLegend();   // 关联图谱图例（静态关系体系，一次渲染）
-        stKpRenderCards();
-        stKpRenderChapters();
-        stKpSetChapters(stKpState.chapters);
-        stKpSwitchView(stKpState.view);
-        stKpRenderDiag();
-        stKpRenderCause(); // 个人错因结构分析（同步学科学情-错因结构分析）
-        stKpRenderLost();   // 个人失分明细（摘要卡 3 下钻目标）
-        stKpRenderAdvice(); // 个人教学建议
-    }
-
-    // 切到知识点分析页签时补渲染（容器 hidden 期间 ECharts 无法测量尺寸）
-    function stKpActivate() {
-        if (st$('stViewKnowledge').hidden) return;
-        stKpRenderAll();
-    }
 
     /* ---------------- 得分变化曲线（ECharts） ---------------- */
     let stTrendChart = null;
@@ -8630,20 +5887,6 @@ init();
         st$('stModalOverlay').classList.remove('show');
     }
 
-    // 作答图像预览（原型演示：未接入真实作答图，以占位图示意）：点击作答证据卡「我的作答」打开；
-    // 关闭路径 = 遮罩空白 / 右上 × / Esc（Esc 由全局处理优先关本层，避免连底层详情弹窗一起关）
-    function stKpOpenAnswerPreview(btn) {
-        const d = btn.dataset;
-        st$('stAnsPreviewTitle').textContent = '我的作答 · 第' + d.no + '题';
-        st$('stAnsPreviewMeta').textContent = d.kp + ' · ' + d.task + '（' + (d.type === 'exam' ? '考试' : '作业') + '） · 满分 ' + d.full + ' 分';
-        st$('stAnsPreviewNo').textContent = '第 ' + d.no + ' 题';
-        st$('stAnsPreviewFull').textContent = d.full + ' 分';
-        st$('stAnsPreviewOverlay').classList.add('show');
-    }
-
-    function stKpCloseAnswerPreview() {
-        st$('stAnsPreviewOverlay').classList.remove('show');
-    }
 
     function stModalDetail(name) {
         const student = stCurrentStudent();
@@ -8708,8 +5951,6 @@ init();
         if (isTrack) {
             // ECharts 需容器可见后才能正确测量宽度，下一帧再渲染
             setTimeout(() => { stRenderTrendChart(); if (stTrendChart) stTrendChart.resize(); }, 0);
-            // 学科学情侧「设置掌握程度」等全局口径变更后：知识点分析页签激活时补渲（含树图档位配色/图例）
-            if (stState.tab === 'knowledge') setTimeout(stKpActivate, 0);
             const body = document.querySelector('.content-body');
             if (body) body.scrollTop = 0;
         } else {
@@ -8897,211 +6138,7 @@ init();
             stRenderTrendChart();
         });
 
-        /* ===== 学生学情面板（学科学情-【学生学情】页签） ===== */
-        st$('stuSearchInput').addEventListener('input', function () {
-            stStuState.search = this.value;
-            stStuState.page = 1;
-            stRenderStuTable();
-        });
-        st$('stuLevelBtns').addEventListener('click', (e) => {
-            const btn = e.target.closest('.stu-level-btn');
-            if (!btn || btn.classList.contains('active')) return;
-            stStuState.level = btn.dataset.level;
-            stStuState.page = 1;
-            stRenderStuLevelBtns();
-            stRenderStuDist();
-            stRenderStuTable();
-        });
-        st$('stuTableBody').addEventListener('click', (e) => {
-            const star = e.target.closest('[data-star]');
-            if (star) {
-                const s = ST_STUDENTS.find((x) => x.id === Number(star.dataset.star));
-                if (s) {
-                    s.starred = !s.starred;
-                    stRenderStuTable();
-                    stToast(s.starred ? '已标记学生：' + s.name : '已取消标记：' + s.name);
-                }
-                return;
-            }
-            const go = e.target.closest('[data-gostudent]');
-            if (go) stStuGoStudent(Number(go.dataset.gostudent));
-        });
-        st$('stuPagination').addEventListener('click', (e) => {
-            const el = e.target.closest('[data-pg]');
-            if (!el || el.classList.contains('disabled') || el.classList.contains('active')) return;
-            const rows = stStuRowsFiltered();
-            const pages = Math.max(1, Math.ceil(rows.length / ST_STU_PAGE_SIZE));
-            if (el.dataset.pg === 'prev') stStuState.page = Math.max(1, stStuState.page - 1);
-            else if (el.dataset.pg === 'next') stStuState.page = Math.min(pages, stStuState.page + 1);
-            else stStuState.page = Number(el.dataset.pg);
-            stRenderStuTable();
-        });
 
-        /* ===== 学生追踪-知识点分析视图 ===== */
-        st$('stKpTabKp').addEventListener('click', () => stKpSwitchDimension('kp'));
-        st$('stKpTabAbility').addEventListener('click', () => stKpSwitchDimension('ability'));
-
-        // 学科筛选：切换后任务清单/已选份数/知识点数据全量重算（演示知识体系仅覆盖数学）
-        st$('stKpSubjectSelect').addEventListener('change', function () {
-            stKpState.time.subject = this.value;
-            stKpRenderAll();
-        });
-
-        // 时间筛选：切档（学年/月/周/自定义）→ 显隐对应日期控件 + 重渲染任务清单与个人数据
-        st$('stKpTimeSegment').addEventListener('click', (e) => {
-            const btn = e.target.closest('.segment-btn');
-            if (!btn || btn.classList.contains('active')) return;
-            stKpState.time.mode = btn.dataset.tmode;
-            st$('stKpTimeSegment').querySelectorAll('.segment-btn').forEach(b => b.classList.toggle('active', b === btn));
-            stKpShowTimePicker(btn.dataset.tmode);
-            stKpTimeChanged();
-        });
-        st$('stKpMonthInput').addEventListener('change', function () {
-            if (this.value) stKpState.time.month = this.value;
-            stKpTimeChanged();
-        });
-        st$('stKpWeekInput').addEventListener('change', function () {
-            if (this.value) stKpState.time.week = this.value;
-            stKpUpdateWeekHint();
-            stKpTimeChanged();
-        });
-        st$('stKpYearSelect').addEventListener('change', function () {
-            stKpState.time.year = this.value;
-            stKpTimeChanged();
-        });
-        st$('stKpCustomFrom').addEventListener('change', function () {
-            if (this.value) stKpState.time.customFrom = this.value;
-            stKpTimeChanged();
-        });
-        st$('stKpCustomTo').addEventListener('change', function () {
-            if (this.value) stKpState.time.customTo = this.value;
-            stKpTimeChanged();
-        });
-
-        // 初始档位与默认周号回显：不依赖 HTML 内联 style，state 与控件显隐 / 提示文本始终自洽
-        stKpState.time.week = st$('stKpWeekInput').value || stKpState.time.week;
-        stKpShowTimePicker(stKpState.time.mode);
-
-        // 学情来源与统计范围弹窗（交互同学科学情 filterModalOverlay）：点胶囊打开，时间范围 + 双栏勾选同屏一次设定，确定后按勾选任务重算已选份数与证据量因子 nTasks
-        const stKpOpenFilterModal = () => {
-            st$('stKpFilterModalOverlay').classList.add('show');
-            stKpRenderFilterModal();
-        };
-        st$('stKpFilterCount').addEventListener('click', stKpOpenFilterModal);
-        st$('stKpFilterCount').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); stKpOpenFilterModal(); }
-        });
-        const stKpCloseFilterModal = () => st$('stKpFilterModalOverlay').classList.remove('show');
-        st$('stKpFilterModalClose').addEventListener('click', stKpCloseFilterModal);
-        st$('stKpBtnCancelModal').addEventListener('click', stKpCloseFilterModal);
-        st$('stKpBtnConfirmModal').addEventListener('click', () => {
-            if (!st$('stViewKnowledge').hidden) stKpRenderAll(); else stKpRenderTasks();   // 重算任务数证据因子与全部派生模块
-            stKpCloseFilterModal();
-        });
-        st$('stKpCheckAllAssignments').addEventListener('change', function () {
-            stKpModalPool().filter(t => t.type === 'assignment').forEach(t => t.checked = this.checked);
-            stKpRenderFilterModal();
-        });
-        st$('stKpCheckAllExams').addEventListener('change', function () {
-            stKpModalPool().filter(t => t.type === 'exam').forEach(t => t.checked = this.checked);
-            stKpRenderFilterModal();
-        });
-        st$('stKpBtnTree').addEventListener('click', () => stKpSwitchView('tree'));
-        st$('stKpBtnTable').addEventListener('click', () => stKpSwitchView('table'));
-        st$('stKpTableTabs').addEventListener('click', (e) => {
-            const t = e.target.closest('span[data-mode]');
-            if (!t || t.classList.contains('active')) return;
-            stKpState.tableMode = Number(t.dataset.mode);
-            st$('stKpTableTabs').querySelectorAll('span').forEach((x) => x.classList.toggle('active', x === t));
-            if (stKpState.view === 'table') stKpRenderTable(stKpState.tableMode);
-        });
-        st$('stKpToggleChapters').addEventListener('click', () => stKpSetChapters(!stKpState.chapters));
-        st$('stKpExport').addEventListener('click', stKpExport);
-        // 「查看全部知识点」范围开关（同步学科学情 kgShowAll）：目录行 + 树状图/表格/图谱/导出渲染层同步过滤，统计口径不动
-        const stShowAllBox = st$('stKpShowAll');
-        if (stShowAllBox) stShowAllBox.addEventListener('change', function () {
-            stShowAllKp = this.checked;
-            stKpRenderChapters();      // 零覆盖模块行随开关显隐（勾选态同步在 stKpRenderChapters 内）
-            stKpRefreshViewsForDir();  // 当前视图同步重渲染
-        });
-        // 摘要卡下钻：未掌握数量 → 切表格视图；个人失分题次 → 失分明细清单；顽固薄弱项 → 诊断模块
-        st$('stKpCard2').addEventListener('click', () => stKpSwitchView('table'));
-        st$('stKpCard3').addEventListener('click', () => stKpGoto('stKpLostSection'));
-        st$('stKpCard5').addEventListener('click', () => {
-            st$('stKpDiagSection').scrollIntoView({ behavior: 'smooth' });
-        });
-        // 失分明细：全选 / 单选 / 查看详情 / 生成个人巩固卷
-        st$('stKpLostCheckAll').addEventListener('change', (e) => {
-            const list = stKpLostList();
-            stKpLostSel = e.target.checked ? new Set(list.map(n => n.name)) : new Set();
-            stKpRenderLost();
-        });
-        st$('stKpLostBody').addEventListener('click', (e) => {
-            const ck = e.target.closest('.st-kp-lost-ck');
-            if (ck) {
-                if (ck.checked) stKpLostSel.add(ck.dataset.name); else stKpLostSel.delete(ck.dataset.name);
-                const list = stKpLostList();
-                const ckAll = st$('stKpLostCheckAll');
-                ckAll.checked = list.length > 0 && stKpLostSel.size === list.length;
-                ckAll.indeterminate = stKpLostSel.size > 0 && stKpLostSel.size < list.length;
-                stKpUpdateLostSelInfo();
-                return;
-            }
-            const d = e.target.closest('[data-act="detail"]');
-            if (d) stKpModalDetail(d.dataset.name);
-        });
-        st$('stKpAdviceExport').addEventListener('click', () => stToast('个人教学建议单已导出（原型演示）'));
-        st$('stKpTableBody').addEventListener('click', (e) => {
-            const d = e.target.closest('[data-stkp-detail]');
-            if (d) stKpModalDetail(d.dataset.stkpDetail);
-        });
-
-        // 个人知识图谱诊断 6 标签切换（同步学科学情-知识图谱诊断）
-        document.querySelectorAll('#stKpDiagTabs .kg-diag-tab').forEach(tab => {
-            tab.addEventListener('click', () => stKpSwitchDiagTab(tab.dataset.diag));
-        });
-
-        // 关联图谱（同步学科学情）：视图切换 / 布局 / 适应画布 / 深度与标签与关系开关 / 仅看关联
-        st$('stKpBtnGraph').addEventListener('click', () => stKpSwitchView('graph'));
-        const kgBtnForce = st$('stKpKgBtnForce'), kgBtnRadial = st$('stKpKgBtnRadial');
-        kgBtnForce.addEventListener('click', () => {
-            stKpGraphState.layout = 'force';
-            kgBtnForce.classList.add('active');
-            kgBtnRadial.classList.remove('active');
-            stKpRenderGraph();
-        });
-        kgBtnRadial.addEventListener('click', () => {
-            stKpGraphState.layout = 'radial';
-            kgBtnRadial.classList.add('active');
-            kgBtnForce.classList.remove('active');
-            stKpRenderGraph();
-        });
-        st$('stKpKgBtnFit').addEventListener('click', () => {
-            if (!stKpGraphChart) return;
-            stKpGraphChart.dispatchAction({ type: 'restore' });
-            if (stKpGraphState.layout === 'radial') stKpRenderGraph();   // 放射布局重算坐标即自适应
-        });
-        const bindKgChipGroup = (groupId, handler) => {
-            const group = st$(groupId);
-            group.querySelectorAll('.kg-chip').forEach(chip => {
-                chip.onclick = () => {
-                    group.querySelectorAll('.kg-chip').forEach(c => c.classList.remove('active'));
-                    chip.classList.add('active');
-                    handler(chip.dataset);
-                };
-            });
-        };
-        bindKgChipGroup('stKpDepthGroup', (d) => { stKpGraphState.depth = Number(d.depth); stKpRenderGraph(); });
-        bindKgChipGroup('stKpLabelGroup', (d) => { stKpGraphState.labelMode = d.label; stKpRenderGraph(); });
-        st$('stKpRelationGroup').querySelectorAll('.kg-chip').forEach(chip => {
-            chip.onclick = () => {
-                const key = chip.dataset.rel;
-                stKpGraphState.rels[key] = !stKpGraphState.rels[key];
-                chip.classList.toggle('active', stKpGraphState.rels[key]);
-                stKpRenderGraph();
-            };
-        });
-        st$('stKpOnlyRelated').addEventListener('change', (e) => { stKpGraphState.onlyRelated = e.target.checked; stKpRenderGraph(); });
 
         // 弹窗关闭
         st$('stModalClose').addEventListener('click', stCloseModal);
@@ -9109,20 +6146,10 @@ init();
             if (e.target === st$('stModalOverlay')) stCloseModal();
         });
         st$('stModalBody').addEventListener('click', (e) => {
-            if (e.target.closest('[data-st-close]')) { stCloseModal(); return; }
-            const ansBtn = e.target.closest('[data-stkp-answer]');
-            if (ansBtn) stKpOpenAnswerPreview(ansBtn);
-        });
-        // 作答图像预览弹窗（叠于详情弹窗之上）：遮罩空白 / 右上 × 关闭
-        st$('stAnsPreviewOverlay').addEventListener('click', (e) => {
-            if (e.target === st$('stAnsPreviewOverlay') || e.target.closest('#stAnsPreviewClose')) stKpCloseAnswerPreview();
+            if (e.target.closest('[data-st-close]')) stCloseModal();
         });
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                // 预览层打开时 Esc 仅关预览层，避免把底层详情弹窗一并关掉
-                if (st$('stAnsPreviewOverlay').classList.contains('show')) { stKpCloseAnswerPreview(); return; }
-                stCloseModal();
-            }
+            if (e.key === 'Escape') stCloseModal();
         });
 
         // 窗口尺寸变化同步图表
@@ -9131,14 +6158,6 @@ init();
                 stTrendChart?.resize();
                 stExamBarChart?.resize();
                 stExamTrendEChart?.resize();
-                if (stState.tab === 'knowledge') {
-                    stKpTreeChart?.resize();
-                    if (stKpState.view === 'graph') stKpGraphChart?.resize();
-                    stKpCauseChart?.resize(); // 个人错因结构堆叠图
-                }
-            }
-            if (st$('subjectView').style.display !== 'none' && !document.getElementById('studentsTabPanel').hidden) {
-                stuDistChart?.resize();
             }
         });
     }
@@ -9149,7 +6168,6 @@ init();
         stRenderExamView();
         stRenderMistakeList();
         stRenderTrendChart();
-        stKpRenderAll();   // 知识点分析视图数据同步（树图渲染带可见性门控，隐藏期自动跳过）
     }
 
     /* ---------------- init ---------------- */
@@ -9158,34 +6176,7 @@ init();
         stRenderStudentHeader();
         stRefreshData();
         stBindEvents();
-        // 学生学情面板（位于学科学情视图内，切到「学生学情」页签时激活分布柱状图）
-        stRenderStuLevelBtns();
-        stRenderStuTable();
     }
-
-    // 主模块钩子：学科学情-【学生学情】页签激活时补渲染分布柱状图（切页签 / 切回学科学情视图时调用）
-    window.StudentBridge = {
-        onStudentsTabVisible() {
-            stRenderStuDist();
-            stuDistChart?.resize();
-        },
-        // 主模块钩子：掌握档位变更（confirmMastery 确认）→ 学生追踪-知识点分析全校共用口径重算（图表在视图隐藏时自跳过，切回补渲）
-        onMasteryChanged() {
-            stKpRenderAll();
-        },
-        // 主模块钩子：周期概览「需关注学生」卡点击 → 学生学情「需关注」筛选
-        gotoWatchStudents() {
-            stStuState.level = 'watch';
-            stStuState.page = 1;
-            stStuState.search = '';
-            const si = st$('stuSearchInput');
-            if (si) si.value = '';
-            stRenderStuLevelBtns();
-            stRenderStuDist();
-            stRenderStuTable();
-            stToast('已筛选「需关注」学生 ' + WATCH_FOCUS_ID_SET.size + ' 人（缺交预警 / 下滑预警 / 持续落后）');
-        }
-    };
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', stInit);
@@ -9195,7 +6186,7 @@ init();
 })();
 
 /* ================= PRD 查看器（内嵌需求文档 + 模块编号徽章联动定位） ================= */
-// 与《学科学情与学生追踪知识点分析-PRD.md》同源；章节正文 body 唯一格式为 Markdown（页内渲染 / 编辑 / 导出导入同源）。
+// 与《学科学情（班级层）-PRD.md》同源；章节正文 body 唯一格式为 Markdown（页内渲染 / 编辑 / 导出导入同源）。
 // 页面各模块标题旁的编号徽章（XK-nn / ST-nn）点击后自动展开抽屉并定位、高亮对应章节。
 
 (function () {
@@ -9203,20 +6194,20 @@ init();
 
     const PRD_GROUPS = [
         { key: 'XK', name: '一、学科学情' },
-        { key: 'ST', name: '二、学生追踪-知识点分析' },
+        { key: 'ST', name: '二、学生追踪' },
         { key: 'CALC', name: '三、指标口径与计算公式' }
     ];
 
     // 导出 Markdown 文档的标题与文件名前缀：首行 = PRD_APP_NAME + 产品需求文档（PRD），文件 <PRD_EXPORT_NAME>-yyyyMMdd-HHmm.md
-    const PRD_APP_NAME = '学科学情与学生追踪-知识点分析';
-    const PRD_EXPORT_NAME = '学科学情与学生追踪知识点分析-PRD';
+    const PRD_APP_NAME = '学科学情（班级层）';
+    const PRD_EXPORT_NAME = '学科学情（班级层）-PRD';
 
     // 章节 body 一律为 Markdown 原文（逐行字符串数组 join('\n')），不要写成 HTML 模板字符串
     const PRD_SECTIONS = [
         {
             id: 'XK-01', group: 'XK', title: '全局导航与视图框架',
             body: [
-                '- **范围**：学情分析新增「学科学情」，学生追踪新增「知识点分析」；按选定周期的作业与考试数据做知识点分析并输出教学建议（班级、个人两条口径）。',
+                '- **范围**：学情分析新增「学科学情」；按选定周期的作业与考试数据做知识点分析并输出教学建议（班级口径）。',
                 '- **互斥显示**：两侧视图同一时刻只显示一侧；切回页签须重绘该页图表，否则因容器此前不可见而空白。',
                 '- **前置条件**：作业与考试数据须打通，未打通时周期汇总、顽固判定与前序归因均不成立。',
                 '- **一期边界**：校级报告、班级报告仅占位入口，不实现。'
@@ -9225,26 +6216,25 @@ init();
         {
             id: 'XK-02', group: 'XK', title: '顶部筛选栏',
             body: [
-                '筛选条件对三个主页签全局生效。',
+                '筛选条件对两个主页签全局生效。',
                 '',
                 '| 项 | 规则 |',
                 '| --- | --- |',
                 '| 学年 | 默认当前学年（演示 2025-2026）；下拉只列学年（含 2024-2025、2023-2024），不展示各学年所带年级班级；切换后按所选学年回查该班学生群体的作业与考试数据，年级班级选中保持不变，全量重算 |',
                 '| 班级 | 默认当前学年任教班级（演示高二 1 班）；列表随所选年级的任教权限生成；选「全部班级」时隐藏「班级平均得分率」卡（无单一班级可算均值） |',
                 '| 学科 | 范围为教务权限内学科，恒 ≥1 个：单学科固定不可切，多学科按列表切换，默认选中第一个；演示按双学科（数学、语文）配置，语文无知识体系 → 切语文学科进入 L2-a 缺省页（XK-13），切回数学恢复原页签与图表 |',
-                '| 时间 | 学年 / 月 / 周（默认）/ 自定义四档，档位切换对应日期控件显隐；月、周、自定义可跨学年选择（范围取教务权限数据并集）；档位与日期控件收在「学情来源与统计范围」弹窗顶部的时间条内，筛选栏只回显「时间范围 · 已选 N 份」胶囊，不再直放时间控件；默认档位为「周」（默认周 2026-W38 = 09-14 ~ 09-20），学生追踪-知识点分析的时间筛选与本页同档同周，两处默认值不得各写一套 |',
-                '| 环比 | 学年、月、周档取上一周期；自定义档取起始日期前等长窗口（起始减 len 天 ~ 起始前 1 天）；窗口内无任务 → 全链路隐藏环比（KPI 徽章、摘要徽章、结论文案） |',
-                '| 学情来源 | 筛选栏胶囊点开弹窗（XK-12.3）：顶部设统计时间范围、下方勾选作业 / 考试，一次设定；选择即时生效，取消不回滚 |',
-                '| 掌握程度 | 「设置掌握程度」打开弹窗（XK-12.1）；档位全校共用并同步学生追踪；学科组长及以上可写，学科教师 / 班主任为只读查看（悬停提示联系学科组长） |',
+                '| 时间 | 学年 / 月 / 周（默认）/ 自定义四档，档位切换对应日期控件显隐；月、周、自定义可跨学年选择（范围取教务权限数据并集）；档位与日期控件收在「学情来源与统计范围」弹窗顶部的时间条内，筛选栏只回显「时间范围 · 已选 N 份」胶囊，不再直放时间控件；默认档位为「周」（默认周 2026-W38 = 09-14 ~ 09-20） |',
+                '| 学情来源 | 筛选栏胶囊点开弹窗（XK-12.3）：顶部设统计时间范围、下方勾选作业 / 考试，一次设定；选择即时生效，取消不回滚；数据时效：作业截止到前一天（不含今天），考试以完整学情发布为准 |',
+                '| 掌握程度 | 「设置掌握程度」打开弹窗（XK-12.1）；档位全校共用，学科组长及以上可写，学科教师 / 班主任为只读查看（悬停提示联系学科组长） |',
                 '',
                 '> 已知限制：学科切换不重算演示数据。',
-                '> 已知限制：时间档位只改统计区间回显与环比基准（自定义档），不改演示周期任务集——周期模块恒为 6 场演示任务（2025-09-28 ~ 2025-12-11），与默认周 2026-W38 不同年，属原型演示数据的固有取舍；接入真实数据后按档位重取任务集。',
+                '> 已知限制：时间档位只改统计区间回显，不改演示周期任务集——周期模块恒为 6 场演示任务（2025-09-28 ~ 2025-12-11），与默认周 2026-W38 不同年，属原型演示数据的固有取舍；接入真实数据后按档位重取任务集。',
             ].join('\n')
         },
         {
             id: 'XK-03', group: 'XK', title: '主页签',
             body: [
-                '- 三个主页签：学情汇总（默认）/ 知识点分析 / 学生学情，同一时刻只显示一个面板。',
+                '- 两个主页签：学情汇总（默认）/ 知识点分析，同一时刻只显示一个面板。',
                 '- 维度子导航：「知识点分析」激活时页签后展开维度 chip，维度项由学科配置决定；单维度学科不显示，超宽横向滚动，切换筛选后计数同步刷新。',
                 '- 切页签后补渲染面板内图表（隐藏期间不渲染）；页签只控制显示，不改变数据口径。'
             ].join('\n')
@@ -9252,28 +6242,27 @@ init();
         {
             id: 'XK-04', group: 'XK', title: '周期学情概览',
             body: [
-                '位置：学情汇总页签。统计区间 = 当前时间档位区间（默认周 2026-W38 = 09-14 ~ 09-20，与筛选栏胶囊同源），展示纳入任务数（作业/考试分列）与对比基准（上一周期）。维度口径与维度切换解耦：两卡都不随维度切换，但分母来源不同——达标率取本周期题目挂接集合（定义见 CALC-01 的 `mSet`），即题目上挂接的末级知识点，不是知识树的末级节点；顽固薄弱取全维度末级节点中满足「≥3 场失分率 ≥40%」者，无挂接节点不可能有 3 场失分记录，因而天然不在其中。两卡分母不同源，不得互相推导。',
+                '位置：学情汇总页签。统计区间 = 当前时间档位区间（默认周 2026-W38 = 09-14 ~ 09-20，与筛选栏胶囊同源），展示纳入任务数（作业/考试分列）。维度口径与维度切换解耦：两卡都不随维度切换，但分母来源不同——达标率取本周期题目挂接集合（定义见 CALC-01 的 `mSet`），即题目上挂接的末级知识点，不是知识树的末级节点；顽固薄弱取全维度末级节点中满足「≥3 场失分率 ≥40%」者，无挂接节点不可能有 3 场失分记录，因而天然不在其中。两卡分母不同源，不得互相推导。',
                 '',
                 '| 卡 | 口径 |',
                 '| --- | --- |',
-                '| 平均得分率 | 各次任务班级得分率的算术平均（按任务次数，不按分值加权）；环比见 XK-02 |',
+                '| 平均得分率 | 各次任务班级得分率的算术平均（按任务次数，不按分值加权） |',
                 '| 稳定度 | 100 − 各次得分率的总体标准差，越高越稳 |',
-                '| 知识点达标率 | 本周期题目挂接集合（`mSet`）中掌握度 ≥ 达标线的节点数 ÷ 集合节点数（挂接集合 = 题目挂接的末级知识点 + 有派生值的能力末级节点；不是全树末级节点，集合内不设「无证据」节点、不做证据过滤）；达标 / 薄弱 / 未掌握三类一律正算、互不反算；阈值随掌握档位联动；徽章为较上一周期的百分点差；点击下钻明细模块 |',
-                '| 顽固薄弱知识点 | 挂接集合内同一节点 ≥3 次不同任务失分率 ≥40%（含能力末级节点）；徽章「±N 个 · 已改善 N · 新增 N」（净变化 = 新增 − 改善）；点击下钻热力演进 |',
+                '| 知识点达标率 | 本周期题目挂接集合（`mSet`）中掌握度 ≥ 达标线的节点数 ÷ 集合节点数（挂接集合 = 题目挂接的末级知识点 + 有派生值的能力末级节点；不是全树末级节点，集合内不设「无证据」节点、不做证据过滤）；达标 / 薄弱 / 未掌握三类一律正算、互不反算；阈值随掌握档位联动；点击下钻明细模块 |',
+                '| 顽固薄弱知识点 | 挂接集合内同一节点 ≥3 次不同任务失分率 ≥40%（含能力末级节点）；点击下钻热力演进 |',
                 '| 提交率 | 实交人次 ÷ 应交人次 × 100，应交人次 = 班级人数 × 任务数（不设迟交单列，迟交计入已交） |',
-                '| 需关注学生 | 需关注 = 缺交预警 ∪ 下滑预警 ∪ 持续落后（与 XK-10 同一套判定）；副行分类计数；悬停出名单弹层，点击下钻学生学情筛选 |',
                 '',
                 '**周期结论**：由声明式规则表驱动，每条规则定义「出现条件 / 语义色 / 文案模板」，数字按当次统计实时计算。',
                 '',
                 '| 规则 | 出现条件 | 语义色 | 文案要点 |',
                 '| --- | --- | --- | --- |',
-                '| 趋势 | 必出 | 恒蓝 | 平均得分率、环比变化、首末变化（升绿降红）+ 趋势档位：升 ≥3 个百分点显著回升 / 升 1~3 缓慢回升 / 相差 1 个点内基本持平 / 降 1~3 缓慢下滑 / 降 ≥3 明显下滑 |',
-                '| 稳定度 | 必出 | 标准差 ≥5 红 / 3~5 琥珀 / <3 绿 | 稳定度、标准差、最高最低与极差；后缀分档 波动偏大 / 波动中等 / 表现稳定 |',
+                '| 趋势 | 必出 | 恒蓝 | 平均得分率、首末变化（升绿降红）+ 趋势档位：升 ≥3 个百分点显著回升 / 升 1~3 缓慢回升 / 相差 1 个点内基本持平 / 降 1~3 缓慢下滑 / 降 ≥3 明显下滑 |',
+                '| 稳定度 | 必出 | 不设语义色（只给数值与文字后缀） | 稳定度、标准差、最高最低与极差；后缀判定指标：`σ` ≥5 → 波动偏大，提升尚未稳定；3 ≤ `σ` <5 → 波动中等，起伏偏大；`σ` <3 → 表现稳定。`σ` = 各次班级得分率的总体标准差（除以 n），保留 1 位小数后比较 |',
                 '| 年级对比 | 必出 | 胜率 ≥60% 绿 / <40% 红 / 其余琥珀 | N 次任务中 X 次高于年级均值；落后清单逐条列「任务名（班级% vs 年级%）」；考试另行统计领先场次 |',
                 '| 顽固薄弱 | 全维度末级顽固非空 | 恒红 | 命中数 + 名单（含能力维度）+ 判定口径；定性「结构性问题，建议专项复习而非重复讲题」 |',
                 '| 行动建议 | 全维度末级顽固非空 | 恒琥珀 | 针对平均失分率最高的一项优先安排专项课时；验证目标失分率降至 40% 以下 |',
                 '',
-                '- **得分趋势图**：本班得分率（蓝实线，考试三角、作业圆点）与年级得分率（灰虚线）双折线 + 基准线；**任务清单**：列头可排序，合计行「首要薄弱点」取全部维度末级节点中平均失分率最高的一项。',
+                '- **得分趋势图**：本班得分率（蓝实线，考试三角、作业圆点）与年级得分率（灰虚线）双折线；**任务清单**：列头可排序，合计行「首要薄弱点」取全部维度末级节点中平均失分率最高的一项。',
                 '- **查看明细分流**：作业 → 作业讲评页，考试 → 试卷讲评页，携带该行任务标识落地到具体任务；跳转前按角色判定讲评页菜单权限，无权限不跳转并提示「暂无查看权限」（约 2.2 秒消失，入口仍可见）；原型阶段点击仅提示「打开作业详情」，真实跳转与权限判定待讲评模块接入。'
             ].join('\n')
         },
@@ -9287,8 +6276,8 @@ init();
                 '| 卡1 周期已检测知识点 / 考核项数量 | 知识点：有检测证据（本期任务或历史考试）的节点数，不随「查看全部知识点」开关变化；能力：非根节点总数；无点击交互 |',
                 '| 卡2 未掌握数量 | 掌握度低于未掌握阈值（默认 60%）的节点数，随档位联动；无点击交互 |',
                 '| 卡3 共性错题数 | 一期隐藏（页面结构保留），二期恢复；清单仅保留历史错题数据，本版不提供题目生成或组卷 |',
-                '| 卡4 班级平均得分率 | 周期平均得分率 + 环比徽章；仅选中具体班级时显示 |',
-                '| 卡5 年级平均得分率 | 纳入任务的年级得分率均值；徽章为年级环比上一周期 |',
+                '| 卡4 班级平均得分率 | 周期平均得分率；仅选中具体班级时显示 |',
+                '| 卡5 年级平均得分率 | 纳入任务的年级得分率均值 |',
                 '| 卡6 顽固薄弱项 | 顽固薄弱项数量，徽章「≥3次失分率≥40%」；点击切换热力演进视图并脉冲高亮顽固行 |'
             ].join('\n')
         },
@@ -9392,7 +6381,6 @@ init();
                 '| 热力演进单元格 | 单场失分率原值，不做聚合 |',
                 '| 热力演进累计列、顽固判定、最突出短板、结论里的累计失分率 | 有效场次的算术平均，与加权口径互不引用 |',
                 '| 达标率 | 分子为加权得分率达标的末级节点数，分母为 `mSet`（本周期题目挂接的末级知识点，加上关联知识点至少 1 个被挂接的能力末级节点），不是知识树的末级节点 |',
-                '| 学生追踪个人树 | 个人加权得分率同公式，班级基准仍取班级加权值，差值 = 个人 − 班级 |',
                 '',
                 '**口径选择理由与调参**',
                 '',
@@ -9429,31 +6417,33 @@ init();
                 '',
                 '| 标签 | 一句话说明 | 判定口径 | 处置要点 | 对应规则 |',
                 '| --- | --- | --- | --- | --- |',
-                '| 顽固薄弱 | 哪些错一直没解决 | 同一考核项 ≥3 次不同任务失分率 ≥40%；强度三档：≥5 次结构性 / 3~4 次疑似 / 1~2 次观察（观察项进折叠区）；病型五类：概念型 / 基础型 / 方法型 / 习惯型 / 孤立型 | 病型定动作：概念→成对辨析、基础→前序补偿、方法→方法专题、习惯→审题规范、孤立→补标注；安排**专项课**而非重复讲题 | 规则 2 |',
+                '| 顽固薄弱 | 哪些错一直没解决 | 同一考核项 ≥3 次不同任务失分率 ≥40%；强度三档：≥5 次结构性 / 3~4 次疑似 / 1~2 次观察（观察项进折叠区）；**病型五类本期不做** | 全部顽固项共用一条**统一建议**：同点巩固 + 变式复测（复盘失分题 → 变式复测 2 次 → 失分率降到 40% 以下退出名单）；安排**专项课**而非重复讲题 | 规则 2 |',
                 '| 前序断层 | 薄弱点的根因在前置链哪一层 | 目标掌握度 <60% 且前置链存在 <70% 节点；回溯三道闸：≤5 层 / 跨一级模块停 / 环路跳过；近 5 层无 <70% 改判「本点自身问题」；前置关系未建 = 第四态，不归因 | 计数「有根因数/断层总数」；**直接讲薄弱点无效，须先补前序**；点击进关联诊断抽屉 | 规则 3 |',
                 '| 易混淆 | 学生把两个概念用反了 | 题库易混淆关系无序对归一；三级：双弱=概念未建立 / 单弱=方向性混淆 / 双强同题失分=情境性混淆；混淆链 ≤3；命中 ≥5 人次才出卡 | 双弱→讲新知、单弱→课中辨析、双强→换情境复测 | 规则 4 |',
                 '| 题型易错点 | 在哪一步错（比错因更细） | 阅卷标注 + 客观题规则匹配；点级=知识点×易错点=讲评落点；同一易错点 ≥3 个知识点命中→跨点习惯性错误 | 可直接写进讲评稿；跨点项升级为审题/书写规范，不逐点重复 | 规则 5 |',
                 '| 前后序证据 | 周期内多任务汇总的作答证据 | 四态映射证据等级：本期已考查 A/B、仅历史 C、暂无证据与未学 D；D 级禁止出结论 | **无作答证据=未知**，不得标为未掌握；点节点标签打开关联诊断抽屉 | 规则 1 |',
                 '| 已达标 | 正向展示：存量认可+增量可见 | 统计单元=题目挂接的末级节点；达标线=「掌握」档下限（3档/4档均 80%）；有效场次 ≥2 方判达标，1 场标「待确认」；进步=首末提升 ≥8pp | 转「减量维持」，每周 1 次滚动复测；新晋达标换情境再测一次 | — |',
                 '',
-                '## 三、顽固薄弱病型判定（规则 2 展开）',
+                '## 三、顽固薄弱处置（规则 2 展开）',
                 '',
-                '病型按 **概念 → 基础 → 方法 → 习惯 → 孤立** 顺序检查，**命中即止**，每个知识点只输出一个病型；病型只决定处置动作，不改变顽固判定本身（顽固 = ≥3 次不同任务失分率 ≥40%）。',
+                '**本期范围**：不做病型五类判断（概念型 / 基础型 / 方法型 / 习惯型 / 孤立型）。顽固判定本身不变（≥3 次不同任务失分率 ≥40%），但所有顽固项**共用同一条建议**，不按病型分派动作，界面也不出现病型徽章。',
                 '',
-                '| 顺序 | 病型 | 判定条件 | 数据来源 | 处置动作 |',
-                '| --- | --- | --- | --- | --- |',
-                '| ① | 概念型 | 落在已命中的易混淆对上，且该对为双弱或单弱（双弱 = 两侧均 <未掌握线；单弱 = 一侧薄弱、另一侧 ≥达标线） | 教研标注易混淆对 + 题库易混淆关系（无序对归一）；对级别按两侧节点掌握度判定 | 成对辨析 |',
-                '| ② | 基础型 | 近端前置 **≤2 层**内存在掌握度 **<70%** 的节点 | 题库前置关系 + 节点掌握度；无证据前置不参与比较，但仍继续向下探查 | 前序补偿 |',
-                '| ③ | 方法型 | 关联方法中 ≥1 个命中「方法薄弱」：方法关联知识点 ≥2 且（顽固 + 断层占比 ≥50%，或方法掌握 <65%） | 题库方法关系 + 规则 6 聚合；方法掌握 = 关联知识点得分率算术平均 | 方法专题 |',
-                '| ④ | 习惯型 | 命中的易错点在 **≥3 个知识点**同时命中（含本点） | 题库易错点关系 + 规则 5 跨点统计 | 审题规范 |',
-                '| ⑤ | 孤立型 | 以上全不命中：无任何关系标注，或现有关系不足以归因 | 关系索引 | 补标注 |',
+                '**统一建议（唯一口径）**：同点巩固 + 变式复测——① 复盘该考核项各次失分题、归类错因；② 用同知识点变式题连续 2 次复测；③ 失分率降到 40% 以下即退出顽固名单。',
                 '',
-                '**判定红线**：无证据节点不参与比较（未知 ≠ 薄弱，也不等于达标）；同一知识点只输出一个病型，其余不折叠展示；孤立型必须写明「待题库补齐后自动升级」，不得当作「已检查无问题」。',
+                '| 强度 | 触发 | 与统一建议的关系 |',
+                '| --- | --- | --- |',
+                '| 结构性 | ≥5 次不同任务失分率 ≥40% | 优先排专项课，统一建议为主路径 |',
+                '| 疑似 | 3~4 次 | 统一建议照常执行，同时核查前置关系标注是否缺失 |',
+                '| 观察 | 1~2 次 | 进折叠区，不出独立建议 |',
+                '',
+                '**判定红线**：无证据节点不参与比较（未知 ≠ 薄弱，也不等于达标）；统一建议对所有顽固项一视同仁，不得因缺少关系标注而拒绝给建议，也不得反过来由建议推断病型。',
+                '',
+                '> 病型五类算法（概念 → 基础 → 方法 → 习惯 → 孤立）与参数仍保留在代码 kgClassifyPathology，本期无调用点，供二期恢复；恢复前不得在界面出现病型标签或「处置 <动作>」措辞。',
                 '',
                 '## 四、显示规则',
                 '',
-                '- **配色**：知识点名与关联标签一律按个人掌握度取色（无证据恒灰），不按模块色或关系类型取色；断层链节点保留根因红/薄弱黄/达标绿；计数与动作徽章按语义色。',
-                '- **病型徽章**：概念型紫 / 基础型橙 / 方法型蓝 / 习惯型粉 / 孤立型灰；徽章悬停显示判定依据与处置理由，卡片次行固定展示「处置 <动作>」。',
+                '- **配色**：知识点名与关联标签一律按班级掌握度取色（无证据恒灰），不按模块色或关系类型取色；断层链节点保留根因红/薄弱黄/达标绿；计数与动作徽章按语义色。',
+                '- **顽固项标记**：卡片首行固定「顽固 · N 次」，次行固定「建议 同点巩固」（悬停展开统一建议全文）；本期不渲染病型徽章，也不使用「处置 <动作>」措辞。',
                 '- **关系覆盖度**（内部指标）= 有作答证据且已建前置关系的知识点 ÷ 有作答证据知识点；能力维度不适用；仅用于断层卡第四态与教学建议降级判定。',
                 '- **标签禁用**：计数为 0 的标签灰显但仍可点击查看空态文案，不得隐藏。',
                 '',
@@ -9501,7 +6491,7 @@ init();
                 '',
                 '## 四、诊断单元与标签裁剪矩阵',
                 '',
-                '一期固定「知识点」单元，6 个标签结构不变，方法与能力洞察由病型分组承载。二期扩展 5 个单元后，按矩阵裁剪标签：',
+                '一期固定「知识点」单元，6 个标签结构不变；**病型五类本期不做**（方法 / 能力洞察不靠病型分组承载）。二期扩展 5 个单元后，按矩阵裁剪标签：',
                 '',
                 '| 诊断类型 | 知识点 | 题点 | 微题点 | 解题方法 | 关键能力 |',
                 '| --- | --- | --- | --- | --- | --- |',
@@ -9547,11 +6537,11 @@ init();
                 '',
                 '| # | 规则名 | 命中条件与算法 | 输出 |',
                 '| --- | --- | --- | --- |',
-                '| 2 | 顽固薄弱 | 同一考核项 ≥3 次不同任务失分率 ≥40% 且证据等级 A；强度：≥5 次结构性 / 3~4 次疑似 / 1~2 次观察；病型按 概念→基础→方法→习惯→孤立 顺序命中即止（概念：落在已命中的易混淆对上且该对为双弱或单弱；基础：近端前置 ≤2 层存在 <70% 的有证据节点；方法：关联方法中 ≥1 个命中方法薄弱，即关联点 ≥2 且（顽固+断层占比 ≥50% 或 方法掌握 <65%）；习惯：命中的易错点在 ≥3 个知识点同时命中（含本点）；孤立：以上全不命中，含「无关系标注」与「关系不足以归因」两种情形） | 病型 + 强度 + 动作 |',
+                '| 2 | 顽固薄弱 | 同一考核项 ≥3 次不同任务失分率 ≥40% 且证据等级 A；强度：≥5 次结构性 / 3~4 次疑似 / 1~2 次观察；**病型五类本期不做**，所有顽固项共用一条统一建议（同点巩固 + 变式复测：复盘失分题 → 变式复测 2 次 → 失分率降到 40% 以下退出名单） | 强度 + 统一建议 |',
                 '| 3 | 前序断层 | 目标掌握度 <未掌握阈值（60%）且前置链存在 <70% 节点；闸 1：最多回溯 5 层，超限标「超过 5 层未定位根因」；闸 2：跨一级模块只提示不归因；闸 3：环路 visited 保护、节点只记一次；兜底：近 5 层无 <70% 改判「本点自身问题」 | 根因节点 + 链深 + 归因态 |',
                 '| 4 | 易混淆 | 题库 149 对单向存储→先无序对归一去重（否则命中数少一半）；双弱=两侧均 <阈值；单弱=一侧 <阈值另一侧达标；双强=两侧达标但同题失分；相邻对同时命中→混淆链（≤3）；命中 ≥5 人次才出卡 | 混淆级别 + 对/链 |',
                 '| 5 | 易错点 | 点级=知识点×易错点→讲评落点；同一易错点 ≥3 个知识点命中→跨点习惯性错误→进「审题/书写规范」，不再逐点重复 | 点级清单 + 跨点标记 |',
-                '| 6 | 方法聚合 | 方法掌握=关联知识点得分率算术平均（不按关系度加权）；方法薄弱=关联点 ≥2 且（顽固或断层占比 ≥50%，或掌握 <65%）；仅被 1 个知识点引用的方法不单独诊断；覆盖 ≥5 个知识点→建议连排 2 课时 | 方法薄弱清单 |',
+                '| 6 | 方法聚合 | 方法掌握=关联知识点得分率算术平均（不按关系度加权）；方法薄弱=关联点 ≥2 且（顽固或断层占比 ≥50%，或掌握 <65%）；仅被 1 个知识点引用的方法不单独诊断；覆盖 ≥5 个知识点→建议连排 2 课时。**本期仅后台聚合，不出建议**（方法专题依赖病型，已停用） | 方法薄弱清单 |',
                 '| 7 | 能力二分 | 考查侧：关联知识点 ≥8 且平均得分率 <65%→能力短板（可测）；依赖侧：薄弱点占比 ≥40% 且无考查边→标「待补测」，**禁止直接判薄弱**；同一知识点-能力同时存在依赖与考查（227 对）只计一次 | 短板/待补测 |',
                 '| 8 | 考法覆盖 | 考法缺口=已考且 <60% 的题点占比 ≥40%；未验证考法=从未考查占比 ≥50%，不得据此判掌握或薄弱；题点与知识点无直属边（同名仅 6/146），须先补映射；**一期不上线**，标「待数据补齐」 | （一期禁用） |',
                 '',
@@ -9565,8 +6555,8 @@ init();
                 '| 方法薄弱占比 / 掌握阈值 | 50% / 65% | 能力聚合最少点 / 短板阈值 | 8 个 / 65% |',
                 '| 跨点习惯错误 | ≥3 个知识点 | 考法缺口 / 未验证占比 | 40% / 50% |',
                 '| 达标线 | 80%（3档/4档相同） | 进步阈值 | 8 个百分点 |',
-                '| 病型·基础型前置层数 / 薄弱线 | ≤2 层 / 70% | 病型·方法型最少点 / 薄弱占比 / 掌握阈值 | 2 个 / 50% / 65% |',
-                '| 病型·习惯型覆盖知识点数 | ≥3 个（含本点） | 病型·概念型对级别 | 双弱 / 单弱（双强不判） |'
+                '| 病型·基础型前置层数 / 薄弱线 | ≤2 层 / 70%（**本期不生效**） | 病型·方法型最少点 / 薄弱占比 / 掌握阈值 | 2 个 / 50% / 65%（**本期不生效**） |',
+                '| 病型·习惯型覆盖知识点数 | ≥3 个（含本点，**本期不生效**） | 病型·概念型对级别 | 双弱 / 单弱（双强不判，**本期不生效**） |'
             ].join('\n')
         },
         {
@@ -9584,12 +6574,11 @@ init();
                 '| --- | --- | --- |',
                 '| 1 | 前序断层 | 前置不牢时讲本点无效——必须先解决 |',
                 '| 2 | 易混淆（单弱） | 概念方向错时刷题无效——辨析优先于练习 |',
-                '| 3 | 方法型顽固 | 解法未建立时重复练同题无效 |',
-                '| 4 | 顽固（概念/基础/习惯型） | 按病型给对应动作 |',
-                '| 5 | 能力短板 | 跨知识点专项，优先级低于单点问题 |',
-                '| 6 | 考法未验证 | 先补测再判断，不直接给教学动作 |',
-                '| 7 | 已达标 | 减量维持，非问题项 |',
-                '| 8 | 补标注 | 数据治理，不计入教学动作条数 |',
+                '| 3 | 顽固薄弱（本期不区分病型） | 统一建议唯一，不存在「按病型给不同动作」的分歧 |',
+                '| 4 | 能力短板 | 跨知识点专项，优先级低于单点问题 |',
+                '| 5 | 考法未验证 | 先补测再判断，不直接给教学动作 |',
+                '| 6 | 已达标 | 减量维持，非问题项 |',
+                '| 7 | 补标注 | 数据治理，不计入教学动作条数 |',
                 '',
                 '## 三、诊断条目统一输出字段',
                 '',
@@ -9600,7 +6589,7 @@ init();
                 '| 单元 | 一期恒为「知识点」 |',
                 '| 类型 | 6 标签之一 |',
                 '| 证据等级 | A / B / C / D |',
-                '| 病型 | 仅顽固项有（概念/基础/方法/习惯/孤立） |',
+                '| 病型 | 本期不输出（病型五类不做） |',
                 '| 引用关系 | 类型 + 对象 + 关系度 |',
                 '| 判定数字 | 场次、得分率、阈值、层深 |',
                 '| 动作与优先级 | 处置建议 + 排序权重 |',
@@ -9696,7 +6685,7 @@ init();
         {
             id: 'XK-08', group: 'XK', title: '错因结构分析',
             body: [
-                '- **堆叠柱状图**：各次任务的失分归因占比（错因 × 任务）；图例可点击显隐系列；悬停某一段时高亮该错因在所有任务上的段落，并显示各次占比 + 周期均值 + 首尾环比。',
+                '- **堆叠柱状图**：各次任务的失分归因占比（错因 × 任务）；图例可点击显隐系列；悬停某一段时高亮该错因在所有任务上的段落，并显示各次占比 + 周期均值 + 首尾变化。',
                 '- **错因体系动态化**：错因种类随学科或题目扩展，配色与干预文案均有通用兜底，教学建议只取首尾差 ≥3 个百分点且上升的错因，不写死错因枚举。',
                 '- **限制**：仅智批作业支持错因分析。',
                 '',
@@ -9719,7 +6708,7 @@ init();
                 '| --- | --- | --- |',
                 '| 专项突破 | 存在顽固薄弱 | 安排专项课时，查看顽固薄弱 |',
                 '| 前序补偿 | 存在前序断层 | 先补前序再讲当前，查看断层归因 |',
-                '| 方法专题 | 存在方法型顽固（同一方法关联 ≥2 个知识点且 ≥50% 关联点薄弱） | 连排方法专题课、按方法组卷 |',
+                '| 方法专题 | **本期不启用**：原触发条件依赖方法型病型判定（同一方法关联 ≥2 个知识点且 ≥50% 关联点薄弱） | 二期恢复病型后连排方法专题课、按方法组卷 |',
                 '| 成对辨析 | 存在易混淆对（单弱优先，其次双弱） | 课中辨析与学生互讲；双强只做换情境复测 |',
                 '| 能力专项 | 某能力关联知识点 ≥8 个且平均得分率 <65% | 跨知识点能力专项训练 |',
                 '| 补测验证 | 能力仅有依赖边无考查边，或知识点关联题点未考占比 ≥50% | 安排覆盖该能力或考法的测评，不得直接判薄弱 |',
@@ -9727,112 +6716,8 @@ init();
                 '| 减量维持 | 存在已达标项 | 滚动复测、让出课时 |',
                 '| 关系建设引导 | 薄弱项缺前置关系，或顽固项无任何关系标注 | 查看断层归因，按薄弱热度排标注顺序 |',
                 '',
-                '- **动作优先级**：前序补偿 → 专项突破 → 方法专题 → 成对辨析 → 能力专项 → 补测验证 → 限时短训 → 减量维持 → 关系建设引导（补标注）；同一知识点多标签命中只取优先级最高的一条作主因，其余折叠为「同时命中 N 项」。',
+                '- **动作优先级**：前序补偿 → 专项突破 → 成对辨析 → 能力专项 → 补测验证 → 限时短训 → 减量维持 → 关系建设引导（补标注）；同一知识点多标签命中只取优先级最高的一条作主因，其余折叠为「同时命中 N 项」。（方法专题本期不启用，不进优先级链）',
                 '- 底部综合建议只含教学路径、综合建议、关注范围与使用场景，不含题量、题型配比、试卷方案或题目内容；「导出建议单」为演示提示。'
-            ].join('\n')
-        },
-        {
-            id: 'XK-10', group: 'XK', title: '学生学情',
-            body: [
-                '- **左侧分布**：学情分布柱状图（五档 优秀 / 良好 / 合格 / 待合格 / 未学习，柱顶标人数，y 轴按人数自适应）+ 等级筛选按钮组（全部、需关注 + 五档，各带计数徽章）；「需关注」与周期概览 KPI 同源；姓名后显示状态徽章。',
-                '- **右侧列表**：姓名搜索 + 七列表格（星标 / 姓名 / 未提交次数 / 提交率 / 平均得分率 / 等级徽章 / 操作），10 条 / 页；标题旁问号悬停展开「状态判定说明（V3.0）」浮层。',
-                '- **等级口径**：≥85 优秀、≥70 良好、≥60 合格、否则待合格、区间内 6 次任务全部未交 = 未学习；平均得分率、等级、未提交次数、提交率与状态判定全部同源（均取自状态引擎同一份任务记录，不再用第二套伪随机生成提交次数）。有效任务 <2 次时等级仍按阈值给出，但徽章加「样本不足」标记（虚线描边 + 右上角点，悬停说明有效场次）——小分值任务单次偶然即可跨档（满分 15 分的书面表达 1 分 = 6.7 个百分点），此时等级只作方向参考，不另立一档、不改五档分布与筛选计数。',
-                '- **跳转**：操作列「学情分析」→ 切学生追踪视图 + 知识点分析页签并选中该生。',
-                '- **徽章（9 种显示态）**：缺交预警（深红实底）/ 下滑预警（红）/ 持续落后（橙）/ 进步（绿）/ 位置回升（绿）/ 单场异常（灰底虚线）/ 数据积累中（灰底虚线）/ 单次波动（灰蓝）/ 平稳（不渲染）；悬停给一句话证据，带具体数字（如「近两周与班级的平均差是 −9.3 个百分点，平时是 +7.2 个，低了 16.5 个」）。',
-                '- **名单口径**：需关注 = 缺交预警 ∪ 下滑预警 ∪ 持续落后；正向关注 = 进步 ∪ 位置回升（不计入需关注）；单场异常（待核实）、数据积累中、单次波动不进任何名单。',
-                '',
-                '**状态判定 V3.0**（原型阶段暂无真实数据接入：任务序列与逐次得分率按学号稳定生成，但 L / S / Δ / 位置档 / 趋势态与最终徽章全部按下列口径真实计算，可手算复核——不是「先定状态再造数字」）',
-                '',
-                '**一句话读懂**：本模块有两条互不合并的轴——「等级」回答「这孩子考得怎么样」（绝对水平），「徽章」回答「最近是往上走还是往下掉」（相对走势）。同时出现「合格」与「下滑预警」并不矛盾，是两条独立信息；合成一个复合标签会同时丢掉这两条信息。',
-                '',
-                '**判定思路（三步，教师可用一句话复述）**',
-                '',
-                '1. 先扣掉班级水平——只看 d = 个人得分率 − 班级得分率。卷子难时全班一起低，d 不变，试卷难度被抵消，剩下的才是「这个孩子在班里的相对位置」。',
-                '2. 再看他平时在班里哪一档——用衰减更慢的权重 w2 求 P，落在 ±5 之外即落后 / 领先。',
-                '3. 最后看最近是否连续偏离自己的平时水平——S（近 15 天）减 L（更早）得 Δ，配合连续 2 次同向确认，才从「单次波动」升级为预警。',
-                '',
-                '> 三条判定线分工：位置（P）管「一直都不太好」，趋势（Δ + 连续次数）管「原来还行、最近在退」，缺交（m）管「人根本没交」。三者互不推演；同时成立时按显示优先级取第一条。',
-                '',
-                '**四个参数**（每个都能用一句话向教师解释，均可配置）',
-                '',
-                '| 参数 | 取值 | 含义 |',
-                '| --- | --- | --- |',
-                '| B 波动带 | 10 个百分点 | 偏离平时水平 ≥10 个百分点算异常 |',
-                '| k 确认次数 | 2 次 | 最近连续 2 次同向越限，才从「单次波动」升级为「预警」 |',
-                '| m 缺交阈值 | 2 次 | 连续 2 次未交 / 缺考触发缺交预警 |',
-                '| H 半衰期 | 30 天 | 30 天前那次成绩的权重是最新那次的一半 |',
-                '',
-                '派生量（不占参数额度）：位置分界 ±B/2 = ±5 个百分点；单场异常界 2B = 20 个百分点；近期窗 H/2 = 15 天；基线窗 4H = 120 天；粗颗粒任务满分上限 200/B = 20 分（满分 ≤20 分的任务只参与位置加权，不参与越限计数，避免 15 分书面表达的 1 分误差被放大成 6.7 个百分点）。',
-                '',
-                '**计算链路**',
-                '',
-                '| 项 | 口径 |',
-                '| --- | --- |',
-                '| 纳入任务 | 作业 + 考试；排除学案、通用题卡、听写卡 |',
-                '| 核心序列 | d = 个人得分率 − 班级得分率（同一次任务同口径，剥离试卷难度）；不再用留一法（它只是 n/(n−1) 的常数缩放，不改变判定结果） |',
-                '| 时间权重 | w = 2^(−距今天数 / H)；位置权重 w2 = 2^(−距今天数 / 2H)（衰减更慢，反映「平时在班里哪一档」） |',
-                '| 单场异常截尾 | 偏离全期位置 ≥2B 的单场先从基线中剔除，避免一次极端值污染「平时水平」 |',
-                '| P 全期位置 | 用 w2 对剔除极值后的有效任务加权平均 d |',
-                '| S 近期水平 | 最近 15 天内、剔除极值后的有效任务，用 w 加权平均 d |',
-                '| L 平时水平 | 15 天以前（基线窗内）的有效任务，用 w 加权平均 d；与 S 不重叠（若近期值同时进入基线，Δ 会被压平 → 这是 V2.0 前后半硬切分的连续化改造要点） |',
-                '| Δ 变化量 | Δ = S − L |',
-                '| 位置档 | P ≤ −5 → 落后；P ≥ +5 → 领先；否则同步（与趋势相互独立，不合成复合标签） |',
-                '| 趋势态 | Δ ≤ −10 且最近连续 2 次均 < L → 下滑；Δ ≥ +10 且最近连续 2 次均 > L → 进步；近窗仅 1 次越限 → 单次波动；否则平稳 |',
-                '| 位置回升 | 最早 2 次有效任务平均落后（≤ −5），而 P 已回到 −5 以上 |',
-                '| 一级指标 | 半衰期加权平均得分率（绝对水平，与位置轴互补），驱动五档等级（≥85 / ≥70 / ≥60 / 待合格） |',
-                '',
-                '**显示优先级**（命中即停）',
-                '',
-                '| 优先级 | 状态 | 判定条件 | 需关注 |',
-                '| --- | --- | --- | --- |',
-                '| 1 | 缺交预警 | 最近连续 ≥2 次未交 / 缺考 | 是 |',
-                '| 2 | 单场异常 | 最近一次 d ≤ L − 20，且相对上一次的落差也 ≥20（排除渐进下滑） | 否（待核实） |',
-                '| 3 | 数据积累中 | 近 15 天有效任务 <2 次，或基线窗无数据 | 否 |',
-                '| 4 | 下滑预警 | 趋势态 = 下滑 | 是 |',
-                '| 5 | 进步 | 趋势态 = 进步 | 否（正向关注） |',
-                '| 6 | 位置回升 | 位置回升条件成立 | 否（正向关注） |',
-                '| 7 | 持续落后 | 位置档 = 落后 且趋势平稳 | 是 |',
-                '| 8 | 单次波动 | 趋势态 = 单次波动 | 否 |',
-                '| 9 | 平稳 | 以上均不满足 | 否 |',
-                '',
-                '**可手算示例**（7 次任务，锚定最新任务日 2025-12-11；d = 个人得分率 − 班级得分率，单位均为个百分点）',
-                '',
-                '| 任务日期 | 10-02 | 10-16 | 11-01 | 11-13 | 11-27 | 12-05 | 12-11 |',
-                '| --- | --- | --- | --- | --- | --- | --- | --- |',
-                '| d | +3.0 | +1.0 | +2.0 | −2.0 | −8.0 | −13.0 | −16.0 |',
-                '',
-                '| 步骤 | 取数与结果 | 判定 |',
-                '| --- | --- | --- |',
-                '| P 全期位置 | w2 加权、剔除极值后 = −6.5 | ≤ −5 → 落后 |',
-                '| S 近期水平 | 近 15 天 3 场（11-27 / 12-05 / 12-11）w 加权 = −12.8 | — |',
-                '| L 平时水平 | 15 天以前 4 场 w 加权 = +0.4 | — |',
-                '| Δ 变化量 | −12.8 − 0.4 = −13.2 | ≤ −10，且最近 2 次（−13 / −16）均低于 L → 下滑 |',
-                '| 一级指标 | 半衰期加权得分率 = 63.4% | ≥60 且 <70 → 合格 |',
-                '| 最终徽章 | 命中显示优先级 4 | 下滑预警，需关注 = 是 |',
-                '',
-                '结论读法：「成绩还过得去，但最近一个月在明显退，需要盯」。同一份数据若把近窗塞进基线（S 与 L 重叠），L 会被抬到 −8.1、Δ 只剩 −4.6，判「平稳」并把徽章错成「持续落后」——这是 V2.0 要修的核心缺陷，也是本模块最该回归的一条断言。',
-                '',
-                '**三条最易误读的边界**',
-                '',
-                '| 误读 | 实际口径 |',
-                '| --- | --- |',
-                '| 一次考砸 = 下滑预警 | 单次暴跌走优先级 2「单场异常」，标待核实、不进任何名单；只有连续 2 次同向越限才升级为预警（k = 2 的全部意义） |',
-                '| 数据不足 = 有问题 | 近 15 天不足 2 次或无基线，一律「数据积累中」，不给方向性结论；无作答证据不等于未掌握（同 CALC-01 铁律二） |',
-                '| 徽章依赖知识点标注 | 不依赖。状态只吃任务级得分率；标注覆盖率变化后不重判历史徽章，否则一次题库补标注会让全班历史结论全变 |',
-                '',
-                '**数据可用性降级**（真实接入后）',
-                '',
-                '| 档位 | 条件 | 呈现 |',
-                '| --- | --- | --- |',
-                '| 完整 | 近 15 天 ≥2 次且基线窗 ≥2 次 | 全部判定照常 |',
-                '| 受限 | 近期够、基线不足 | 只判位置档与硬标记，趋势留空并标「数据积累中」 |',
-                '| 不足 | 近 15 天 <2 次 | 只给平均得分率与提交情况 |',
-                '',
-                '> 两种「数据不够」必须分开：近 15 天不足 2 次 → 「满 2 次后再判断趋势」（多交几次可解除）；次数已够但 15 天以前无记录 → 「还没有更早的记录作对照，首场满 15 天后自动判断」（再交多少场都不解除，只能等时间）。两者都显示「数据积累中」、均不进任何名单；但绝不能写成「平稳」——平稳的前提是有基线且未越限。',
-                '',
-                '**同源约束**（五处必须读同一份状态表，不得各自计算）：周期概览「需关注学生」卡（数字 + 副行分类计数 + 悬停名单）、学生学情「需关注」筛选按钮与人数、学生列表徽章、学生追踪-知识点分析页标题徽章、学生追踪趋势图下方通俗解读条。',
-                '',
-                '> 参数仅 4 个且均为教学语义（波动带 / 确认次数 / 缺交次数 / 半衰期），教师可手算复核；徽章结论仅供辅助预警，缺交与单场异常必须先人工核实。知识点标注缺失不影响本模块判定——状态只依赖任务级得分率，不依赖知识点标注覆盖；标注覆盖率提升后，本模块不做二次改口径（避免历史徽章重新判一遍）。'
             ].join('\n')
         },
         {
@@ -9850,7 +6735,7 @@ init();
             body: [
                 '- **设置掌握程度**：3 档 / 4 档单选；按角色控制写权限，展示最后保存留痕并模拟并发冲突；确认后班级与学生追踪全量联动。学科组长及以上可改档位（底部取消 / 确认）；学科教师与班主任为只读查看，档位单选与得分率区间置禁用态（灰底虚线 + 禁止光标），不渲染取消 / 确认按钮，仅右上角 × 关闭；弹窗内不设权限说明条。',
                 '- **设置权重（已移除）**：得分率统一由后台默认时间衰减模型聚合。',
-                '- **学情来源与统计范围**：弹窗顶部为统计时间条（学年 / 月 / 周 / 自定义档位 + 对应日期控件），下方作业 / 考试双栏勾选、栏头全选与计数；底栏左侧回显「当前范围 · 已选 N 份」，与筛选栏胶囊同源；学生追踪同款弹窗交互。',
+                '- **学情来源与统计范围**：弹窗顶部为统计时间条（学年 / 月 / 周 / 自定义档位 + 对应日期控件），下方作业 / 考试双栏勾选、栏头全选与计数；底栏左侧回显「当前范围 · 已选 N 份」，与筛选栏胶囊同源；学生追踪同款弹窗交互。时间条下方常驻数据时效口径：**作业数据截止到前一天（不含今天），考试以完整学情发布为准（未发布不计入）**。',
                 '- **关联诊断与分组教学建议**：保留证据四态、前后序关系、学生分组、教学动作、关注范围、建议对象与判定依据；支持复制建议和导出 CSV。',
                 '- **题库知识图谱组件**：一期保留自研图谱组件，题库组件仅作全屏查看入口。',
                 '- **一期边界**：不包含题目生成、题量配置、题型配比、组卷、保存题库或布置新练习；效果验证只给教学建议，不生成复测题。',
@@ -9880,25 +6765,24 @@ init();
                 '',
                 '| 模块 | L0 | L0-b | L1 | L2-a | L2-b | L3 | L4 |',
                 '| --- | --- | --- | --- | --- | --- | --- | --- |',
-                '| 顶部筛选栏 / 学生追踪筛选条 | N | N | N | N | N | N | N |',
-                '| 周期概览 KPI（班级 6 卡 / 个人 4 卡） | E | D | D | E | N | N | N |',
-                '| 得分趋势图（班级 / 个人） | E | E | E | E | N | N | N |',
+                '| 顶部筛选栏 | N | N | N | N | N | N | N |',
+                '| 周期概览 KPI（班级 5 卡） | E | D | D | E | N | N | N |',
+                '| 得分趋势图（班级） | E | E | E | E | N | N | N |',
                 '| 任务清单 | E | N | N | N | N | N | N |',
-                '| 周期结论（班级 / 个人） | E | E | E | E | N | N | N |',
-                '| 摘要卡（5 张） | H | H | H | H（个人 D） | E | N | N |',
+                '| 周期结论（班级） | E | E | E | E | N | N | N |',
+                '| 摘要卡（5 张） | H | H | H | H | E | N | N |',
                 '| 目录 + 树 / 热力 / 表格 / 图谱 | H | H | H | E | E | N | N |',
                 '| 诊断 6 标签 | H | H | H | H | H | N | N |',
                 '| 错因结构 | H | H | H | H | H | E | N |',
                 '| 教学建议 | H | E | E | E | E | N | N |',
-                '| 学生学情列表 | D | N | N | N | N | N | N |',
                 '| 明细页「查看详情」 | H | N | N | N | N | N | N |',
                 '| 导出 | 禁用 | 禁用 | 禁用 | 禁用 | 可用 | 可用 | 可用 |',
                 '',
                 '- **同页互斥**：只渲染最高级空态（L0 > L0-b > L1 > L2 > L3 > L4），低级别模块折叠为一行摘要（如「另有 4 个模块因无任务未展示」），默认收起可展开；禁止 6 张 KPI 全为「—」各带一行「暂无数据」；筛选栏与顶部导航始终可用，内容级主页签可随面板一起让位；空态不劫持滚动、不强行弹窗。',
                 '- **文案四要素**：现象、原因、影响，加「下一步」（仅当使用者能自助处置时必填；产品侧与数据治理侧原因只说明不指引，避免制造无效动作）。',
-                '- **红线**：空态不显示「0」（0 = 有数据且为零）；得分率分母为 0 置「—」，不显示 0%；空周期隐藏环比；不得输出「已达标 / 无问题 / 各项正常」；不同原因不得共用一句「暂无数据」；L0 下不输出任何诊断条目（含关系未建）。',
+                '- **红线**：空态不显示「0」（0 = 有数据且为零）；得分率分母为 0 置「—」，不显示 0%；不得输出「已达标 / 无问题 / 各项正常」；不同原因不得共用一句「暂无数据」；L0 下不输出任何诊断条目（含关系未建）。',
                 '',
-                '> 现状：已实现任务清单、学情来源弹窗、表格与明细弹窗、个人侧体系未覆盖、教学建议无异常、班级侧 L2-a 与 L0-b 空态；班级侧整页 L0 缺省、L2-b 与 L3-b 提示、同页空态互斥折叠、L0 下导出禁用尚未实现。层级边界：本章管页面级 / 模块级缺省，条目级不可诊断见 XK-07D。'
+                '> 现状：已实现任务清单、学情来源弹窗、表格与明细弹窗、教学建议无异常、班级侧 L2-a 与 L0-b 空态；班级侧整页 L0 缺省、L2-b 与 L3-b 提示、同页空态互斥折叠、L0 下导出禁用尚未实现。层级边界：本章管页面级 / 模块级缺省，条目级不可诊断见 XK-07D。'
             ].join('\n')
         },
         {
@@ -9911,157 +6795,15 @@ init();
         {
             id: 'ST-02', group: 'ST', title: '学生头部与数据页签',
             body: [
-                '- 头部：星标按钮（与列表联动）+ 姓名 + 学号 + 竖线分隔 + 四数据页签同行居左；四页签互斥显示，隐藏期间不画图，切到该页签时再补渲染。',
-                '- 四页签：**作业（默认）**= 学科筛选 + 日期范围 + 排名开关 + CSV 导出 + 九列表格 + 个人 / 班级 / 年级三线得分曲线；**考试**= 最近考试 KPI 五卡 + 学科成绩柱状图 + 历次学情统计；**错题本**= 学科筛选 + 错题卡片 + 导出；**知识点分析**= ST-03 ~ ST-14 范围。',
+                '- 头部：星标按钮（与列表联动）+ 姓名 + 学号 + 竖线分隔 + 三数据页签同行居左；三页签互斥显示，隐藏期间不画图，切到该页签时再补渲染。',
+                '- 三页签：**作业（默认）**= 学科筛选 + 日期范围 + 排名开关 + CSV 导出 + 九列表格 + 个人 / 班级 / 年级三线得分曲线；**考试**= 最近考试 KPI 五卡 + 学科成绩柱状图 + 历次学情统计；**错题本**= 学科筛选 + 错题卡片 + 导出。',
                 '- 演示数据：刘鸿锦为截图复刻数据，其余学生以学号作固定种子生成，刷新不变。'
-            ].join('\n')
-        },
-        {
-            id: 'ST-03', group: 'ST', title: '学科与时间筛选条',
-            body: [
-                '- **学科下拉**：范围为教务权限内学科，默认选中第一个（演示为数学，其余学科走未覆盖空态）；切换后整页按新学科全量重算。',
-                '- **时间与作业的合并入口**：筛选条只保留学科下拉 + 回显胶囊「时间范围 · 已选 N 份」；档位（学年/月/周/自定义）、日期控件与作业/考试勾选统一收在「学情来源与统计范围」弹窗内一次设定（同 XK-12.3 方案）。',
-                '- **回显口径**：时间文本按档位格式化为「2026年9月」/「2026-2027学年」/「2026-W38（09-14 ~ 09-20）」/「2026-09-01 ~ 2026-09-15」；份数 = 当前学科 + 时间范围内且未取消勾选的任务数，与弹窗底栏同源同步。默认档位与学科学情顶部时间筛选一致（周，默认周 2026-W38），切换档位只改统计区间，不改知识体系与判定阈值。',
-                '- 个人与班级得分率由种子稳定生成；已选任务份数作为证据量因子影响个人数据收敛程度（ST-05）。'
-            ].join('\n')
-        },
-        {
-            id: 'ST-04', group: 'ST', title: '维度切换（并入模块头标题行）',
-            body: [
-                '- 维度标签：知识点（111）/ 能力（10），位于「知识点维度分析」标题行右侧；节点结构与班级树一致、计数同源；无演示数据的学科不显示计数。'
-            ].join('\n')
-        },
-        {
-            id: 'ST-05', group: 'ST', title: '摘要卡（5 张）',
-            body: [
-                '数据源为**个人树**：以班级树为底，用学号作固定种子给个人掌握度加偏移——偏移幅度取决于证据覆盖度（已选任务数 ÷ 6，最低取 0.35），任务越少越贴近班级基准，掌握度落在 4%~99%；考察频次与个人失分题次按同一比例缩放（失分题次约等于考察频次 × 未掌握比例）；班级基准保留用于对比。',
-                '',
-                '| 卡 | 口径与交互 |',
-                '| --- | --- |',
-                '| 卡1 周期已检测知识点 / 能力数量 | 知识点：个人证据覆盖「有检测证据 x / 全体系总数」（本期任务或历史考试），不随「查看全部知识点」开关变化；能力：非根节点总数；无演示数据的学科置横线 |',
-                '| 卡2 未掌握数量 | 掌握度低于未掌握阈值（默认 60%，随档位联动）的节点数；点击切表格视图 |',
-                '| 卡3 个人失分题次 | 个人失分题次合计，与个人失分明细同源；一期隐藏，页面结构保留 |',
-                '| 卡4 个人平均得分率 | 个人掌握度均值；徽章为与班级的差值（正负百分点，上升绿下降红）；无演示数据的学科五张卡均置横线 |',
-                '| 卡5 顽固薄弱项 | 顽固薄弱项个数，徽章「≥3 次失分率 ≥40%」；点击定位个人知识图谱诊断区 |',
-                '',
-                '**掌握档位**（与学科学情共用同一套，改档位后全页联动）：3 档 掌握 ≥80 / 一般 60~80 / 未掌握 <60；4 档 优秀 ≥90 / 掌握 80~90 / 一般 60~80 / 未掌握 <60。'
-            ].join('\n')
-        },
-        {
-            id: 'ST-06', group: 'ST', title: '知识点分析明细',
-            body: [
-                '- **统一目录（个人版）**：一级模块多选开关 + 计数徽章 + 个人得分率徽章（按全校共用档位着色）+ 覆盖徽章「已考 x/y」（零覆盖模块琥珀警示，得分率位显示「未检测」）；关闭项灰显加删除线，再次点击恢复；只影响展示层（树 / 表格 / 图谱 / 导出），统计口径不变；开关状态按维度独立记忆，切维度、学科、学生不重置；目录色点 = 该模块个人掌握度档位色，无证据恒灰。',
-                '- **查看全部知识点**（仅知识点维度）：默认只显示该生周期涉及的知识点模块（零覆盖一级模块整棵隐藏，模块内本期未检测节点隐藏，仅有历史证据与未学节点保留）；勾选后显示全部节点；无作答证据的节点恒灰并标「未检测」，不展示个人掌握度，表格与导出数值列置「—」，不参与断层着色与红边，图谱统计条追加「含未检测 N」；统计口径（摘要卡 / 诊断 / 建议）不随开关变化。',
-                '- **树状图（默认）**：按层级展开，节点按个人掌握档位着色；底部图例随档位配置生成（3 档 / 4 档档位名 + 区间 + 色块）+ 灰色「无作答证据 / 未覆盖」；容器隐藏（尺寸为 0）时跳过绘制，切到该视图再补渲染。',
-                '- **表格**：层级页签「全部 / 一级 / 二级 / 三级」；列：考核项、考察频次、个人得分率、班级得分率、与班级差值（按正负着色）、个人失分次数、掌握程度、操作（查看详情 → ST-11 弹窗）。',
-                '- **关联图谱**：工具栏同学科学情（深度默认三级、关系开关 3 项且只有文字与选中态、标签策略、仅看关联、力导向 / 放射布局）；画布只渲染知识点节点与知识点间边，四类关联节点池不上图；节点掌握度为个人值；前序断层节点红描边 + 红晕 + 加粗线宽（口径同 ST-07，按得分率升序最多取 5 个）；节点详情面板含个人 / 班级掌握度与差值、关联清单（考查能力 / 依赖能力 / 考查题型 / 常用方法 / 易错点分类）、根因链标签与前后序诊断；图例为两段式（节点掌握度色阶 / 画布可见关系线型）。',
-                '- **导出**：《学生姓名-知识点（或能力）个人分析.csv》，目录关闭模块同口径剔除；学科知识体系未覆盖时目录显示「未覆盖」（不显示 0/0），树图只保留单个置灰节点，表格显示缺省提示行，图谱区走 L2-a 占位，KPI 四卡置「—」，不得以 0 代替无数据（口径见 XK-13）。'
-            ].join('\n')
-        },
-        {
-            id: 'ST-07', group: 'ST', title: '个人知识图谱诊断（6 个标签）',
-            body: [
-                '结构与学科学情「知识图谱诊断」一致，口径为当前选中学生的个人数据。',
-                '',
-                '| 标签 | 个人口径 |',
-                '| --- | --- |',
-                '| 顽固薄弱 | 同一考核项在 ≥3 次不同任务中失分率 ≥40%（诊断区取二级及以下、掌握度低于未掌握阈值（默认 60%）的考核项，按得分率升序最多 5 项）；已选任务不足 3 份时判定为空，证据不足不下结论 |',
-                '| 前序断层 | 目标掌握度低于未掌握阈值且祖先链存在 <70% 节点 → 根因取最弱的一级前置；无前置关系记「前置关系未建·待标注」不归因；个人版三态（关系未建 / 根因在前序 / 前序已达标），无「前置暂无证据」态；计数为「有根因数 / 断层总数」 |',
-                '| 易混淆 | 学科级易混淆对 + 该生个人命中次数（与 ST-10 建议条数同源）；无演示数据的学科不渲染 |',
-                '| 易错点 | 该生个人易错点清单 |',
-                '| 前后序证据 | 该生周期内多任务汇总证据（原型模拟）；无作答证据 = 未知，不得标为未掌握；未学内容仅衔接，不布置加练 |',
-                '| 已达标 | 达标线 = 「掌握」档下限，3 档与 4 档均为 80%（90% 为 4 档「优秀」下限，不作达标线）；进步判定为首末有效场次提升 ≥8 个百分点；已达标转「减量维持」，每周 1 次滚动复测 |',
-                '',
-                '- **配色**：顽固薄弱项名、易混淆与易错点「关联：X」中的知识点按个人掌握档位着色（个人树查不到取灰），计数徽章保持语义色。',
-                '- **规则同源**：证据等级 A/B/C/D、顽固强度三档与病型五类、断层三道闸（≤5 层 / 跨模块停 / 环保护）、易混淆三级分级与冲突消解顺序均与班级侧一致（细则见 XK-07A ~ XK-07C）。'
-            ].join('\n')
-        },
-        {
-            id: 'ST-08', group: 'ST', title: '个人错因结构分析',
-            body: [
-                '- **堆叠柱状图**：该生各次任务的失分归因占比 + 图例可点击显隐；悬停某错因段时高亮该错因在全部任务中的段，显示各次占比 + 周期均值 + 首尾环比（与班级版同口径）。',
-                '- **限制**：仅智批作业支持错因分析；配色与干预文案走通用兜底，不写死错因枚举。',
-                '',
-                '**个人化矩阵生成**（原型模拟）：以班级错因矩阵对应行为基准，逐单元加一个由「学号 + 场次 + 错因序号」确定的抖动（幅度约 ±5），特征错因额外上调约 7 个点，单元下限 2 后按行归一化到 100%；接入真实数据后替换为该生逐题失分归因汇总。',
-                '',
-                '**关键发现**：先判空态——学科未覆盖显示单条「XX 知识体系演示数据未覆盖，暂无该生错因分析」；本周期任务不足 2 份显示「该生本周期任务不足 2 份，无法对比错因迁移」。判定与班级 XK-08 同口径：首尾场次逐错因对比，变化幅度 ≥3 个百分点判为显著迁移并按幅度降序（上升红、下降绿 + 配套干预文案），不足 3 个百分点归入「基本稳定」蓝色汇总。'
-            ].join('\n')
-        },
-        {
-            id: 'ST-09', group: 'ST', title: '个人失分明细',
-            body: [
-                '- 一期隐藏，页面结构保留个人历史失分明细。',
-                '- 清单仅作历史学情数据保留，不提供个人巩固卷或其他题目生成功能。'
-            ].join('\n')
-        },
-        {
-            id: 'ST-10', group: 'ST', title: '个人教学建议',
-            body: [
-                '把该生当前学科、当前周期的诊断结论汇总成可执行的教学动作；一期只给建议、指向与依据，不含题目内容、组卷或布置练习入口。',
-                '',
-                '**数据来源（与上方诊断模块同源，不独立计算）**：个人平均得分率与达标项取个人树当前维度末级节点掌握度；顽固薄弱取个人顽固列表（≥3 次考查中失分率 ≥40%），前序断层取个人断层归因，易混淆命中次数与诊断卡同一算法；达标线 = 「掌握」档下限（3 档与 4 档均为 80%）；统计范围跟随目录关闭状态与范围开关，与摘要卡、诊断卡逐项一致，不一致即缺陷。',
-                '',
-                '| 建议 | 触发条件 | 依据文案 | 按钮 |',
-                '| --- | --- | --- | --- |',
-                '| 个人专项突破（红） | 存在顽固薄弱项 | 命中项数量 + 知识点名单，说明重复讲题对结构性问题无效 | 查看顽固薄弱（滚动定位并脉冲高亮） |',
-                '| 前序补偿（橙） | 存在掌握度低于未掌握阈值的断层点 | 有根因：断层项数量 + 根因示例；关系未建：按同点巩固处理并给前置标注覆盖率 | 查看断层归因 |',
-                '| 成对辨析（琥珀） | 存在易混淆对且该学科有演示数据 | 易混对数 + 最严重的一对 + 该生命中次数，提示用成对辨析与学生互讲替代刷题 | 查看易混淆 |',
-                '| 追赶班级（青） | 个人均值比班级均值低 ≥5 个百分点 | 个人均值、班级均值、差值，优先补齐低于班级 10% 的差距项 | 导出个人学情单；查看失分明细 |',
-                '| 达标维持（绿） | 存在达到达标线的考核项 | 达标项数量 + 当前达标线，建议每周一次滚动复测 | 查看达标项（切表格视图） |',
-                '| 关系建设引导（石板灰） | 存在薄弱项且该项无任何前置关系标注 | 待标注数量 + 前三个知识点名称 | 查看断层归因 |',
-                '',
-                '- **空态**：六条全不命中显示「该生本周期各项诊断均无异常，按既有节奏推进」，综合卡同步隐藏；学科无演示数据显示「该学科知识体系未覆盖，暂无个人教学建议」并隐藏区域与综合卡；关系建设引导属数据治理动作，不计入教学动作条数。',
-                '- **个人综合教学建议卡**：与班级版同结构，标题「个人综合教学建议」+ 纳入整合的建议条数；教学路径按 前序补偿 → 个人专项突破 → 成对辨析 → 追赶班级 → 达标维持 排列，缺项跳过；教学动作表三列（教学动作 / 关注范围取前三项、超出折叠为「等 N 项」/ 使用场景）；前序补偿入表且前置标注覆盖率 <60% 时卡片顶部提示归因能力受限；「导出建议」为演示提示。',
-                '- **导出与联动**：右上「导出建议单」导出该生当前学科、周期、目录范围下的知识点学情表（取值范围 / 考察频次 / 个人得分率 / 班级得分率 / 与班级差值 / 个人失分次数 / 掌握程度），无证据行数值置横线；按钮只做三件事——滚动定位并高亮诊断区、切换视图、导出数据，点不到任何出题、组卷或布置入口。'
-            ].join('\n')
-        },
-        {
-            id: 'ST-11', group: 'ST', title: '详情弹窗（个人口径）',
-            body: [
-                '- 考核项个人明细弹窗展示学生、层级、路径、个人 / 班级得分率、掌握程度、断层判定与历史作答证据。',
-                '- 操作仅保留关闭、查看错题本、我的作答与原图预览；一期不提供题目生成或组卷入口。'
-            ].join('\n')
-        },
-        {
-            id: 'ST-12', group: 'ST', title: '状态徽章',
-            body: [
-                '- **位置**：个人周期学情概览标题行内，排在概览徽章之前；仅在知识点分析页签激活时显示（口径只对应知识点分析的筛选范围）。',
-                '- **数据同源**：与学情页列表徽章同读一份状态表（V3.0 九显示态）；平稳不渲染徽章，未学习渲染为缺交预警（深红实底）。',
-                '- **口径标注**：悬停气泡含判定口径、判定理由与「统计范围：学科 X · 起 ~ 止」；切页签、切学生、改筛选时重新渲染。'
-            ].join('\n')
-        },
-        {
-            id: 'ST-13', group: 'ST', title: '个人周期学情概览',
-            body: [
-                '位置：时间筛选条之后、维度工具之前。筛选条以下分两大模块：01 个人周期学情概览（本模块）与 02 知识点维度分析（维度工具至教学建议）。数据源为当前已选任务集合（个人与班级得分率成对提供、按日期升序）；个人无上一周期数据时不显示环比，趋势判定回退为周期内首末进步。',
-                '',
-                '| KPI 卡（4 张） | 口径 |',
-                '| --- | --- |',
-                '| 个人平均得分率 | 各次任务个人得分率的算术平均；徽章为与班级基准的差值（正负百分点） |',
-                '| 稳定度 | 100 − 个人得分率标准差；副行：标准差 / 最高 / 最低 |',
-                '| 个人顽固薄弱 | 同诊断区口径（≥3 次失分率 ≥40%）；非数学学科显示「演示知识体系未覆盖」 |',
-                '| 高于班级场次 | 个人得分率高于班级的场次数 / 周期任务总数；副行：落后场次 + 作业与考试拆分 |',
-                '',
-                '- **趋势与状态结论化**：「周期进步」「状态判定」两张卡已并入周期结论——趋势条目承载末次减首次的进步幅度与趋势档位，状态条目承载 V3.0 九显示态（附有效场次与平均得分率）。',
-                '- **该生周期得分趋势**：横轴为已勾选任务（日期升序），个人得分率蓝实线（考试三角、作业圆点）+ 班级得分率灰虚线；无任务显示空态。',
-                '- **学情状态通俗解读条**：状态胶囊 + 大白话（与学情页徽章同源，按状态 key 取文案而非文案字面）；缺交预警 / 下滑预警 / 持续落后为红色提醒态，其余蓝色；无判定显示「当前筛选范围内暂无该生状态判定」。',
-                '- **个人周期结论**：与班级版同构的规则表驱动，5 条——趋势 / 稳定度 / 班级对比（落后清单逐条列「任务名（个人% vs 班级%）」）/ 顽固薄弱 / 状态建议；无任务时显示单条空态。'
-            ].join('\n')
-        },
-        {
-            id: 'ST-14', group: 'ST', title: '学情来源弹窗',
-            body: [
-                '位置：筛选条胶囊「时间范围 · 已选 N 份」打开的「学情来源与统计范围」弹窗（交互同学科学情 XK-12）。',
-                '',
-                '- **统计时间范围**：弹窗顶部时间条承载档位与对应日期控件（由筛选条迁入）；选定即生效，切换后同步刷新弹窗内任务列表与个人概览。',
-                '- **勾选交互**：双栏列表（可选范围 = 当前学科 + 当前时间范围内的任务，默认全选）+ 栏头全选与「已选 / 总数」计数 + 底部确定 / 取消；底栏左侧回显「当前范围 · 已选 N 份」；「取消」不回滚勾选与时间变更（已知限制）。',
-                '- **变更记录**：原「选中任务得分趋势图」已迁移至个人周期学情概览（ST-13），本弹窗保留时间范围设置与勾选交互。'
             ].join('\n')
         },
         {
             id: 'CALC-01', group: 'CALC', title: '全局指标口径与计算公式',
             body: [
-                '**为什么单独一章**：同一个量在多个页面被重复计算——平均得分率同时出现在周期概览、摘要卡与学生追踪；需关注人数同时驱动 KPI 卡与学情页筛选。口径一旦分叉，页面之间就会互相打脸，而且没人能判断哪个数是对的。本章是全站唯一的口径出处：页面上任何一个数字都必须能指回本章某一行；页面文案与本章冲突时，先改文案，再改计算。',
+                '**为什么单独一章**：同一个量在多个页面被重复计算——平均得分率同时出现在周期概览、摘要卡与任务清单。口径一旦分叉，页面之间就会互相打脸，而且没人能判断哪个数是对的。本章是全站唯一的口径出处：页面上任何一个数字都必须能指回本章某一行；页面文案与本章冲突时，先改文案，再改计算。',
                 '',
                 '**三条铁律**',
                 '',
@@ -10078,11 +6820,9 @@ init();
                 '| `rate` | 单场得分率 | 该场该考核项得分 ÷ 该场该项满分 × 100 | 场次内已按分值算比例；场次之间不再按分值加权 |',
                 '| `loss` | 单场失分率 | 100 − `rate` | 热力单元格与顽固判定用它，不用得分率 |',
                 '| `qRate` | 单场知识点得分率 | 作业、考试已分别实现 | 两类任务均已分别实现计算，本 PRD 不展开算式；下游直接消费其结果 |',
-                '| `cRate` | 班级同场得分率 | 班级该项总得分 ÷ 班级该项总满分 × 100 | 必须与 `rate` 同场同口径，否则差值无意义 |',
-                '| `d` | 相对班级差 | `rate` − `cRate` | 状态判定核心序列；同场相减已剥离试卷难度 |',
-                '| `Δ` | 距锚点天数 | 锚点日 − 任务日期（自然日，当日为 0） | 两个锚点不可混用：知识点分析锚定周期结束日，状态判定锚定最新任务日 |',
+                '| `cRate` | 班级同场得分率 | 班级该项总得分 ÷ 班级该项总满分 × 100 | 必须与 `rate` 同场同口径，否则年级对比失真 |',
+                '| `Δ` | 距锚点天数 | 锚点日 − 任务日期（自然日，当日为 0） | 全站只用周期结束日一个锚点，不另设锚点 |',
                 '| `w` | 时间权重 | 0.5 的（`Δ` ÷ `H`）次幂，`H` = 30 天 | 30 天前的证据恰好半权 |',
-                '| `w2` | 位置权重 | 0.5 的（`Δ` ÷ 2`H`）次幂 | 衰减更慢，回答「平时在班里哪一档」 |',
                 '| `mastery` | 节点掌握度 | 同节点各场 `rate` 按 `w` 加权平均，上限 100 | 树、表格、图谱着色与档位映射的唯一输入 |',
                 '| `mSet` | 题目挂接集合（达标率分母） | 两部分之并：① 本周期各任务的题目所挂接的末级知识点，按任务汇总去重；② 关联知识点至少 1 个被挂接的能力末级节点，其得分率由这些知识点聚合派生 | 它不是整个知识树的末级节点，也不是全树叶子；挂接即证据，集合内每个节点都有得分率，因此不存在「无证据节点」这一类别 |',
                 '',
@@ -10096,7 +6836,6 @@ init();
                 '| 稳定度 | 100 − `σ` | 越高越稳；`σ` 与稳定度须同源，不得各自四舍五入后相减 |',
                 '| 极差 | `max` − `min` | 结论里的最高、最低、极差同源 |',
                 '| 胜率 | 胜场数 ÷ 任务数 × 100 | 胜 = 本班（本人）严格大于对比对象；相等不计胜 |',
-                '| 环比 | 本周期值 − 上一周期同口径值 | 无基准返回空，不显示 0（0 会被读成「没有变化」） |',
                 '| 首末变化 | 末次值 − 首次值 | 有效场次按日期升序，跳过空值 |',
                 '| 名单人数 | 命中学生 ID 去重后的个数 | 同一学生可命中多个条件，须先取并集，不得把各组人数相加 |',
                 '',
@@ -10104,26 +6843,22 @@ init();
                 '',
                 '| 阈值 | 取值 | 使用位置 |',
                 '| --- | --- | --- |',
-                '| 达标线 | 「掌握」档下限：3 档 80%、4 档 80%（4 档的 90% 是「优秀」下限，不作达标线；达标线与档位数无关） | XK-04 达标率分子、XK-07 已达标、ST-07、ST-10 |',
-                '| 未掌握线 | 3 档 60% / 4 档 60%（取最低档上界） | XK-05 卡2、XK-06 树图着色、XK-07 断层目标、ST-05 卡2、ST-06 |',
-                '| 顽固：次数与失分率 | ≥3 次且失分率 ≥40% | XK-04 卡4、XK-05 卡6、XK-06 热力与底部结论、XK-07、ST-05 卡5、ST-13 |',
+                '| 达标线 | 「掌握」档下限：3 档 80%、4 档 80%（4 档的 90% 是「优秀」下限，不作达标线；达标线与档位数无关） | XK-04 达标率分子、XK-07 已达标 |',
+                '| 未掌握线 | 3 档 60% / 4 档 60%（取最低档上界） | XK-05 卡2、XK-06 树图着色、XK-07 断层目标 |',
+                '| 顽固：次数与失分率 | ≥3 次且失分率 ≥40% | XK-04 卡4、XK-05 卡6、XK-06 热力与底部结论、XK-07 |',
                 '| 顽固强度分档 | ≥5 次结构性 / 3~4 次疑似 / 1~2 次观察 | XK-07 顽固薄弱 |',
-                '| 断层：前置阈值与回溯层数 | <70% / ≤5 层 | XK-07 前序断层、ST-07、ST-10 |',
-                '| 易混出卡与链长 | ≥5 人次 / ≤3 | XK-07 易混淆、ST-07、ST-10 |',
+                '| 断层：前置阈值与回溯层数 | <70% / ≤5 层 | XK-07 前序断层 |',
+                '| 易混出卡与链长 | ≥5 人次 / ≤3 | XK-07 易混淆 |',
                 '| 跨点习惯错误 | 同一易错点在 ≥3 个知识点命中 | XK-07 易错点 |',
                 '| 方法聚合 | 关联点 ≥2 且（顽固或断层占比 ≥50% 或掌握 <65%） | XK-07 规则 6 |',
                 '| 能力聚合 | 考查侧 ≥8 点且 <65%；依赖侧薄弱占比 ≥40% | XK-07 规则 7 |',
                 '| 考法覆盖 | 缺口 ≥40%；未验证 ≥50% | XK-07 规则 8（一期不上线） |',
                 '| 热力单元格五档 | <20 / 20~40 / 40~60 / 60~75 / ≥75，固定五档，不随掌握档位切换（另设 0% 无失分、未考查两态） | XK-06 热力演进 |',
-                '| 行尾趋势与错因迁移 | 前后两半均值差 ±5 / 首末占比差 ±3 | XK-06 行尾判定章、XK-08、ST-08 |',
-                '| 周期趋势档 | +3 显著回升 / +1 缓慢回升 / ±1 内持平 / −1 缓慢下滑 / −3 明显下滑 | XK-04 周期结论、ST-13 |',
-                '| 稳定度语义色 | `σ` ≥5 红 / 3~5 琥珀 / <3 绿 | XK-04、ST-13 |',
+                '| 行尾趋势与错因迁移 | 前后两半均值差 ±5 / 首末占比差 ±3 | XK-06 行尾判定章、XK-08 |',
+                '| 周期趋势档 | +3 显著回升 / +1 缓慢回升 / ±1 内持平 / −1 缓慢下滑 / −3 明显下滑 | XK-04 周期结论 |',
+                '| 稳定度后缀分档 | `σ` ≥5 波动偏大 / 3 ≤ `σ` <5 波动中等 / `σ` <3 表现稳定（保留 1 位小数后比较） | XK-04 周期结论 |',
                 '| 胜率语义色 | ≥60% 绿 / <40% 红 / 其余琥珀 | XK-04 年级对比 |',
-                '| 诊断进步阈值 | 首末有效场次提升 ≥8 个百分点 | XK-07 已达标、ST-07 |',
-                '| 追赶班级 | 个人均值 − 班级均值 ≤ −5 | ST-10 |',
-                '| 五档等级 | ≥85 优秀 / ≥70 良好 / ≥60 合格 / 其余待合格；全部未交 = 未学习 | XK-10 列表与分布、ST-01 筛选 |',
-                '| 状态判定四参数 | `B` = 10 个百分点 / `k` = 2 次 / `m` = 2 次 / `H` = 30 天 | XK-10、ST-12、ST-13 |',
-                '| 状态派生界 | 位置分界 ±5（`B` ÷ 2）/ 单场异常界 20（2`B`）/ 近期窗 15 天（`H` ÷ 2）/ 基线窗 120 天（4`H`）/ 粗颗粒满分上限 20 分（200 ÷ `B`） | XK-10 |',
+                '| 诊断进步阈值 | 首末有效场次提升 ≥8 个百分点 | XK-07 已达标 |',
                 '',
                 '### 4 指标—页面索引（哪个指标在哪一章、哪个模块用）',
                 '',
@@ -10131,26 +6866,24 @@ init();
                 '',
                 '| 指标 | 计算 | 使用位置 |',
                 '| --- | --- | --- |',
-                '| 平均得分率 | 各次任务 `cRate` 的算术平均 | XK-04 卡1、XK-05 卡4、ST-13 班级基准 |',
+                '| 平均得分率 | 各次任务 `cRate` 的算术平均 | XK-04 卡1、XK-05 卡4 |',
                 '| 稳定度 | 100 − `σ`(各次 `cRate`) | XK-04 卡2、XK-04 周期结论「稳定度」条 |',
                 '| 知识点达标率 | `mSet` 内掌握度 ≥ 达标线的节点数 ÷ `mSet` 节点数 × 100；达标 / 薄弱 / 未掌握三类一律正算，不得用「总数 − 达标 − 薄弱」反算未掌握；分母是题目挂接集合，不是全树末级节点 | XK-04 卡3（下钻 XK-06） |',
-                '| 顽固薄弱知识点 | `mSet`（含能力末级节点）中同一节点在 ≥3 场不同任务失分率 ≥40% 的节点数；副行给出净变化（新增 − 改善）与改善 / 新增个数 | XK-04 卡4（下钻 XK-06 热力）、XK-05 卡6 |',
+                '| 顽固薄弱知识点 | `mSet`（含能力末级节点）中同一节点在 ≥3 场不同任务失分率 ≥40% 的节点数 | XK-04 卡4（下钻 XK-06 热力）、XK-05 卡6 |',
                 '| 提交率 | 实交人次 ÷ 应交人次 × 100，应交人次 = 班级人数 × 任务数（迟交计入已交，不单列） | XK-04 卡5 |',
-                '| 需关注学生 | 缺交预警 ∪ 下滑预警 ∪ 持续落后，按 ID 去重计数 | XK-04 卡6（悬停名单、下钻）、XK-10 筛选、ST-12 |',
                 '| 年级对比胜率 | 本班 `cRate` 高于年级同场得分率的场次 ÷ 任务数 | XK-04 周期结论「年级对比」条 |',
-                '| 环比 | 本周期值 − 上一周期同口径值；上一周期同样由题库派生（独立 3 场任务），不存一份手填的对比数字 | XK-02 筛选说明、XK-04 卡1 徽章、XK-05 卡4 与卡5 徽章 |',
-                '| 趋势档位 | 环比（无环比取首末变化）按 +3 / +1 / −1 / −3 分档 | XK-04 周期结论「趋势」条 |',
+                '| 趋势档位 | 首末变化按 +3 / +1 / −1 / −3 分档 | XK-04 周期结论「趋势」条 |',
                 '| 任务清单首要薄弱点 | `mSet` 内累计失分率最高的一项（含能力末级节点） | XK-04 任务清单合计行 |',
                 '',
                 '#### 4.2 知识点分析 · 明细、热力与图谱（XK-05 / XK-06 / XK-06A）',
                 '',
                 '| 指标 | 计算 | 使用位置 |',
                 '| --- | --- | --- |',
-                '| 节点得分率（加权） | Σ(`w` × `rate`) ÷ Σ`w`，`rate` 取该节点各场的单场知识点得分率（`qRate`，见 §7） | XK-06 树状图、表格、关联图谱、XK-11 详情页、ST-06 |',
-                '| 节点掌握档位 | 加权得分率落入档位区间后的档位名与色值 | XK-06 节点着色与图例、XK-07 配色、ST-06 |',
-                '| 覆盖徽章 x/y | 子树有证据节点数 ÷ 子树节点总数 | XK-06 统一目录、ST-06 目录 |',
-                '| 已检测节点数 | 证据为「本期已考查」或「仅有历史证据」的节点数 | XK-05 卡1、ST-05 卡1 |',
-                '| 未掌握节点数 | 加权掌握度低于未掌握线的节点数 | XK-05 卡2、ST-05 卡2 |',
+                '| 节点得分率（加权） | Σ(`w` × `rate`) ÷ Σ`w`，`rate` 取该节点各场的单场知识点得分率（`qRate`，见 §7） | XK-06 树状图、表格、关联图谱、XK-11 详情页 |',
+                '| 节点掌握档位 | 加权得分率落入档位区间后的档位名与色值 | XK-06 节点着色与图例、XK-07 配色 |',
+                '| 覆盖徽章 x/y | 子树有证据节点数 ÷ 子树节点总数 | XK-06 统一目录 |',
+                '| 已检测节点数 | 证据为「本期已考查」或「仅有历史证据」的节点数 | XK-05 卡1 |',
+                '| 未掌握节点数 | 加权掌握度低于未掌握线的节点数 | XK-05 卡2 |',
                 '| 累计失分率 | 有效场次 `loss` 的算术平均（不衰减） | XK-06 热力累计列、底部结论「最突出短板」 |',
                 '| 热力行尾判定 | 顽固 / 反复 / 偶发 / 恶化 / 回升 / 稳定 六态 | XK-06 热力演进 |',
                 '| 关系覆盖度 | 有证据且已建前置关系的知识点 ÷ 有证据知识点 | XK-07 断层第四态、XK-09 建议降级 |',
@@ -10159,60 +6892,27 @@ init();
                 '',
                 '| 指标 | 计算 | 使用位置 |',
                 '| --- | --- | --- |',
-                '| 证据等级 A / B / C / D | 周期内直接考查场次：≥3 / 1~2 / 仅历史证据 / 无 | XK-07 六个标签、XK-07D、ST-07 |',
-                '| 前序断层 | 目标掌握度低于未掌握线，且祖先链存在 <70% 节点（回溯 ≤5 层） | XK-07、XK-07C 主因排序、ST-07、ST-10 |',
+                '| 证据等级 A / B / C / D | 周期内直接考查场次：≥3 / 1~2 / 仅历史证据 / 无 | XK-07 六个标签、XK-07D |',
+                '| 前序断层 | 目标掌握度低于未掌握线，且祖先链存在 <70% 节点（回溯 ≤5 层） | XK-07、XK-07C 主因排序 |',
                 '| 可诊断覆盖率 | 可诊断 N ÷ 应诊断 M（%） | XK-07D 模块底部、XK-09、导出 CSV |',
-                '| 易混淆分级与命中人次 | 无序对归一后判双弱 / 单弱 / 双强，累计命中人次 | XK-07、ST-07、ST-10 |',
+                '| 易混淆分级与命中人次 | 无序对归一后判双弱 / 单弱 / 双强，累计命中人次 | XK-07 |',
                 '| 方法掌握度 | 关联知识点得分率的算术平均（不按关系度加权） | XK-07 规则 6 |',
-                '| 错因占比迁移 | 末次占比 − 首次占比，绝对值 ≥3 为显著迁移 | XK-08 关键发现、ST-08 |',
-                '| 建议触发条件 | XK-09 与 ST-10 规则表的 when 条件 | XK-09 教学建议、ST-10 个人教学建议 |',
-                '',
-                '#### 4.4 学生学情与状态判定（XK-10 / ST-12 / ST-13）',
-                '',
-                '| 指标 | 计算 | 使用位置 |',
-                '| --- | --- | --- |',
-                '| `d` 序列 | 逐次任务 `rate` − `cRate` | XK-10 计算链路、ST-12 徽章、ST-13 通俗解读条 |',
-                '| `P` 全期位置 | 剔除极值后按 `w2` 加权平均 `d` | XK-10 位置档 |',
-                '| `S` 近期水平 | 最近 15 天内有效任务按 `w` 加权平均 `d` | XK-10 趋势态 |',
-                '| `L` 平时水平 | 15 天以前（基线窗内）有效任务按 `w` 加权平均 `d`，与 `S` 不重叠 | XK-10 趋势态、单场异常、悬停证据句 |',
-                '| `Δ` 变化量 | `S` − `L` | XK-10 趋势态、ST-13 |',
-                '| 位置档 | `P` ≤ −5 落后 / `P` ≥ +5 领先 / 否则同步 | XK-10 徽章、名单分类 |',
-                '| 趋势态 | `Δ` ≤ −10 且最近 2 次均低于 `L` → 下滑；`Δ` ≥ +10 且最近 2 次均高于 `L` → 进步；近窗仅 1 次越限 → 单次波动 | XK-10 徽章 |',
-                '| 单场异常 | 最新一次 ≤ `L` − 20，且相对上一次的落差 ≥20 | XK-10 徽章（待核实，不进名单） |',
-                '| 缺交预警 | 最近连续未交或缺考 ≥2 次 | XK-10 徽章、ST-12 |',
-                '| 数据积累中 | 近 15 天有效任务 <2 次，或基线窗无数据 | XK-10 徽章（不进名单） |',
-                '| 位置回升 | 最早 2 次有效任务均值 ≤ −5，而 `P` 已回到 −5 以上 | XK-10 徽章（正向关注） |',
-                '| 加权平均得分率与等级 | 半衰期加权平均 `rate`；≥85 / ≥70 / ≥60 / 其余；全部未交 = 未学习 | XK-10 列表与左侧分布、ST-01 等级筛选 |',
-                '| 个人提交率 | （任务数 − 未交次数）÷ 任务数 × 100 | XK-10 列表 |',
-                '| 正向关注人数 | 进步 ∪ 位置回升，按 ID 去重计数 | XK-04 卡6 副行、XK-10 筛选 |',
-                '',
-                '#### 4.5 学生追踪 · 个人口径（ST-05 / ST-13）',
-                '',
-                '| 指标 | 计算 | 使用位置 |',
-                '| --- | --- | --- |',
-                '| 个人平均得分率 | 各次任务个人 `rate` 的算术平均 | ST-13 卡1 |',
-                '| 个人稳定度 | 100 − `σ`(个人各次 `rate`) | ST-13 卡2、ST-13 结论「稳定度」条 |',
-                '| 高于班级场次 | 个人 `rate` 高于班级 `cRate` 的场次数 ÷ 任务数 | ST-13 卡4 |',
-                '| 个人掌握度均值 | 个人树节点掌握度的算术平均 | ST-05 卡4（卡名「知识点平均掌握度」） |',
-                '| 与班级差值 | 个人均值 − 班级均值 | ST-05 卡4 徽章、ST-10「追赶班级」触发条件 |',
-                '| 个人失分题次 | Σ 节点失分题次（约等于考察频次 × 未掌握比例） | ST-05 卡3（一期隐藏） |',
-                '| 个人趋势档位 | 首末变化按 +3 / +1 / −1 / −3 分档（个人无环比） | ST-13 趋势条目 |',
+                '| 错因占比迁移 | 末次占比 − 首次占比，绝对值 ≥3 为显著迁移 | XK-08 关键发现 |',
+                '| 建议触发条件 | XK-09 规则表的 when 条件 | XK-09 教学建议 |',
                 '',
                 '### 5 口径边界（三组数字不可互推）',
                 '',
                 '| 边界 | 说明 |',
                 '| --- | --- |',
-                '| 周期概览均值 vs 状态判定加权 | 前者按任务次数算术平均，回答「这周期整体考得怎么样」；后者按 `w` 加权，回答「现在是什么水平」。两者不相等是正常现象，页面不得互相引用，更不得为了让它们相等而改公式 |',
+                '| 周期概览均值 vs 节点掌握度 | 前者按任务次数算术平均，回答「这周期整体考得怎么样」；后者按 `w` 加权，回答「单个知识点现在是什么水平」。两者不相等是正常现象，页面不得互相引用，更不得为了让它们相等而改公式 |',
                 '| 热力累计失分率 vs 节点得分率 | 前者是有效场次 `loss` 的算术平均，后者是按 `w` 加权的 `rate`；只有恰好 1 场考查时才互补为 100 |',
-                '| 个人提交率 vs 班级提交率 | 个人按 6 次任务算本人交没交，班级按全班人次算整体交纳率；统计单元不同，不可相加、相减或互相校验 |',
                 '',
                 '### 6 已知实现差异（原型 vs 本章规范）——本版已全部收敛',
                 '',
                 '| 编号 | 位置 | 收敛结果 |',
                 '| --- | --- | --- |',
                 '| D1 | XK-04 卡3 达标率分母 | 已收敛：分母取 `mSet`（题目挂接的 kpTree 末级节点 + 被挂接的能力末级节点）；达标 / 薄弱 / 未掌握三档在同一集合内正算，三者之和恒等于分母 |',
-                '| D2 | ST-05 卡4 | 已收敛：卡 4 改名为「知识点平均掌握度 / 能力平均掌握度」，取个人树节点掌握度算术平均；任务得分率均值只出现在 ST-13 卡 1，两卡不再同卡混称 |',
-                '| D3 | XK-04 徽章与副行 | 已收敛：达标率环比、顽固净变化与改善 / 新增个数、提交率（276 ÷ 288 = 95.8%）均由周期模型实时派生；原演示常量中的教学跟进类指标（含其固定百分比）已随跟进功能整体删除，不再保留任何演示数值 |',
+                '| D3 | XK-04 徽章与副行 | 已收敛：提交率（276 ÷ 288 = 95.8%）由周期模型实时派生；原演示常量中的教学跟进类指标（含其固定百分比）已随跟进功能整体删除，不再保留任何演示数值 |',
                 '| D4 | XK-06 节点得分率 | 已收敛：节点掌握度 = 100 − Σ(`w` × `loss`) ÷ Σ`w`，`loss` 由单场题目挂接聚合而来（见 §7）；前端只做档位映射 |',
                 '',
                 '### 7 数据基座：末级知识点图谱与题目挂接',
@@ -10237,7 +6937,7 @@ init();
                 '',
                 '- 挂接即证据：末级知识点在本周期没有任何题目挂接，就不产生得分率，也不进 `mSet`、不进达标率分母；',
                 '- 不进集合 ≠ 0 分：页面不显示 0，也不显示档位色（未知 ≠ 未掌握）；',
-                '- 原型题库规模：本周期 6 场任务（共 56 题）、上一周期 3 场（共 25 题）、末级知识点 61 条，覆盖当前考核项所在的集合与逻辑、函数基础、指数与对数、三角函数等模块；接入真实数据时原子表按教研标签表增量补行即可，派生链不需改动。',
+                '- 原型题库规模：本周期 6 场任务（共 56 题）、末级知识点 61 条，覆盖当前考核项所在的集合与逻辑、函数基础、指数与对数、三角函数等模块；接入真实数据时原子表按教研标签表增量补行即可，派生链不需改动。',
                 '',
                 '> 本章只登记口径，不重复各章交互细节。新增任何指标时，先在 §3 登记阈值、在 §4 登记使用位置，再改页面——顺序颠倒就会出现同一个数字两种算法。'
             ].join('\n')
@@ -10564,7 +7264,7 @@ init();
         });
         hits.sort((a, b) => (b.inTitle - a.inTitle) || (a.s.id < b.s.id ? -1 : 1));
         if (!hits.length) {
-            prdSearchResults.innerHTML = '<div class="prd-search-empty">无匹配章节，试试「环比」「顽固」「需关注」</div>';
+            prdSearchResults.innerHTML = '<div class="prd-search-empty">无匹配章节，试试「顽固」「错因」「口径」</div>';
         } else {
             prdSearchResults.innerHTML = hits.slice(0, 20).map(h =>
                 '<button type="button" class="prd-search-item" data-sec="' + h.s.id + '">'

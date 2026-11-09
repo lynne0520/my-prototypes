@@ -322,7 +322,8 @@
       <h1>学科学情 · 计算口径看板</h1>
     </div>
     <p class="topbar-sub">
-      本期范围：真实数据接入后的派生链（CALC-01 §7）、时间衰减模型（XK-06A）、均价类指标、达标率与顽固判定、状态判定 V3.0、热力演进、错因迁移。
+      本期范围：真实数据接入后的派生链（CALC-01 §7）、时间衰减模型（XK-06A）、均价类指标、达标率与顽固判定、热力演进、错因迁移（班级口径）。
+      已下线：学生学情主页签、学生追踪-知识点分析、环比体系、需关注名单与状态判定 V3.0。
       不含二期：规则 6 方法聚合 / 规则 7 能力二分 / 规则 8 考法覆盖 / 方法·能力独立标签 / 跟进功能。
     </p>
   </div>
@@ -364,7 +365,7 @@
 <section id="map" class="sec">
   <div class="sec-head">
     <h2><span class="sec-no">01</span>计算地图</h2>
-    <p class="sec-desc">五条数据流，每条从左到右走完全程。审查方法：任选一条链，从最左格问到最右格；每格只允许使用自己那个色的口径。跨色引用即为缺陷。</p>
+    <p class="sec-desc">四条数据流，每条从左到右走完全程。审查方法：任选一条链，从最左格问到最右格；每格只允许使用自己那个色的口径。跨色引用即为缺陷。</p>
   </div>
 
   <div class="flow-wrap">
@@ -391,7 +392,7 @@
     </div>
 
     <div class="flow" data-chain="B">
-      <div class="flow-head"><b>链 B · 任务级均价</b><span>产出：周期概览 6 卡 · 周期结论 · 个人概览 4 卡</span></div>
+      <div class="flow-head"><b>链 B · 任务级均价</b><span>产出：周期概览 5 卡 · 周期结论 · 得分趋势图</span></div>
       <div class="flow-row">
         <div class="cell q-raw"><b>classRate · 6 场</b><em>班级该项总得分 ÷ 总满分</em></div>
         <div class="arrow">→</div>
@@ -403,7 +404,7 @@
         <div class="arrow">→</div>
         <div class="cell q-rule"><b>徽章与文案</b><em>σ≥5 红 / 3~5 琥珀 / &lt;3 绿</em></div>
       </div>
-      <p class="flow-note"><b>并行分支（同源不互推）：</b>极差 = max−min · 胜率 = 胜场 ÷ 任务数（相等不计胜）· 环比 = 本期 − 上期（无基准返回空，不显示 0）· 首末变化 = 末次 − 首次 → 趋势档 ±3/±1。</p>
+      <p class="flow-note"><b>并行分支（同源不互推）：</b>极差 = max−min · 胜率 = 胜场 ÷ 任务数（相等不计胜）· 首末变化 = 末次 − 首次 → 趋势档 +3/+1/−1/−3（只用周期内首末两场，不引入上一周期）。</p>
     </div>
 
     <div class="flow" data-chain="C">
@@ -422,36 +423,6 @@
         <div class="cell q-rule"><b>教学动作</b><em>病型定动作</em></div>
       </div>
       <p class="flow-note"><b>不可越界：</b>不能用加权 mastery 反推顽固次数，也不能用「累计失分率」替代逐场 loss 计数。</p>
-    </div>
-
-    <div class="flow" data-chain="D">
-      <div class="flow-head"><b>链 D · 状态判定 V3.0</b><span>产出：学生列表徽章 · 需关注名单 · 个人概览 · 通俗解读条</span></div>
-      <div class="flow-row">
-        <div class="cell q-raw"><b>d = rate − cRate</b><em>必须同场相减，剥离难度</em></div>
-        <div class="arrow">→</div>
-        <div class="cell q-w"><b>w2 = 0.5<sup>Δ/2H</sup></b><em>位置权重，衰减更慢</em></div>
-        <div class="arrow">→</div>
-        <div class="cell q-w"><b>P = Σw2·d ÷ Σw2</b><em>剔除 ≥2B 极值后</em></div>
-        <div class="arrow">→</div>
-        <div class="cell q-rule"><b>位置档</b><em>P ≤ −5 落后 / ≥ +5 领先</em></div>
-      </div>
-      <div class="flow-row flow-row-2">
-        <div class="cell q-w"><b>S = Σw·d（近 15 天）</b><em>与 L 不重叠</em></div>
-        <div class="arrow">→</div>
-        <div class="cell q-w"><b>L = Σw·d（15 天前）</b><em>基线窗 4H = 120 天</em></div>
-        <div class="arrow">→</div>
-        <div class="cell q-rule"><b>Δ' = S − L</b><em>变化量</em></div>
-        <div class="arrow">→</div>
-        <div class="cell q-rule"><b>趋势态</b><em>|Δ'| ≥ 10 且连续 k=2 次同向</em></div>
-      </div>
-      <div class="flow-row flow-row-3">
-        <div class="cell q-rule"><b>九显示态优先级 1→9</b><em>命中即停</em></div>
-        <div class="arrow">→</div>
-        <div class="cell q-rule"><b>需关注名单</b><em>缺交 ∪ 下滑 ∪ 持续落后，按 ID 去重</em></div>
-        <div class="arrow">→</div>
-        <div class="cell q-rule"><b>五档等级</b><em>半衰期加权 rate，85/70/60</em></div>
-      </div>
-      <p class="flow-note"><b>符号警告：</b>PRD 中 Δ 有两种含义——链 A 的「距锚点天数」与链 D 的「S − L 变化量」。实现必须用不同变量名（如 <code>daysToAnchor</code> / <code>delta</code>），否则必现混算。且两者锚点不同：链 A 锚定周期结束日，链 D 锚定最新任务日。</p>
     </div>
 
     <div class="flow" data-chain="E">
@@ -508,7 +479,7 @@
       <span class="chip q-mean">算术平均</span>
       <span class="trace-src">CALC-01 §4.1</span>
     </div>
-    <div class="formula">全部按任务次数平均，不按分值、不加权；σ 除以 n 而非 n−1；胜率相等不计胜；环比无基准返回空</div>
+    <div class="formula">全部按任务次数平均，不按分值、不加权；σ 除以 n 而非 n−1；胜率相等不计胜</div>
     <div class="trace-body" data-render="t3"></div>
   </article>
 
@@ -537,36 +508,24 @@
   <article class="trace" id="t6">
     <div class="trace-head">
       <span class="trace-no">T-06</span>
-      <h3>状态判定 V3.0：从 d 到徽章</h3>
-      <span class="chip q-w">时间衰减加权</span>
-      <span class="chip q-rule">判定</span>
-      <span class="trace-src">XK-10 · 参数 B=10 / k=2 / m=2 / H=30</span>
-    </div>
-    <div class="formula">d = rate − cRate（同场相减）→ P = Σw2·d ÷ Σw2 → 位置档　　S（近 15 天）与 L（15 天前）分别加权 → Δ' = S − L → 趋势态</div>
-    <div class="trace-body" data-render="t6"></div>
-  </article>
-
-  <article class="trace" id="t7">
-    <div class="trace-head">
-      <span class="trace-no">T-07</span>
       <h3>热力演进：五档着色与累计列</h3>
       <span class="chip q-raw">原值</span>
       <span class="chip q-mean">算术平均</span>
       <span class="trace-src">XK-06 热力演进</span>
     </div>
     <div class="formula">单元格 = 单场 loss 原值按五档着色；累计列 = 有效场次 loss 的算术平均（不衰减）；行尾六态优先看顽固，再看趋势</div>
-    <div class="trace-body" data-render="t7"></div>
+    <div class="trace-body" data-render="t6"></div>
   </article>
 
-  <article class="trace" id="t8">
+  <article class="trace" id="t7">
     <div class="trace-head">
-      <span class="trace-no">T-08</span>
+      <span class="trace-no">T-07</span>
       <h3>错因结构迁移：首末占比差</h3>
       <span class="chip q-mean">算术平均</span>
       <span class="trace-src">XK-08 关键发现</span>
     </div>
     <div class="formula">变化幅度 = 末次占比 − 首次占比（1 位小数）；|幅度| ≥ 3 判显著迁移，按幅度降序；&lt;3 归入「基本稳定」一条汇总</div>
-    <div class="trace-body" data-render="t8"></div>
+    <div class="trace-body" data-render="t7"></div>
   </article>
 </section>
 
@@ -621,7 +580,7 @@
 
 <footer class="foot">
   <span>数据来源：学科学情一期 <code>js/app.js</code> 的 periodTasks（6 场真实演示任务）+ 可手算样例集。</span>
-  <span>口径来源：PRD.md CALC-01 / XK-06A / XK-07B / XK-10。</span>
+  <span>口径来源：PRD.md CALC-01 / XK-06A / XK-07B（学生层口径已随学生学情与状态引擎一同下线）。</span>
 </footer>
 
 <script src="app.js"></script>
