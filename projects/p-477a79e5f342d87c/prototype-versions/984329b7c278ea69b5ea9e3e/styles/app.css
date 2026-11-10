@@ -1,5 +1,5 @@
 /* ==========================================================================
-   学科侧重表 · 组件样式
+   跨学科分析表 · 组件样式
    全部取值来自 tokens.css 的语义层 / 组件层令牌
    尺寸基线：参考图 2000×1038 与本页面 1:1 对齐
    ========================================================================== */
@@ -783,9 +783,9 @@ button {
 }
 
 /* ==========================================================================
-   学科侧重（当日诊断）
-   口径：时间/作业弹窗统一筛选 → 学科得分率（各作业算术平均，无主次）
-         → 班/年级/学生三层离均差 → 作业明细
+   跨学科分析（班级报表）
+   口径：当日/近3天证据 → 满分加权得分率 → 班级行动门槛 / 学生标准化候选
+         → 班级无证据不强制判弱 / 学生必有优先巩固 → 作业明细
    ========================================================================== */
 
 /* 筛选区：控件允许换行，避免 1440 基线溢出 */
@@ -885,6 +885,37 @@ button {
   color: var(--color-text-brand);
 }
 
+/* 高亮描边：边框 / 图标 / 文字统一走品牌蓝，用于常态强引导的筛选入口 */
+.btn--outline-brand {
+  gap: 6px;
+  border-color: var(--color-brand);
+  background: var(--color-bg-brand-soft);
+  color: var(--color-text-brand);
+  font-weight: var(--pr-fw-medium);
+}
+
+.btn--outline-brand svg {
+  flex: none;
+  stroke: currentColor;
+}
+
+.btn--outline-brand:hover {
+  border-color: var(--color-brand-strong);
+  background: var(--color-bg-brand-soft-hover);
+  color: var(--color-brand-strong);
+}
+
+.btn--outline-brand:active {
+  border-color: var(--color-brand-strong);
+  background: var(--color-bg-brand-soft-active);
+  color: var(--color-brand-strong);
+}
+
+.btn--outline-brand:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-brand);
+}
+
 .btn--ghost {
   background: transparent;
   color: var(--color-text-secondary);
@@ -907,6 +938,7 @@ button {
   padding-bottom: var(--pr-space-10);
 }
 
+/* 主页面已不再渲染这个胶囊（时间改由左侧口径栏回显）；独立报表页 高三34班_跨学科分析报表_最近批改.html 仍在用 */
 .focus-scope {
   display: inline-flex;
   align-items: center;
@@ -920,10 +952,131 @@ button {
   white-space: nowrap;
 }
 
+/* 口径说明：默认收起为一个「?」，hover / 键盘聚焦才展开气泡 */
+.focus-hint-slot {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.q-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--pr-blue-200);
+  border-radius: var(--pr-radius-pill);
+  background: var(--color-bg-brand-soft);
+  color: var(--color-text-brand);
+  font-family: var(--pr-font-numeric);
+  font-size: 11px;
+  font-weight: var(--pr-fw-bold);
+  line-height: 1;
+  cursor: help;
+  vertical-align: middle;
+  margin-left: 5px;
+}
+
+.q-tip:hover,
+.q-tip:focus {
+  border-color: var(--color-brand);
+  background: var(--pr-blue-100);
+}
+
+.q-tip:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-brand);
+}
+
+/* 带文字的入口（如「口径 ?」），与顶部胶囊同高 */
+.q-tip--label {
+  width: auto;
+  height: 26px;
+  margin-left: 0;
+  padding: 0 10px;
+  gap: 4px;
+  font-family: var(--pr-font-sans);
+  font-size: var(--pr-fs-sm);
+  font-weight: var(--pr-fw-regular);
+  white-space: nowrap;
+}
+
+/* 口径入口仅保留小问号图标：去掉文字与 26px 胶囊按钮外观 */
+.q-tip--icon-only {
+  width: 14px;
+  height: 14px;
+  margin-left: 0;
+  padding: 0;
+  border: 1px solid var(--pr-blue-200);
+  border-radius: 50%;
+  background: var(--color-bg-surface);
+  color: var(--color-text-brand);
+  font-family: var(--pr-font-numeric);
+  font-size: 10px;
+  font-weight: var(--pr-fw-semibold);
+}
+
+.q-tip__bubble {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 80;
+  width: max-content;
+  max-width: 340px;
+  padding: 10px var(--pr-space-4) 12px;
+  border: 1px solid var(--focus-card-border);
+  border-radius: var(--pr-radius-sm);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-float);
+  color: var(--color-text-body);
+  font-family: var(--pr-font-sans);
+  font-size: var(--pr-fs-sm);
+  font-weight: var(--pr-fw-regular);
+  line-height: 1.75;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s;
+  pointer-events: none;
+}
+
+.q-tip__bubble > span {
+  display: block;
+}
+
+.q-tip__bubble > span + span {
+  margin-top: 6px;
+}
+
+.q-tip__bubble b {
+  margin-right: 6px;
+  color: var(--color-text-title);
+  font-weight: var(--pr-fw-semibold);
+}
+
+.q-tip:hover .q-tip__bubble,
+.q-tip:focus .q-tip__bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* 标题行靠右时气泡右对齐，避免撑出视口 */
+.q-tip--end .q-tip__bubble {
+  left: auto;
+  right: 0;
+}
+
 /* 口径条 */
 .focus-hint {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--pr-space-3);
   margin-bottom: var(--pr-space-5);
   padding: 10px var(--pr-space-4);
@@ -949,6 +1102,26 @@ button {
   color: var(--color-text-muted);
   font-size: var(--pr-fs-xs);
   white-space: nowrap;
+}
+
+/* 满分区 / 演示数据提示：各占一整行，不与主口径挤在同一行 */
+.focus-hint__ceil,
+.focus-hint__demo {
+  flex-basis: 100%;
+  padding: 4px var(--pr-space-3);
+  border-radius: var(--pr-radius-xs);
+  font-size: var(--pr-fs-xs);
+  line-height: 1.7;
+}
+
+.focus-hint__ceil {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.focus-hint__demo {
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
 }
 
 /* KPI 卡 */
@@ -1002,6 +1175,40 @@ button {
   font-size: var(--pr-fs-xs);
   color: var(--color-text-muted);
   line-height: 1.6;
+}
+
+/* 可点击的 KPI 卡：点击直达下方对应名单 */
+.kpi-card--link {
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.kpi-card--link:hover {
+  border-color: var(--color-brand);
+  box-shadow: var(--shadow-float);
+  transform: translateY(-1px);
+}
+
+.kpi-card--link:focus-visible {
+  outline: none;
+  border-color: var(--color-brand);
+  box-shadow: var(--ring-brand);
+}
+
+.kpi-card__more {
+  color: var(--color-text-brand);
+  white-space: nowrap;
+}
+
+/* 跳转落点高亮：只闪一次，不常驻 */
+@keyframes focusSectionFlash {
+  0% { box-shadow: 0 0 0 0 rgba(0, 79, 255, 0.34); }
+  55% { box-shadow: 0 0 0 7px rgba(0, 79, 255, 0.12); }
+  100% { box-shadow: var(--shadow-raised); }
+}
+
+.focus-section.is-flash {
+  animation: focusSectionFlash 1.8s var(--ease-standard);
 }
 
 /* 分区卡 */
@@ -1229,6 +1436,59 @@ button {
   font-size: 11px;
 }
 
+/* 结论正文：主句 + 补充说明（class 名沿用 diag- 前缀，实际由 focus-data.js 的「班级行动建议」使用） */
+.diag-decision {
+  font-size: var(--pr-fs-sm);
+  line-height: 1.8;
+  color: var(--color-text-body);
+}
+
+.diag-decision b {
+  color: var(--color-text-title);
+  font-weight: var(--pr-fw-semibold);
+}
+
+.diag-decision-note {
+  margin-top: 6px;
+  padding-left: 9px;
+  border-left: 2px solid var(--color-border-default);
+  font-size: var(--pr-fs-xs);
+  line-height: 1.7;
+  color: var(--color-text-secondary);
+}
+
+/* 证据徽章：3 份以上 / 2 份 / 1 份（A 最稳、C 只有 1 份） */
+.diag-evidence {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: var(--pr-fs-xs);
+  font-weight: var(--pr-fw-medium);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.diag-evidence--A {
+  color: var(--color-brand-deep);
+  background: var(--pr-blue-75);
+}
+
+.diag-evidence--B {
+  color: var(--pr-gray-600);
+  background: var(--pr-gray-100);
+}
+
+.diag-evidence--C {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+
+.diag-evidence--N {
+  padding: 0;
+  color: var(--color-text-muted);
+  background: transparent;
+}
+
 /* 紧凑表格 */
 .data-table--compact {
   table-layout: auto;
@@ -1250,6 +1510,11 @@ button {
   box-shadow: inset 3px 0 0 var(--color-brand);
 }
 
+/* 跨学科分析表同样用 is-top 标记本周最该补的那一科 */
+.data-table--compact tbody tr.is-top td:first-child {
+  box-shadow: inset 3px 0 0 var(--color-brand);
+}
+
 .th-sub {
   font-size: var(--pr-fs-xs);
   font-weight: var(--pr-fw-regular);
@@ -1261,6 +1526,57 @@ button {
   font-family: var(--pr-font-numeric);
   font-size: var(--pr-fs-xs);
   color: var(--color-text-muted);
+}
+
+/* 学生表补弱摘要：学科与原因一列说清，得分率下附班均，末列只留建议标签 */
+.data-table--heat .weak-subject-col,
+.data-table--heat .weak-subject-cell {
+  min-width: 250px;
+}
+
+.weak-subject__name,
+.weak-subject__reason,
+.weak-score__value,
+.weak-score__avg {
+  display: block;
+}
+
+.weak-subject__name {
+  color: var(--color-text-title);
+  font-weight: var(--pr-fw-semibold);
+}
+
+.weak-subject__reason {
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: var(--pr-fs-xs);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.data-table--heat .weak-score-col,
+.data-table--heat .weak-score-cell {
+  min-width: 96px;
+}
+
+.weak-score__value {
+  font-family: var(--pr-font-numeric);
+  font-weight: var(--pr-fw-semibold);
+}
+
+.weak-score__avg {
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-family: var(--pr-font-numeric);
+  font-size: var(--pr-fs-xs);
+  font-weight: var(--pr-fw-regular);
+  white-space: nowrap;
+}
+
+.data-table--heat .weak-tag-col,
+.data-table--heat .weak-tag-cell {
+  min-width: 96px;
+  white-space: nowrap;
 }
 
 .data-table td.cell-name {
@@ -1492,6 +1808,47 @@ button {
   color: var(--color-text-brand);
 }
 
+/* 优先巩固：与重点提升区分，只表达个人学习优先级，不使用危险色 */
+.tag--relative {
+  background: var(--pr-blue-75);
+  color: var(--color-brand-deep);
+}
+
+/* 天花板科目标记：小一号，不抢主体权重 */
+.tag--ceiling {
+  height: 18px;
+  padding: 0 6px;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  font-size: var(--pr-fs-xs);
+}
+
+/* KPI 由四卡改为三卡（废除补弱收益后合并两张同值卡） */
+.kpi-row--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* 热力格第三行状态小字：短板 / 低分 / 天花板 */
+.heat-cell em {
+  display: block;
+  font-style: normal;
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+
+.heat-cell.is-fail b {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.heat-cell.is-ceiling b,
+.heat-cell.is-ceiling span {
+  opacity: 0.55;
+}
+
 /* 行高亮：仅用于不带热力底色的表格 */
 .data-table--compact tbody tr.is-urgent td {
   background: var(--heat-n1-bg);
@@ -1530,6 +1887,11 @@ body.is-modal-open {
   border-radius: var(--pr-radius-lg);
   box-shadow: var(--shadow-float);
   overflow: hidden;
+}
+
+/* 弹窗 overflow:hidden 会裁掉上沿越界的徽章；改为视口定位，坐标由 JS 按弹窗实际位置写入 */
+.modal > .prd-badge {
+  position: fixed;
 }
 
 .modal__head {
@@ -1594,6 +1956,14 @@ body.is-modal-open {
   color: var(--color-text-title);
 }
 
+/* 标题内的括注：降字号、降字重、转次色，作为补充说明不抢标题 */
+.modal__subtitle-note {
+  margin-left: 2px;
+  font-size: var(--pr-fs-sm);
+  font-weight: var(--pr-fw-regular);
+  color: var(--color-text-muted);
+}
+
 .modal__subtitle-row {
   display: flex;
   align-items: center;
@@ -1616,12 +1986,6 @@ body.is-modal-open {
   align-items: center;
   flex-wrap: wrap;
   gap: var(--pr-space-4);
-}
-
-.modal__note {
-  margin: var(--pr-space-3) 0 0;
-  font-size: var(--pr-fs-xs);
-  color: var(--color-text-muted);
 }
 
 .modal__foot {
@@ -1722,3 +2086,14 @@ body.is-modal-open {
   font-size: var(--pr-fs-xs);
   color: var(--color-text-muted);
 }
+
+/* 批改率：未批完用警示色，全批完与其余元信息同色 */
+.task-item__rate {
+  font-weight: var(--pr-fw-semibold);
+  color: var(--color-text-body);
+}
+
+.task-item__rate.is-low {
+  color: var(--color-warning);
+}
+

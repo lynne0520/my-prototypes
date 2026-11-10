@@ -1,5 +1,5 @@
 /* ==========================================================================
-   学科侧重表 · Design Tokens
+   跨学科分析表 · Design Tokens
    三层架构：Primitive（原始值）→ Semantic（语义别名）→ Component（组件令牌）
    组件层只引用语义层，禁止裸 hex / rgba 硬编码。
    取值依据：对参考图（2000×1038）逐像素取样测得。
@@ -101,6 +101,8 @@
   --color-bg-sidebar: var(--pr-blue-20);
   --color-bg-sidebar-active: var(--pr-blue-80);
   --color-bg-brand-soft: var(--pr-blue-50);
+  --color-bg-brand-soft-hover: var(--pr-blue-100);
+  --color-bg-brand-soft-active: var(--pr-blue-200);
   --color-bg-disabled: var(--pr-gray-150);
 
   --color-text-title: var(--pr-gray-900);
@@ -201,14 +203,14 @@
   --link-fg-hover: var(--color-brand-strong);
   --link-fg-active: var(--color-brand);
 
-  /* 学科侧重 · 得分率条形图 */
+  /* 跨学科分析 · 得分率条形图 */
   --bar-track-bg: var(--pr-gray-100);
   --bar-fill-start: var(--pr-blue-300);
   --bar-fill-end: var(--color-brand);
   --bar-mark: var(--color-text-muted);
   --bar-height: 14px;
 
-  /* 学科侧重 · 卡片与紧凑表格 */
+  /* 跨学科分析 · 卡片与紧凑表格 */
   --focus-card-border: var(--pr-blue-75);
   --focus-cell-pad: var(--pr-space-2);
   --heat-cell-pad: 10px;

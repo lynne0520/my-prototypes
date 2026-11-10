@@ -1,5 +1,5 @@
 /* ==========================================================================
-   学科侧重表 · 交互逻辑
+   跨学科分析表 · 交互逻辑
    结构：数据层 → 状态层 → 渲染层 → 事件层
    ========================================================================== */
 (function () {
@@ -65,11 +65,12 @@
     { key: 'ex2', name: '期中考试', full: 120, factor: false }
   ];
 
+  /* 班级报告的左侧菜单：顺序即展示顺序（学情统计 → 提交汇总 → 跨学科分析） */
   var MENUS = {
     class: [
-      { key: 'focus', label: '学科侧重' },
       { key: 'stats', label: '学情统计' },
-      { key: 'submit', label: '提交汇总' }
+      { key: 'submit', label: '提交汇总' },
+      { key: 'focus', label: '跨学科分析' }
     ],
     school: [
       { key: 'schoolStats', label: '学科统计' },
@@ -102,6 +103,9 @@
 
   /* ==================== 2. 状态层 ==================== */
 
+  /* 预设区间的回诵天数：必须早于 state 初始化（makeScope 要用） */
+  var FOCUS_RANGE_DAYS = { today: 0, '3d': 2, '7d': 6, '14d': 13, '30d': 29 };
+
   var state = {
     topTab: 'class',      // school | class | track
     mode: 'homework',     // homework | exam
@@ -116,15 +120,9 @@
     sortKey: 'hw1',
     sortDir: 'asc',
 
-    /* 学科侧重视图：当日诊断（短期分诊，不做长期特质判断） */
-    focus: {
-      year: '2026-2027学年',
-      level: '高三',
-      clazz: '高三34班',
-      range: 'today',
-      start: FocusReport.TODAY,
-      end: FocusReport.TODAY,
-      tasks: {}            // 作业 id → 是否参与统计（无主次，可多份）
+    /* 跨学科视图的筛选口径：只剩跨学科分析一页（当日诊断，可按需改成近 3/7 天） */
+    scopes: {
+      focus: makeScope('today')
     }
   };
 
@@ -481,14 +479,15 @@
     renderSidebar();
 
     var isFocus = state.topTab === 'class' && state.view === 'focus';
-    $('#filtersClass').style.display = isFocus ? 'none' : '';
-    $('#panelClass').style.display = isFocus ? 'none' : '';
+    var isCross = isFocus;                               // 跨学科当日诊断：单学科筛选与统计表全部让位
+    $('#filtersClass').style.display = isCross ? 'none' : '';
+    $('#panelClass').style.display = isCross ? 'none' : '';
     $('#filtersFocus').style.display = isFocus ? '' : 'none';
     $('#panelFocus').style.display = isFocus ? '' : 'none';
-    $('#modeSegmented').style.display = isFocus ? 'none' : '';
+    $('#modeSegmented').style.display = isCross ? 'none' : '';
 
     if (isFocus) {
-      renderFocusFilters();
+      renderFilterBars();
       renderFocusReport();
     } else {
       renderFilters();
@@ -496,10 +495,14 @@
     }
   }
 
-  /* ==================== 4b. 学科侧重（当日诊断） ==================== */
+  /* ==================== 4b. 跨学科分析（当日诊断） ==================== */
 
-  var FOCUS_CLASSES = ['高三31班', '高三32班', '高三33班', '高三34班'];
-  var FOCUS_RANGE_DAYS = { today: 0, '7d': 6, '30d': 29 };
+  var FOCUS_CLASSES = ['高三31班', '高三32班', '高三33班', '高三34班', '高三35班'];
+
+  /* 跨学科分析筛选条只此一份：口径状态与页面结构一一对应 */
+  var FILTER_BARS = [
+    { key: 'focus', year: '#focusYear', levels: '#focusLevels', classes: '#focusClasses', echo: '#focusEcho' }
+  ];
 
   function shiftDate(iso, days) {
     var d = new Date(iso + 'T00:00:00');
@@ -509,24 +512,36 @@
     return d.getFullYear() + '-' + m + '-' + day;
   }
 
-  function focusHomeworks() {
-    var f = state.focus;
+  function makeScope(rangeKey) {
+    return {
+      year: '2026-2027学年',
+      level: '高三',
+      clazz: '高三34班',
+      range: rangeKey,
+      start: shiftDate(FocusReport.TODAY, -(FOCUS_RANGE_DAYS[rangeKey] || 0)),
+      end: FocusReport.TODAY,
+      tasks: {}            // 作业 id → 是否参与统计（无主次，可多份）
+    };
+  }
+
+  function scopeOf(key) {
+    return state.scopes[key] || state.scopes.focus;
+  }
+
+  function scopeHomeworks(s) {
     return FocusReport.HOMEWORKS.filter(function (hw) {
-      return hw.date >= f.start && hw.date <= f.end;
+      return hw.date >= s.start && hw.date <= s.end;
     });
   }
 
-  function initFocusTasks() {
+  function initScopeTasks(s) {
     FocusReport.HOMEWORKS.forEach(function (hw) {
-      if (!Object.prototype.hasOwnProperty.call(state.focus.tasks, hw.id)) {
-        state.focus.tasks[hw.id] = true;
-      }
+      if (!Object.prototype.hasOwnProperty.call(s.tasks, hw.id)) s.tasks[hw.id] = true;
     });
   }
 
-  function pickedHomeworks() {
-    var f = state.focus;
-    return focusHomeworks().filter(function (hw) { return f.tasks[hw.id]; });
+  function pickedHomeworks(s) {
+    return scopeHomeworks(s).filter(function (hw) { return s.tasks[hw.id]; });
   }
 
   function focusTimeText(f) {
@@ -538,12 +553,17 @@
     return focusTimeText(f);
   }
 
+  function scopeDays(f) {
+    var a = new Date(f.start + 'T00:00:00');
+    var b = new Date(f.end + 'T00:00:00');
+    return Math.max(1, Math.round((b - a) / 86400000) + 1);
+  }
+
   /* 页面只回显：时间 / 学科 / 作业数，其余全在弹窗里调 */
-  function focusEchoHTML() {
-    var f = state.focus;
-    var list = pickedHomeworks();
-    var names = FocusReport.SUBJECTS.filter(function (s) {
-      return list.some(function (hw) { return hw.subject === s; });
+  function focusEchoHTML(s) {
+    var list = pickedHomeworks(s);
+    var names = FocusReport.SUBJECTS.filter(function (sub) {
+      return list.some(function (hw) { return hw.subject === sub; });
     });
     var subText;
     if (!names.length) subText = '无';
@@ -551,7 +571,7 @@
     else subText = names.length + ' 个（' + names.join('、') + '）';
 
     return [
-      ['时间', focusEchoTime(f)],
+      ['时间', focusEchoTime(s)],
       ['学科', subText],
       ['作业', list.length + ' 份']
     ].map(function (it) {
@@ -559,28 +579,30 @@
     }).join('');
   }
 
-  function renderFocusFilters() {
-    var f = state.focus;
-    initFocusTasks();
+  function renderFilterBars() {
+    FILTER_BARS.forEach(function (bar) {
+      var f = scopeOf(bar.key);
+      initScopeTasks(f);
 
-    $('#focusYear').value = f.year;
+      $(bar.year).value = f.year;
+      $(bar.classes).innerHTML = FOCUS_CLASSES.map(function (c) {
+        return '<button class="link' + (c === f.clazz ? ' is-active' : '') +
+          '" type="button" data-clazz="' + c + '">' + c + '</button>';
+      }).join('');
+      $$(bar.levels + ' .chip').forEach(function (btn) {
+        btn.classList.toggle('is-active', btn.dataset.level === f.level);
+      });
+      $(bar.echo).innerHTML = focusEchoHTML(f);
+    });
 
-    $('#focusClasses').innerHTML = FOCUS_CLASSES.map(function (c) {
-      return '<button class="link' + (c === f.clazz ? ' is-active' : '') +
-        '" type="button" data-clazz="' + c + '">' + c + '</button>';
-    }).join('');
-
-    $('#focusEcho').innerHTML = focusEchoHTML();
-
-    var isToday = f.start === FocusReport.TODAY && f.end === FocusReport.TODAY;
-    $('#focusScope').textContent = (isToday ? '当日诊断 · ' : '诊断区间 · ') + focusTimeText(f);
-    $('#focusTitle').textContent = '学科侧重诊断——' + f.clazz;
+    var focusScope = scopeOf('focus');
+    $('#focusTitle').textContent = '跨学科分析诊断——' + focusScope.clazz;
   }
 
   /* ---------- 弹窗：时间范围 + 作业清单统一处理 ---------- */
 
   var focusDraft = null;   // 弹窗编辑态，点「应用筛选」才写回 state
-  var FOCUS_PRESETS = [['today', '今天'], ['7d', '近7天'], ['30d', '近30天'], ['custom', '自定义']];
+  var FOCUS_PRESETS = [['today', '今天'], ['3d', '近3天'], ['7d', '近7天'], ['14d', '近14天'], ['30d', '近30天'], ['custom', '自定义']];
 
   function draftHomeworks() {
     if (!focusDraft) return [];
@@ -617,7 +639,9 @@
               (focusDraft.tasks[hw.id] ? ' checked' : '') + ' />' +
             '<span class="checkbox__box"></span>' +
             '<span class="task-item__name">' + hw.name + '</span>' +
-            '<span class="task-item__meta">满分 ' + hw.full + ' · 应交 ' + hw.due + ' 人</span>' +
+            '<span class="task-item__meta">满分 ' + hw.full + ' · 已交 ' + hw.handed + '/' + hw.due +
+              ' 人 · 批改率 <b class="task-item__rate' + (hw.gradePct != null && hw.gradePct < 100 ? ' is-low' : '') + '">' +
+              (hw.gradePct == null ? '—' : hw.gradePct + '%') + '</b></span>' +
             '</label>';
         }).join('') +
         '</div>';
@@ -646,10 +670,20 @@
     updateFocusModalHint();
   }
 
-  function openFocusModal() {
-    var f = state.focus;
-    focusDraft = { range: f.range, start: f.start, end: f.end, tasks: {} };
-    initFocusTasks();
+  // 弹窗容器设了 overflow:hidden，上沿越界的徽章会被裁；改为视口定位并按弹窗实际位置同步
+  function placeFocusModalBadge() {
+    var modal = document.querySelector('#focusModal .modal');
+    var badge = modal && modal.querySelector('.prd-badge');
+    if (!modal || !badge) return;
+    var rect = modal.getBoundingClientRect();
+    badge.style.top = (rect.top - 10) + 'px';
+    badge.style.left = (rect.left + 10) + 'px';
+  }
+
+  function openFocusModal(scopeKey) {
+    var f = scopeOf(scopeKey);
+    focusDraft = { scopeKey: scopeKey, range: f.range, start: f.start, end: f.end, tasks: {} };
+    initScopeTasks(f);
     Object.keys(f.tasks).forEach(function (k) { focusDraft.tasks[k] = f.tasks[k]; });
 
     var presets = FOCUS_PRESETS.map(function (p) {
@@ -670,12 +704,11 @@
               '" aria-label="结束日期" />' +
           '</div>' +
         '</div>' +
-        '<p class="modal__note">预设区间以今天（' + FocusReport.TODAY +
-          '）为终点；自定义可直接改日期，起止颠倒会自动对调。</p>' +
       '</div>' +
       '<div class="modal__section">' +
         '<div class="modal__subtitle-row">' +
-          '<h3 class="modal__subtitle">作业清单（同一学科可多份，无主次）</h3>' +
+          '<h3 class="modal__subtitle">作业清单' +
+            '<span class="modal__subtitle-note">（同一学科支持选择多份作业）</span></h3>' +
           '<div class="modal__bulk">' +
             '<button class="link" type="button" data-modal-bulk="all">全选</button>' +
             '<button class="link" type="button" data-modal-bulk="none">清空</button>' +
@@ -687,6 +720,7 @@
     renderModalTasks();
     $('#focusModal').style.display = '';
     document.body.classList.add('is-modal-open');
+    placeFocusModalBadge();
   }
 
   function closeFocusModal() {
@@ -709,7 +743,7 @@
       toast('至少保留一份作业');
       return;
     }
-    var f = state.focus;
+    var f = scopeOf(focusDraft.scopeKey);
     f.range = focusDraft.range;
     f.start = focusDraft.start;
     f.end = focusDraft.end;
@@ -723,7 +757,8 @@
 
   function renderFocusReport() {
     var root = $('#focusRoot');
-    var hws = pickedHomeworks();
+    var f = scopeOf('focus');
+    var hws = pickedHomeworks(f);
 
     if (!hws.length) {
       root.innerHTML = '<div class="focus-section"><div class="empty-state">' +
@@ -733,7 +768,9 @@
 
     FocusReport.render(root, {
       homeworks: hws.map(function (hw) { return hw.id; }),
-      dateLabel: focusTimeText(state.focus)
+      dateLabel: focusTimeText(f),
+      start: f.start,
+      end: f.end
     });
   }
 
@@ -798,16 +835,16 @@
   }
 
   function exportFocusCsv() {
-    var f = state.focus;
-    var hws = pickedHomeworks();
+    var f = scopeOf('focus');
+    var hws = pickedHomeworks(f);
     if (!hws.length) {
       toast('未选择任何作业');
       return;
     }
     var rows = FocusReport.exportRows(hws.map(function (hw) { return hw.id; }));
-    rows.unshift(['学科侧重诊断 · ' + f.clazz, focusEchoTime(f),
-      hws.length + ' 份作业 · 学科得分率 = 各作业得分率的算术平均']);
-    downloadCsv(rows, '学科侧重_' + f.clazz + '_' + f.start +
+    rows.unshift(['跨学科分析 · 班级报表 · ' + f.clazz, focusEchoTime(f),
+      hws.length + ' 份作业 · 学科得分率 = 得分合计 ÷ 满分合计 · 当日/近3天证据 · 仅 1 份作业时只作临时建议']);
+    downloadCsv(rows, '跨学科分析_' + f.clazz + '_' + f.start +
       (f.start === f.end ? '' : '_' + f.end));
   }
 
@@ -947,36 +984,50 @@
     $('#exportBtn').addEventListener('click', exportCsv);
     $('#focusExport').addEventListener('click', exportFocusCsv);
 
-    /* ---------- 学科侧重：筛选层 ---------- */
+    /* ---------- 跨学科分析视图：筛选层（只有一份筛选条） ---------- */
 
-    $('#focusYear').addEventListener('change', function () {
-      state.focus.year = this.value;
-      toast('统计周期已切换为 ' + this.value);
-    });
+    FILTER_BARS.forEach(function (bar) {
+      $(bar.year).addEventListener('change', function () {
+        scopeOf(bar.key).year = this.value;
+        toast('统计周期已切换为 ' + this.value);
+      });
 
-    // 年级：演示数据仅覆盖高三34班
-    $('#focusLevels').addEventListener('click', function (e) {
-      var btn = e.target.closest('.chip');
-      if (!btn) return;
-      if (btn.dataset.level !== '高三') {
-        toast('演示数据仅覆盖高三34班');
-        return;
-      }
-      $$('#focusLevels .chip').forEach(function (b) {
-        b.classList.toggle('is-active', b === btn);
+      // 年级：演示数据仅覆盖高三年级
+      $(bar.levels).addEventListener('click', function (e) {
+        var btn = e.target.closest('.chip');
+        if (!btn) return;
+        if (btn.dataset.level !== '高三') {
+          toast('演示数据仅覆盖高三年级');
+          return;
+        }
+        scopeOf(bar.key).level = btn.dataset.level;
+        renderFilterBars();
+        toast('已切换至 ' + btn.dataset.level);
+      });
+
+      $(bar.classes).addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-clazz]');
+        if (!btn) return;
+        var clazz = btn.dataset.clazz;
+        if (clazz === scopeOf(bar.key).clazz) return;
+        if (!FocusReport.setDemoClass(clazz)) {
+          toast('演示数据仅覆盖高三34班与高三35班');
+          return;
+        }
+        scopeOf(bar.key).clazz = clazz;
+        scopeOf(bar.key).tasks = {};
+        render();
+        toast('已加载 ' + clazz + ' 的演示数据');
       });
     });
 
-    $('#focusClasses').addEventListener('click', function (e) {
-      var btn = e.target.closest('[data-clazz]');
-      if (!btn) return;
-      if (btn.dataset.clazz !== state.focus.clazz) {
-        toast('演示数据仅覆盖高三34班');
-      }
-    });
+    // 时间 / 作业统一在弹窗内处理：按钮写回跨学科分析的口径
+    $('#focusFilterBtn').addEventListener('click', function () { openFocusModal('focus'); });
 
-    // 时间 / 作业统一在弹窗内处理
-    $('#focusFilterBtn').addEventListener('click', openFocusModal);
+    // 视口变化时弹窗重新居中，需重算徽章坐标（仅弹窗可见时）
+    window.addEventListener('resize', function () {
+      if ($('#focusModal').style.display !== 'none') placeFocusModalBadge();
+    });
     $('#focusModalClose').addEventListener('click', closeFocusModal);
     $('#focusModalCancel').addEventListener('click', closeFocusModal);
     $('#focusModalApply').addEventListener('click', applyFocusModal);
