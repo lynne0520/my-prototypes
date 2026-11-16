@@ -1228,6 +1228,14 @@ button {
   color: var(--color-text-secondary);
 }
 
+/* 主值内两组计数之间的分隔点：降级为小字号 muted，避免 26px 粗体圆点过重 */
+.kpi-card__sep {
+  margin: 0 8px;
+  font-size: var(--pr-fs-sm);
+  font-weight: var(--pr-fw-regular);
+  color: var(--color-text-muted);
+}
+
 .kpi-card__sub {
   margin-top: 2px;
   font-size: var(--pr-fs-xs);
@@ -1591,6 +1599,11 @@ button {
   color: var(--color-text-muted);
 }
 
+/* 等级分档表头的得分率区间：不换行，避免「60–69.9%」被折成两行 */
+.th-sub--nowrap {
+  white-space: nowrap;
+}
+
 .cell-hint {
   margin-left: 4px;
   font-family: var(--pr-font-numeric);
@@ -1598,14 +1611,13 @@ button {
   color: var(--color-text-muted);
 }
 
-/* 学生表补弱摘要：学科与原因一列说清，得分率下附班均，末列只留建议标签 */
+/* 学生表建议摘要：建议学科列只显学科名（原因移入悬停提示），得分率下附班均，末列只留建议标签 */
 .data-table--heat .weak-subject-col,
 .data-table--heat .weak-subject-cell {
-  min-width: 250px;
+  min-width: 110px;
 }
 
 .weak-subject__name,
-.weak-subject__reason,
 .weak-score__value,
 .weak-score__avg {
   display: block;
@@ -1614,14 +1626,6 @@ button {
 .weak-subject__name {
   color: var(--color-text-title);
   font-weight: var(--pr-fw-semibold);
-}
-
-.weak-subject__reason {
-  margin-top: 4px;
-  color: var(--color-text-secondary);
-  font-size: var(--pr-fs-xs);
-  line-height: 1.4;
-  white-space: nowrap;
 }
 
 .data-table--heat .weak-score-col,
@@ -1737,6 +1741,7 @@ button {
 
 .data-table--heat thead tr:first-child th {
   height: 46px;
+  white-space: nowrap;
 }
 
 .data-table--heat tbody tr {
@@ -1922,6 +1927,23 @@ button {
 .heat-cell.is-ceiling b,
 .heat-cell.is-ceiling span {
   opacity: 0.55;
+}
+
+/* 黑白打印专用七档底色：屏幕上的红/绿语义色灰度值接近，黑白打印分不清；
+   打印时换成亮度单调递增的七档（越深 = 越低于班均，越浅 = 越高于班均），
+   并保留轻微暖/冷倾向，彩色打印仍能读出红绿语义；图例色块同步生效 */
+@media print {
+  :root {
+    --heat-n3-bg: #B9A6A6;
+    --heat-n2-bg: #C8B6B6;
+    --heat-n1-bg: #D7C6C6;
+    --heat-flat-bg: #D4D9E2;
+    --heat-p1-bg: #E3EDE5;
+    --heat-p2-bg: #EEF5EF;
+    --heat-p3-bg: #F9FCFA;
+    --heat-n3-fg: #6E1A1F;
+    --heat-n2-fg: #82252B;
+  }
 }
 
 /* 行高亮：仅用于不带热力底色的表格 */
@@ -2493,5 +2515,99 @@ body.is-modal-open {
 
 .focus-empty .btn {
   margin-top: var(--pr-space-6);
+}
+
+/* ==========================================================================
+   弹窗：导出格式选择（PDF / Excel）
+   ========================================================================== */
+
+.modal--export {
+  max-width: 680px;
+}
+
+.export-formats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--pr-space-4);
+}
+
+.export-format {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pr-space-3);
+  padding: var(--pr-space-4);
+  border: 1.5px solid var(--color-border-default);
+  border-radius: var(--pr-radius-md);
+  background: var(--color-bg-surface);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-standard), background 0.15s var(--ease-standard),
+    box-shadow 0.15s var(--ease-standard);
+}
+
+.export-format:hover {
+  border-color: var(--pr-blue-300);
+  background: var(--pr-gray-25);
+}
+
+.export-format input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.export-format.is-active {
+  border-color: var(--color-brand-solid);
+  background: var(--color-bg-brand-soft);
+  box-shadow: var(--ring-brand);
+}
+
+.export-format:focus-within {
+  outline: none;
+  box-shadow: var(--ring-brand);
+}
+
+.export-format__text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.export-format__name {
+  display: flex;
+  align-items: center;
+  gap: var(--pr-space-2);
+  font-size: var(--pr-fs-base);
+  font-weight: var(--pr-fw-semibold);
+  color: var(--color-text-title);
+}
+
+.export-format__check {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 0 var(--pr-radius-md) 0 var(--pr-radius-md);
+  background: var(--color-brand-solid);
+  color: var(--color-text-inverse);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.15s var(--ease-standard), transform 0.15s var(--ease-standard);
+}
+
+.export-format.is-active .export-format__check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media (max-width: 720px) {
+  .export-formats {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 

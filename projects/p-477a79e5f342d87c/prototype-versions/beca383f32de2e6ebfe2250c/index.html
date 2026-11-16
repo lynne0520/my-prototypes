@@ -506,7 +506,7 @@
                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 3.5v11M8 11l4 4 4-4M4.5 19.5h15" />
               </svg>
-              导出Excel
+              导出
             </button>
           </div>
         </div>
@@ -538,6 +538,54 @@
       <div class="modal__actions">
         <button class="btn btn--ghost" id="focusModalCancel" type="button">取消</button>
         <button class="btn btn--primary" id="focusModalApply" type="button">保存并应用</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 弹窗：导出格式选择（PDF / Excel） ============ -->
+<div class="modal-mask" id="exportModal" role="dialog" aria-modal="true"
+     aria-labelledby="exportModalTitle" style="display:none">
+  <div class="modal modal--export">
+    <div class="modal__head">
+      <div>
+        <h2 class="modal__title" id="exportModalTitle">选择导出格式</h2>
+        <p class="modal__desc" id="exportModalDesc">导出当前跨学科分析报表</p>
+      </div>
+      <button class="modal__close" id="exportModalClose" type="button" aria-label="关闭">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </div>
+    <div class="modal__body">
+      <div class="export-formats" id="exportFormats" role="radiogroup" aria-label="导出格式">
+        <label class="export-format is-active" data-format="pdf">
+          <input type="radio" name="exportFormat" value="pdf" checked />
+          <span class="export-format__text">
+            <span class="export-format__name">PDF 文档</span>
+          </span>
+          <span class="export-format__check" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
+                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+          </span>
+        </label>
+        <label class="export-format" data-format="excel">
+          <input type="radio" name="exportFormat" value="excel" />
+          <span class="export-format__text">
+            <span class="export-format__name">Excel 表格</span>
+          </span>
+          <span class="export-format__check" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
+                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+          </span>
+        </label>
+      </div>
+    </div>
+    <div class="modal__foot">
+      <span class="modal__hint" id="exportModalHint"></span>
+      <div class="modal__actions">
+        <button class="btn btn--ghost" id="exportModalCancel" type="button">取消</button>
+        <button class="btn btn--primary" id="exportModalApply" type="button">确认导出</button>
       </div>
     </div>
   </div>
