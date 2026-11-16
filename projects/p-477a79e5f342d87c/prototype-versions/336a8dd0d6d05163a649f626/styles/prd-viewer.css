@@ -828,7 +828,6 @@ body.prd-resizing * {
 #panelFocus .panel__actions,
 #focusHintSlot,
 #focusModal .modal,
-#focusRoot .diag-decision,
 #focusRoot .kpi-row,
 #focusRoot .focus-section {
     position: relative;

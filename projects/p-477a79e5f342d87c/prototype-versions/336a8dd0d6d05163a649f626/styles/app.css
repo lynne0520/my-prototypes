@@ -931,6 +931,79 @@ button {
   opacity: 0.5;
 }
 
+/* 学生姓名前「关注」小星星：未关注=灰色描边，点亮=琥珀色填充（无图标字体，内联 SVG） */
+.watch-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--pr-radius-sm);
+  background: transparent;
+  color: var(--pr-gray-300);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: color 0.18s var(--ease-standard), transform 0.18s var(--ease-standard);
+}
+
+.watch-star svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.watch-star:hover {
+  color: var(--color-warning);
+  transform: scale(1.15);
+}
+
+.watch-star.is-on {
+  color: var(--color-warning);
+}
+
+.watch-star.is-on svg {
+  fill: currentColor;
+  stroke-width: 1;
+}
+
+.watch-star:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-brand);
+}
+
+/* 姓名列：星标 + 姓名不换行 */
+.data-table--heat td.cell-name {
+  white-space: nowrap;
+}
+
+/* 「导出本表」：图标 + 文字、无边框的幽灵按钮 */
+.focus-export-stu {
+  gap: 5px;
+  border: 0;
+  color: var(--color-text-secondary);
+}
+
+.focus-export-stu svg {
+  flex: none;
+  stroke: currentColor;
+}
+
+.focus-export-stu:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-text-brand);
+}
+
+.focus-export-stu:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-brand);
+}
+
 /* 面板：内容自然堆叠，由 .content 承担滚动 */
 .panel--focus {
   display: block;
@@ -1002,21 +1075,6 @@ button {
   font-size: var(--pr-fs-sm);
   font-weight: var(--pr-fw-regular);
   white-space: nowrap;
-}
-
-/* 口径入口仅保留小问号图标：去掉文字与 26px 胶囊按钮外观 */
-.q-tip--icon-only {
-  width: 14px;
-  height: 14px;
-  margin-left: 0;
-  padding: 0;
-  border: 1px solid var(--pr-blue-200);
-  border-radius: 50%;
-  background: var(--color-bg-surface);
-  color: var(--color-text-brand);
-  font-family: var(--pr-font-numeric);
-  font-size: 10px;
-  font-weight: var(--pr-fw-semibold);
 }
 
 .q-tip__bubble {
@@ -1179,11 +1237,18 @@ button {
 
 /* 可点击的 KPI 卡：点击直达下方对应名单 */
 .kpi-card--link {
+  position: relative;
   cursor: pointer;
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
-.kpi-card--link:hover {
+/* hover 的 transform 会让卡片自成一个层叠上下文，口径气泡（z-index:80）
+   便只能排在卡片内部，被下方分区（.focus-section，z-index:auto）遮住。
+   故交互态把整张卡片抬到 10：低于顶栏 15/20 与 toast 60、遮罩 80，
+   高于表格吸顶表头 3，气泡可正常压在下方分区之上。 */
+.kpi-card--link:hover,
+.kpi-card--link:focus-within {
+  z-index: 10;
   border-color: var(--color-brand);
   box-shadow: var(--shadow-float);
   transform: translateY(-1px);
@@ -1272,6 +1337,11 @@ button {
   grid-template-columns: minmax(0, 1.5fr) minmax(330px, 1fr);
   gap: var(--pr-space-6);
   margin-bottom: var(--pr-space-5);
+}
+
+/* 诊断要点 aside 已取消：条形图独占整行 */
+.focus-split--full {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* 得分率条形图 */
@@ -1528,14 +1598,55 @@ button {
   color: var(--color-text-muted);
 }
 
-/* 学生表最后一列：标签下方跟一句人话建议，学生和家长只读这一句 */
-.cell-advice {
+/* 学生表补弱摘要：学科与原因一列说清，得分率下附班均，末列只留建议标签 */
+.data-table--heat .weak-subject-col,
+.data-table--heat .weak-subject-cell {
+  min-width: 250px;
+}
+
+.weak-subject__name,
+.weak-subject__reason,
+.weak-score__value,
+.weak-score__avg {
   display: block;
+}
+
+.weak-subject__name {
+  color: var(--color-text-title);
+  font-weight: var(--pr-fw-semibold);
+}
+
+.weak-subject__reason {
   margin-top: 4px;
-  max-width: 230px;
+  color: var(--color-text-secondary);
   font-size: var(--pr-fs-xs);
-  line-height: 1.45;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.data-table--heat .weak-score-col,
+.data-table--heat .weak-score-cell {
+  min-width: 96px;
+}
+
+.weak-score__value {
+  font-family: var(--pr-font-numeric);
+  font-weight: var(--pr-fw-semibold);
+}
+
+.weak-score__avg {
+  margin-top: 4px;
   color: var(--color-text-muted);
+  font-family: var(--pr-font-numeric);
+  font-size: var(--pr-fs-xs);
+  font-weight: var(--pr-fw-regular);
+  white-space: nowrap;
+}
+
+.data-table--heat .weak-tag-col,
+.data-table--heat .weak-tag-cell {
+  min-width: 96px;
+  white-space: nowrap;
 }
 
 .data-table td.cell-name {
@@ -1785,6 +1896,11 @@ button {
 /* KPI 由四卡改为三卡（废除补弱收益后合并两张同值卡） */
 .kpi-row--three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* 年级对比概览卡已取消：KPI 概览仅余两卡 */
+.kpi-row--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 /* 热力格第三行状态小字：短板 / 低分 / 天花板 */
@@ -2054,5 +2170,328 @@ body.is-modal-open {
 
 .task-item__rate.is-low {
   color: var(--color-warning);
+}
+
+/* ============ 分学科作业与判弱规则设置 ============ */
+#focusModal .modal {
+  max-width: 1060px;
+}
+
+#focusModal .modal__body {
+  padding-bottom: var(--pr-space-6);
+}
+
+.subject-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: var(--pr-space-2);
+  padding: var(--pr-space-1);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--pr-radius-md);
+  background: var(--color-bg-subtle);
+  overflow-x: auto;
+}
+
+.subject-tab {
+  flex: 1 0 132px;
+  min-height: 54px;
+  padding: 7px var(--pr-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--pr-radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.subject-tab span,
+.subject-tab small {
+  display: block;
+}
+
+.subject-tab span {
+  font-size: var(--pr-fs-base);
+  font-weight: var(--pr-fw-semibold);
+  color: var(--color-text-body);
+}
+
+.subject-tab small {
+  margin-top: 3px;
+  font-size: var(--pr-fs-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.subject-tab:hover {
+  background: var(--color-bg-brand-soft);
+}
+
+.subject-tab.is-active {
+  border-color: var(--focus-card-border);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-raised);
+}
+
+.subject-tab.is-active span,
+.subject-tab.is-active small {
+  color: var(--color-text-brand);
+}
+
+.subject-tab:focus-visible,
+.difficulty-btn:focus-visible,
+.rule-disclosure summary:focus-visible,
+.rule-field input:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-brand);
+}
+
+.subject-panel {
+  margin-top: var(--pr-space-4);
+}
+
+.subject-rules {
+  margin-top: var(--pr-space-4);
+  padding: var(--pr-space-4);
+  border: 1px solid var(--focus-card-border);
+  border-radius: var(--pr-radius-md);
+  background: var(--pr-blue-25);
+}
+
+.subject-rules__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--pr-space-4);
+}
+
+.subject-rules__head h4 {
+  margin: 0;
+  font-size: var(--pr-fs-base);
+  color: var(--color-text-title);
+}
+
+.subject-rules__head p {
+  margin: 4px 0 0;
+  font-size: var(--pr-fs-xs);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+.difficulty-row {
+  display: flex;
+  align-items: center;
+  gap: var(--pr-space-4);
+  margin-top: var(--pr-space-4);
+  padding-bottom: var(--pr-space-4);
+  border-bottom: 1px dashed var(--color-border-default);
+  font-size: var(--pr-fs-sm);
+  color: var(--color-text-body);
+}
+
+.difficulty-group {
+  display: inline-flex;
+  gap: var(--pr-space-1);
+  padding: 3px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--pr-radius-sm);
+  background: var(--color-bg-surface);
+}
+
+.difficulty-btn {
+  min-width: 72px;
+  height: 32px;
+  padding: 0 var(--pr-space-3);
+  border: 0;
+  border-radius: var(--pr-radius-xs);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: var(--pr-fs-sm);
+  cursor: pointer;
+}
+
+.difficulty-btn:hover {
+  background: var(--color-bg-brand-soft);
+  color: var(--color-text-brand);
+}
+
+.difficulty-btn.is-active {
+  background: var(--color-brand-solid);
+  color: var(--color-text-inverse);
+  font-weight: var(--pr-fw-medium);
+}
+
+.rule-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--pr-space-3) var(--pr-space-5);
+  margin-top: var(--pr-space-4);
+}
+
+.rule-field {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(150px, 1fr);
+  align-items: center;
+  gap: 5px var(--pr-space-3);
+  min-width: 0;
+}
+
+.rule-field__label {
+  font-size: var(--pr-fs-sm);
+  font-weight: var(--pr-fw-medium);
+  color: var(--color-text-body);
+}
+
+.rule-field__control {
+  display: flex;
+  align-items: center;
+  gap: var(--pr-space-2);
+  min-width: 0;
+  font-size: var(--pr-fs-xs);
+  color: var(--color-text-muted);
+}
+
+.rule-field input {
+  width: 84px;
+  height: 34px;
+  padding: 0 var(--pr-space-2);
+  border: 1px solid var(--input-border);
+  border-radius: var(--pr-radius-sm);
+  background: var(--input-bg);
+  color: var(--input-fg);
+  font-family: var(--pr-font-numeric);
+  font-size: var(--pr-fs-sm);
+}
+
+.rule-field input:disabled {
+  border-color: var(--color-border-default);
+  background: var(--color-bg-disabled);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  opacity: 1;
+  -webkit-text-fill-color: var(--color-text-muted);
+}
+
+.rule-field.is-locked .rule-field__label {
+  color: var(--color-text-muted);
+}
+
+.rule-field__note {
+  grid-column: 1 / -1;
+  font-size: var(--pr-fs-xs);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.rule-disclosure {
+  margin-top: var(--pr-space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--pr-radius-sm);
+  background: var(--color-bg-surface);
+}
+
+.rule-disclosure summary {
+  display: flex;
+  align-items: center;
+  gap: var(--pr-space-3);
+  padding: var(--pr-space-3) var(--pr-space-4);
+  border-radius: var(--pr-radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--pr-fs-sm);
+  font-weight: var(--pr-fw-medium);
+  cursor: pointer;
+  list-style: none;
+}
+
+.rule-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.rule-disclosure summary::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 150ms ease;
+}
+
+.rule-disclosure[open] summary::before {
+  transform: rotate(45deg);
+}
+
+.rule-disclosure summary > span {
+  flex: 1;
+}
+
+.rule-disclosure summary small {
+  color: var(--color-text-muted);
+  font-size: var(--pr-fs-xs);
+  font-weight: var(--pr-fw-regular);
+}
+
+.rule-disclosure summary:hover {
+  color: var(--color-text-brand);
+}
+
+.rule-disclosure__body {
+  padding: 0 var(--pr-space-4) var(--pr-space-4);
+}
+
+.rule-error {
+  min-height: 18px;
+  margin-top: var(--pr-space-2);
+  color: var(--color-danger);
+  font-size: var(--pr-fs-xs);
+}
+
+.modal-hint-warning {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-warning);
+}
+
+/* 有效学科不足时的缺省页 */
+.focus-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 440px;
+  padding: var(--pr-space-10);
+  text-align: center;
+}
+
+.focus-empty__icon {
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  margin-bottom: var(--pr-space-5);
+  border-radius: 50%;
+  background: var(--color-bg-brand-soft);
+  color: var(--color-text-brand);
+}
+
+.focus-empty h2 {
+  margin: 0;
+  font-size: var(--pr-fs-xl);
+  color: var(--color-text-title);
+}
+
+.focus-empty p {
+  margin: var(--pr-space-3) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--pr-fs-base);
+}
+
+.focus-empty p b {
+  color: var(--color-text-brand);
+}
+
+.focus-empty .btn {
+  margin-top: var(--pr-space-6);
 }
 

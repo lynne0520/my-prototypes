@@ -5,17 +5,15 @@
      1) index.html → 左侧【跨学科分析】视图（壳页负责筛选，本文件只渲染报表主体）
      2) 高三34班_跨学科分析报表_最近批改.html → 独立可分享报表
 
-   v4 绝对弱 / 相对弱双层版：
+   v5 逐学科可配置规则版：
      1. 聚合：学科得分率 = Σ(各作业得分) / Σ(各作业满分)，按满分加权；
-        班级与年级使用同一作业集合、同一权重，缺交不按 0 分。
+        班级与学科组使用同一作业集合、同一权重，缺交不按 0 分。
      2. 证据：A≥3 份 / B=2 份 / C=1 份；C 级只给临时建议。
         当前决策只使用当日或近 3 天证据，更长窗口保留展示但只做趋势复核。
-     3. 班级绝对弱两条通道：低分人数占比 ≥30%、
-        班均未达 85% 且连续两次低于年级 5 个百分点；证据不足时标「待确认」。
-        班级相对弱 = 班均未达 85% 且低于年级、但未达绝对弱条件的科，按差距排序。
-        页面只呈现绝对弱 / 相对弱清单及判定依据。
-     4. 学生绝对弱：低分（<60%），或未达 85% 且低于班均 10 个百分点，
-        先比是否低分再比偏离程度；学生相对弱仍按偏离刻度兜底为「优先巩固」。
+     3. 每科独立设置达标线、低分线、班级/学生差距线、低分面、未交率闸门与确认次数；
+        未设置时使用常规默认值，难度预设只带入达标线与低分线。
+     4. 班级明确短板由低分面或连续班均差通道触发；学生重点提升由绝对低分或相对偏低触发。
+        所有判定、热力色阶、建议与导出均读取本科实际规则，而非全局固定阈值。
      5. 标准差只作「学生分化」展示，不参与判定；P75 ≥95% 的科目仍标「满分区」，
         但不再享有跳过判定的豁免，避免高分区里的低分学生被漏掉。
 
@@ -36,7 +34,7 @@
   /* 演示数据开关：true 时逐作业得分率由学科基准率对称拆分生成（非真实观测） */
   var DEMO = true;
 
-  /* 等级分档（均按得分率百分比）：优 ≥85% / 良 70~84% / 中 60~69% / 低分 <60% */
+  /* 展示分档：优 ≥85% / 良 70~84% 固定；中/低分以逐科低分线为界。 */
   var CUT = { excellent: 85, good: 70, pass: 60 };
 
   /* 演示数据拆分幅度：第一份整体偏高、第二份对称下压，保证按满分加权后仍等于基准率 */
@@ -46,13 +44,12 @@
   var CEILING_P75 = 95;
 
   /*
-    暂行教学口径（尚无教研校准，数值取保守、可解释的起始值）：
-      · 学生提醒线：固定 10 个百分点，仅当个人得分率未达 85% 时用于相对判弱；
-      · 学生低分线：得分率 <60%，不受 85% 闸门限制；
-      · 班级判弱线：固定 5 个百分点，要求班均未达 85% 且最近两次作业连续同向；
-      · 低分面：得分率 <60% 的学生占比 ≥30%，独立判为绝对弱。
+    常规默认教学口径（尚无教研校准，教师可按学科调整）：
+      · 达标线 85%、学生低分线 60%、学生提醒线 10 个百分点；
+      · 班级判弱线 5 个百分点、连续确认 2 次；
+      · 低分面 30%、未交率闸门 30%。
     标准差只保留为“学生分化”展示指标，不参与任何判定。
-    10 / 5 / 30 是便于教师理解和后续回测的暂行阈值，不是统计定律。
+    这些默认值是便于教师理解和后续回测的暂行阈值，不是统计定律。
   */
   var STUDENT_TRIGGER_PP = 10;
   var CLASS_ACTION_PP = 5;
@@ -61,20 +58,97 @@
   var SUBMIT_Q_HIGH = 0.30;
   var RECENT_LOOKBACK_DAYS = 2;             // 今天 + 向前 2 天 = 近 3 天
 
+  /* 教师可调的逐学科规则：预设只负责带入数值，任何手动修改都标为自定义。 */
+  var DIFFICULTY_PRESETS = {
+    normal: { label: '常规', targetLine: 85, lowLine: 60 },
+    hard: { label: '偏难', targetLine: 75, lowLine: 50 },
+    easy: { label: '偏易', targetLine: 90, lowLine: 65 }
+  };
+  var SUBJECT_RULES = {};
+
+  function numberOr(v, fallback, min, max) {
+    var n = typeof v === 'number' ? v : parseFloat(v);
+    if (!isNum(n)) n = fallback;
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function normalizeRule(patch) {
+    patch = patch || {};
+    var difficulty = patch.difficulty || 'normal';
+    var preset = DIFFICULTY_PRESETS[difficulty] || DIFFICULTY_PRESETS.normal;
+    var targetLine = numberOr(patch.targetLine, preset.targetLine, 1, 100);
+    var lowLine = numberOr(patch.lowLine, preset.lowLine, 1, 69);
+    if (lowLine >= targetLine) lowLine = Math.max(1, Math.min(69, targetLine - 1));
+    return {
+      difficulty: difficulty,
+      targetLine: targetLine,
+      lowLine: lowLine,
+      classGap: numberOr(patch.classGap, CLASS_ACTION_PP, 1, 30),
+      studentGap: numberOr(patch.studentGap, STUDENT_TRIGGER_PP, 1, 30),
+      lowShare: numberOr(patch.lowShare, CLASS_LOW_SHARE_MIN * 100, 1, 100),
+      missingRate: numberOr(patch.missingRate, SUBMIT_Q_HIGH * 100, 0, 100),
+      confirmTimes: Math.round(numberOr(patch.confirmTimes, CLASS_CONFIRM_TIMES, 1, 5))
+    };
+  }
+
+  function ruleFor(subject) {
+    return normalizeRule(SUBJECT_RULES[subject]);
+  }
+
+  function difficultyLabel(rule) {
+    var preset = DIFFICULTY_PRESETS[rule.difficulty];
+    return preset ? preset.label : '自定义';
+  }
+
+  function configureRules(map) {
+    SUBJECT_RULES = {};
+    map = map || {};
+    Object.keys(map).forEach(function (subject) {
+      if (SUBJECTS.indexOf(subject) >= 0) SUBJECT_RULES[subject] = normalizeRule(map[subject]);
+    });
+  }
+
+  function getRules() {
+    var map = {};
+    SUBJECTS.forEach(function (subject) { map[subject] = ruleFor(subject); });
+    return map;
+  }
+
+  function getRulePreset(difficulty, current) {
+    var rule = normalizeRule(current);
+    var preset = DIFFICULTY_PRESETS[difficulty];
+    if (!preset) {
+      rule.difficulty = 'custom';
+      return rule;
+    }
+    rule.difficulty = difficulty;
+    rule.targetLine = preset.targetLine;
+    rule.lowLine = preset.lowLine;
+    return normalizeRule(rule);
+  }
+
+  function rulesText(all) {
+    return all.map(function (s) {
+      return s.name + '（' + difficultyLabel(s.rule) + '：达标 ' + f1(s.targetLine) +
+        '%，低分 ' + f1(s.lowLine) + '%，班级差 ' + f1(s.actionLine) +
+        ' 个百分点，学生差 ' + f1(s.trigger) + ' 个百分点）';
+    }).join('；');
+  }
+
   /*
     当日作业清单：同一学科可多份，作业之间无主次。
-    gradeRate = 该校该作业的年级得分率（与班均同一套作业口径；真实接入时由平台提供）。
+    gradeRate = 该校该作业的学科组得分率（与班均同一套作业口径；真实接入时由平台提供）。
   */
   var HOMEWORKS = [
-    { id: 'yw1', subject: '语文', name: '知识清单1（文言实词与病句）', full: 40, due: 37, handed: 37, date: TODAY, graded: '11-05 12:20', gradeRate: 79.4 },
-    { id: 'yw2', subject: '语文', name: '古诗文默写（第3单元）', full: 20, due: 37, handed: 35, date: TODAY, graded: '11-05 12:35', gradeRate: 76.7 },
-    { id: 'sx1', subject: '数学', name: '高三数学周末测试（五）2026.11.02', full: 60, due: 37, handed: 37, date: TODAY, graded: '11-05 08:15', gradeRate: 76.4 },
-    { id: 'sx2', subject: '数学', name: '课堂限时练（导数应用）', full: 30, due: 37, handed: 37, date: TODAY, graded: '11-05 08:20', gradeRate: 74.6 },
-    { id: 'yy1', subject: '英语', name: '读后续写（二稿）', full: 25, due: 37, handed: 36, date: TODAY, graded: '11-05 21:40', gradeRate: 86.2 },
-    { id: 'yy2', subject: '英语', name: '听力42', full: 30, due: 37, handed: 34, date: TODAY, graded: '11-05 09:05', gradeRate: 89.5 },
-    { id: 'wl1', subject: '物理', name: '第九章 作业1 库仑定律 电场强度', full: 40, due: 37, handed: 37, date: TODAY, graded: '11-05 14:30', gradeRate: 74.4 },
-    { id: 'hx1', subject: '化学', name: '10月19日化学作业答题纸（电化学）', full: 50, due: 37, handed: 37, date: TODAY, graded: '11-05 16:05', gradeRate: 71.2 },
-    { id: 'sw1', subject: '生物', name: '限时练三（遗传规律）', full: 40, due: 37, handed: 37, date: TODAY, graded: '11-05 19:50', gradeRate: 78.0 }
+    { id: 'yw1', subject: '语文', name: '知识清单1（文言实词与病句）', full: 40, due: 37, handed: 37, date: TODAY, scannedAt: '11-05 12:20', gradeRate: 79.4 },
+    { id: 'yw2', subject: '语文', name: '古诗文默写（第3单元）', full: 20, due: 37, handed: 35, date: TODAY, scannedAt: '11-05 12:35', gradeRate: 76.7 },
+    { id: 'sx1', subject: '数学', name: '高三数学周末测试（五）2026.11.02', full: 60, due: 37, handed: 37, date: TODAY, scannedAt: '11-05 08:15', gradeRate: 76.4 },
+    { id: 'sx2', subject: '数学', name: '课堂限时练（导数应用）', full: 30, due: 37, handed: 37, date: TODAY, scannedAt: '11-05 08:20', gradeRate: 74.6 },
+    { id: 'yy1', subject: '英语', name: '读后续写（二稿）', full: 25, due: 37, handed: 36, date: TODAY, scannedAt: '11-05 21:40', gradeRate: 86.2 },
+    { id: 'yy2', subject: '英语', name: '听力42', full: 30, due: 37, handed: 34, date: TODAY, scannedAt: '11-05 09:05', gradeRate: 89.5 },
+    { id: 'wl1', subject: '物理', name: '第九章 作业1 库仑定律 电场强度', full: 40, due: 37, handed: 37, date: TODAY, scannedAt: '11-05 14:30', gradeRate: 74.4 },
+    { id: 'hx1', subject: '化学', name: '10月19日化学作业答题纸（电化学）', full: 50, due: 37, handed: 37, date: TODAY, scannedAt: '11-05 16:05', gradeRate: 71.2 },
+    { id: 'sw1', subject: '生物', name: '限时练三（遗传规律）', full: 40, due: 37, handed: 37, date: TODAY, scannedAt: '11-05 19:50', gradeRate: 78.0 }
   ];
 
   /* 逐生学科基准得分率（%）：学号 / 姓名 / 语 数 英 物 化 生；null = 该科未交或未批改 */
@@ -118,23 +192,130 @@
     ['43406', '马文祺', 82.3, 86.7, 90.0, 83.3, 73.1, 84.7]
   ];
 
+  /*
+    演示班级二：高三35班（弱科示例），40 人。
+    常规默认规则下，语文、数学各有 13 人得分率低于 60%，低分面分别为 32.5% 与 35%；
+    两科班均同时低于同卷学科组 5 个百分点以上，因此都稳定触发班级明确短板。
+    其余四科班均高于学科组，保留一组正常对照。
+  */
+  var CLASS35_ROWS = [
+    ['43501', '赵子航', 52, 49, 87, 77, 71, 80],
+    ['43502', '林雨桐', 55, 51, 90, 80, 74, 84],
+    ['43503', '周嘉禾', 58, 53, 93, 75, 69, 77],
+    ['43504', '吴思远', 53, 55, 86, 82, 76, 86],
+    ['43505', '陈可欣', 56, 49, 89, 78, 72, 79],
+    ['43506', '王子墨', 59, 51, 92, 84, 78, 83],
+    ['43507', '李雨泽', 54, 53, 95, 76, 70, 81],
+    ['43508', '张若熙', 57, 55, 88, 81, 75, 85],
+    ['43509', '刘博文', 52, 49, 91, 79, 73, 78],
+    ['43510', '杨欣怡', 55, 51, 94, 83, 77, 84],
+    ['43511', '黄浩宇', 58, 53, 97, 77, 71, 82],
+    ['43512', '徐嘉宁', 53, 55, 89, 82, 76, 86],
+    ['43513', '孙一诺', 56, 49, 92, 78, 72, 80],
+    ['43514', '马晨曦', 62, 59, 88, 80, 74, 81],
+    ['43515', '朱语涵', 68, 65, 91, 76, 70, 78],
+    ['43516', '胡俊熙', 74, 71, 94, 82, 76, 86],
+    ['43517', '郭雨欣', 80, 77, 86, 74, 68, 76],
+    ['43518', '何宇航', 86, 83, 89, 79, 73, 82],
+    ['43519', '高梦琪', 65, 60, 92, 81, 75, 85],
+    ['43520', '罗子涵', 71, 66, 95, 77, 71, 79],
+    ['43521', '郑天佑', 77, 72, 87, 83, 77, 87],
+    ['43522', '梁怡然', 83, 78, 90, 75, 69, 77],
+    ['43523', '谢承泽', 89, 84, 93, 80, 74, 83],
+    ['43524', '宋佳宁', 63, 61, 96, 82, 76, 86],
+    ['43525', '唐子轩', 69, 67, 88, 78, 72, 80],
+    ['43526', '韩雨晨', 75, 73, 91, 84, 78, 88],
+    ['43527', '曹欣然', 81, 79, 94, 76, 70, 78],
+    ['43528', '许嘉豪', 87, 85, 97, 81, 75, 84],
+    ['43529', '邓思琪', 66, 62, 89, 77, 71, 80],
+    ['43530', '冯宇辰', 72, 68, 92, 83, 77, 87],
+    ['43531', '曾雅涵', 78, 74, 95, 79, 73, 82],
+    ['43532', '彭子睿', 84, 80, 98, 85, 79, 89],
+    ['43533', '吕梦瑶', 90, 86, 90, 75, 69, 77],
+    ['43534', '苏浩宇', 64, 63, 93, 80, 74, 83],
+    ['43535', '卢欣妍', 70, 69, 96, 82, 76, 86],
+    ['43536', '蒋文博', 76, 75, 88, 78, 72, 79],
+    ['43537', '蔡雨桐', 82, 81, 91, 84, 78, 88],
+    ['43538', '贾子聪', 88, 87, 94, 76, 70, 78],
+    ['43539', '丁佳怡', 67, 64, 87, 81, 75, 84],
+    ['43540', '魏晨阳', 73, 70, 90, 79, 73, 82]
+  ];
+
+  /* 原始演示班快照：切回高三34班时恢复，不让班级切换污染基准数据 */
+  var CLASS34_HOMEWORKS = cloneHomeworks(HOMEWORKS);
+  var CLASS34_ROWS = cloneRows(ROWS);
+
   var STUDENTS = [];
   var HW_BY_SUBJECT = {};
 
   /* 作业行展示口径：已批改份数 = 该作业所属学科逐生得分率的有效人次（有分数即已批改），
-     与学科统计表「提交」列同源，避免弹窗与报表出现两套人数；handed 为平台已交人次，缺省按应交人数兜底。 */
+     与学科统计表「提交」列同源，避免弹窗与报表出现两套人数；handed 为平台已交人次，缺省按应交人数兜底。
+     已批改份数必须单独存放，不能覆盖 scannedAt，否则作业列表会把人数当成扫描时间显示。 */
   function attachHomeworkStats() {
     HOMEWORKS.forEach(function (hw) {
       var col = SUBJECTS.indexOf(hw.subject);
-      var graded = 0;
+      var gradedCount = 0;
       if (col >= 0) {
-        ROWS.forEach(function (row) { if (isNum(row[2 + col])) graded += 1; });
+        ROWS.forEach(function (row) { if (isNum(row[2 + col])) gradedCount += 1; });
       }
       var handed = isNum(hw.handed) ? hw.handed : hw.due;
-      hw.graded = graded;
-      hw.handed = Math.max(graded, handed);
-      hw.gradePct = hw.handed ? Math.round(graded / hw.handed * 100) : null;
+      /* 兼容旧数据契约：历史字段 graded 曾是时间字符串 */
+      if (!hw.scannedAt && typeof hw.graded === 'string') hw.scannedAt = hw.graded;
+      hw.gradedCount = gradedCount;
+      hw.handed = Math.max(gradedCount, handed);
+      hw.gradePct = hw.handed ? Math.round(gradedCount / hw.handed * 100) : null;
     });
+  }
+
+  function cloneHomeworks(list) {
+    return list.map(function (hw) {
+      var copy = {};
+      Object.keys(hw).forEach(function (k) { copy[k] = hw[k]; });
+      return copy;
+    });
+  }
+
+  function cloneRows(rows) {
+    return rows.map(function (row) {
+      return row.map(function (cell) {
+        if (!cell || typeof cell !== 'object') return cell;
+        var copy = {};
+        Object.keys(cell).forEach(function (k) { copy[k] = cell[k]; });
+        return copy;
+      });
+    });
+  }
+
+  function class35Homeworks() {
+    return cloneHomeworks(CLASS34_HOMEWORKS).map(function (hw) {
+      hw.due = 40;
+      hw.handed = 40;
+      return hw;
+    });
+  }
+
+  function demoClassData(clazz) {
+    if (clazz === '高三34班') {
+      return { homeworks: cloneHomeworks(CLASS34_HOMEWORKS), rows: cloneRows(CLASS34_ROWS) };
+    }
+    if (clazz === '高三35班') {
+      return { homeworks: class35Homeworks(), rows: cloneRows(CLASS35_ROWS) };
+    }
+    if (clazz === '高三36班') {
+      /* 缺省示例：只有语文、英语两科有作业，其余学科无成绩。 */
+      var allowed = ['语文', '英语'];
+      var homeworks = cloneHomeworks(CLASS34_HOMEWORKS).filter(function (hw) {
+        return allowed.indexOf(hw.subject) >= 0;
+      });
+      var rows = cloneRows(CLASS34_ROWS).map(function (row) {
+        SUBJECTS.forEach(function (subject, i) {
+          if (allowed.indexOf(subject) < 0) row[2 + i] = null;
+        });
+        return row;
+      });
+      return { homeworks: homeworks, rows: rows };
+    }
+    return null;
   }
 
   function buildStudents() {
@@ -166,8 +347,21 @@
 
   rebuildHwIndex();
 
+  /* 学生「关注」星标：本地持久化；file:// 下 localStorage 可能受限，全程 try/catch 兜底 */
+  var WATCH_KEY = 'xkFocusWatched_v1';
+  function loadWatched() {
+    try {
+      var raw = window.localStorage.getItem(WATCH_KEY);
+      var obj = raw ? JSON.parse(raw) : {};
+      return obj && typeof obj === 'object' ? obj : {};
+    } catch (e) { return {}; }
+  }
+  function saveWatched(map) {
+    try { window.localStorage.setItem(WATCH_KEY, JSON.stringify(map)); } catch (e) {}
+  }
+
   /* 模块内 UI 状态（两处引用各自独立，互不影响） */
-  var ui = { weakOnly: false };
+  var ui = { weakOnly: false, watched: loadWatched() };
   var lastRender = null;
 
   /* ==================== 2. 工具函数 ==================== */
@@ -263,7 +457,7 @@
     return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
   }
 
-  /* 离均差热力分档：统一以 10 个百分点为刻度，与固定学生提醒线同源。 */
+  /* 离均差热力分档：每科以自己的学生提醒线 t 为刻度。 */
   function heatClass(d, t) {
     if (!isNum(d) || !isNum(t)) return 'heat-na';
     if (d <= -3 * t) return 'heat-n3';
@@ -325,10 +519,10 @@
 
   /*
     班级弱科证据：从最近一次作业向前数，连续有多少次同时满足
-    「该次班均 <85%」且「比同卷年级低 ≥5 个百分点」。
+    「该次班均未达本科达标线」且「比同卷学科组低至少本科班级差距线」。
     同日作业没有更细时间时按当前作业顺序判断；中间断一次即停止。
   */
-  function classActionStreak(list, hwMap) {
+  function classActionStreak(list, hwMap, rule) {
     var ordered = list.slice().sort(function (a, b) {
       if (a.date === b.date) return list.indexOf(a) - list.indexOf(b);
       return a.date < b.date ? -1 : 1;
@@ -338,7 +532,7 @@
       var hw = ordered[i];
       var rate = hwMap[hw.id];
       var hit = isNum(rate) && isNum(hw.gradeRate) &&
-        rate < CUT.excellent && hw.gradeRate - rate >= CLASS_ACTION_PP;
+        rate < rule.targetLine && hw.gradeRate - rate >= rule.classGap;
       if (!hit) break;
       streak++;
     }
@@ -350,6 +544,7 @@
   function computeSubject(subject, ids) {
     var list = selectedHomeworks(ids).filter(function (h) { return h.subject === subject; });
     if (!list.length) return null;
+    var rule = ruleFor(subject);
 
     /* 作业级：各作业的班级平均得分率（人次不计缺交，分母随有效人次缩减） */
     var hwMap = {};
@@ -378,7 +573,7 @@
     /* 严格按有效提交 pooled：Σ(得分率×满分) / Σ满分，缺交不进入分母 */
     var avg = validFullSum ? classRateSum / validFullSum : null;
 
-    /* 年级均使用同一作业、同一有效人次×满分权重，避免缺交造成两侧权重不同源 */
+    /* 学科组均使用同一作业、同一有效人次×满分权重，避免缺交造成两侧权重不同源 */
     var gradeAvg = weightedMean(list.map(function (hw) {
       return { v: hw.gradeRate, w: hw.full * (hwCounts[hw.id] || 0) };
     }));
@@ -414,30 +609,36 @@
     stuRates.forEach(function (v) {
       if (v >= CUT.excellent) dist.ex++;
       else if (v >= CUT.good) dist.good++;
-      else if (v >= CUT.pass) dist.pass++;
+      else if (v >= rule.lowLine) dist.pass++;
       else dist.weak++;
     });
 
     /* 天花板：P75 触及计分上限附近，剩余差异主要来自赋分颗粒度，不能用来判短板 */
     var exempt = isNum(p75) && p75 >= CEILING_P75;
 
-    /* 固定提醒线只表示“低多少个百分点值得提醒”，实际还要通过 85% 绝对闸门。 */
-    var trigger = STUDENT_TRIGGER_PP;
+    /* 学生提醒线只表示相对差距，实际还要通过本科达标线闸门。 */
+    var trigger = rule.studentGap;
 
     var diff = isNum(avg) && isNum(gradeAvg) ? avg - gradeAvg : null;
 
     /*
-      班级判弱线固定 5 个百分点；actionRatio 仅表达差距相对判弱线的倍数，
-      是否判为绝对弱还要看班均是否未达 85%、以及最近两次是否连续同向。
+      actionRatio 仅表达差距相对本科班级判弱线的倍数；是否判为明确短板，
+      还要看班均是否未达本科达标线、以及连续同向次数是否达到本科要求。
     */
-    var actionLine = CLASS_ACTION_PP;
-    var actionStreak = classActionStreak(list, hwMap);
-    var actionConfirmed = actionStreak >= CLASS_CONFIRM_TIMES;
+    var actionLine = rule.classGap;
+    var actionStreak = classActionStreak(list, hwMap, rule);
+    var actionConfirmed = actionStreak >= rule.confirmTimes;
     var belowGrade = isNum(diff) && diff < 0 ? -diff : 0;
     var actionRatio = belowGrade > 0 ? belowGrade / actionLine : null;
 
     return {
       name: subject,
+      rule: rule,
+      targetLine: rule.targetLine,
+      lowLine: rule.lowLine,
+      lowShareMin: rule.lowShare / 100,
+      missingLimit: rule.missingRate / 100,
+      confirmTimes: rule.confirmTimes,
       n: n,
       hwCount: list.length,
       list: list,
@@ -477,37 +678,37 @@
     }).filter(Boolean);
   }
 
-  /* 参与班级比较的学科：有同卷年级均即可；是否判弱另由绝对闸门判定 */
+  /* 参与班级比较的学科：有同卷学科组均即可；是否判弱另由绝对闸门判定 */
   function rankable(shown) {
     return shown.filter(function (s) { return isNum(s.diff); });
   }
 
-  /* 班均差通道：班均未达 85%，且比同卷年级低至少 5 个百分点。 */
+  /* 班均差通道：班均未达本科达标线，且比同卷学科组低至少本科班级差距线。 */
   function classGapHit(s) {
-    return isNum(s.avg) && s.avg < CUT.excellent &&
-      isNum(s.gradeGap) && s.gradeGap >= CLASS_ACTION_PP;
+    return isNum(s.avg) && s.avg < s.targetLine &&
+      isNum(s.gradeGap) && s.gradeGap >= s.actionLine;
   }
 
   /* 班级结论允许为空：门槛未过线时，不再从六科里强制挑一个「最弱」 */
   function decideClass(shown) {
     var pool = rankable(shown);
-    var submitWarn = shown.filter(function (s) { return s.missingQ > SUBMIT_Q_HIGH; });
+    var submitWarn = shown.filter(function (s) { return s.missingQ > s.missingLimit; });
     var eligible = shown.filter(function (s) {
-      return s.timing !== 'history' && s.missingQ <= SUBMIT_Q_HIGH &&
-        (isNum(s.diff) || s.lowShare >= CLASS_LOW_SHARE_MIN);
+      return s.timing !== 'history' && s.missingQ <= s.missingLimit &&
+        (isNum(s.diff) || s.lowShare >= s.lowShareMin);
     });
 
     /*
-      班级绝对弱两条通道，任一命中即判绝对弱，互不覆盖：
-        · 低分人数占比 ≥30% → 判为绝对弱（低分面）
-        · 班均未达 85%，且连续两次低于年级 ≥5 个百分点 → 判为绝对弱（班均差）
+      班级明确短板两条通道，任一命中即判明确短板，互不覆盖：
+        · 低于本科低分线的人数占比达到本科低分面阈值；
+        · 班均未达本科达标线，且班均差达到本科差距线。
     */
     var candidates = eligible.filter(function (s) {
-      return s.lowShare >= CLASS_LOW_SHARE_MIN || classGapHit(s);
+      return s.lowShare >= s.lowShareMin || classGapHit(s);
     });
 
     candidates.forEach(function (s) {
-      s.absoluteCandidate = s.lowShare >= CLASS_LOW_SHARE_MIN;
+      s.absoluteCandidate = s.lowShare >= s.lowShareMin;
     });
     candidates.sort(function (a, b) {
       if (a.absoluteCandidate !== b.absoluteCandidate) return a.absoluteCandidate ? -1 : 1;
@@ -520,27 +721,27 @@
       return b.lowShare - a.lowShare;
     });
 
-    /* 班级相对弱：未达绝对弱条件，但班均未达 85% 且低于年级；与绝对弱分组同时列出 */
+    /* 班级相对短板：未达明确短板条件，但班均未达本科达标线且低于学科组。 */
     var relative = eligible.filter(function (s) {
-      return candidates.indexOf(s) < 0 && s.avg < CUT.excellent &&
+      return candidates.indexOf(s) < 0 && s.avg < s.targetLine &&
         s.diff < 0 && isNum(s.actionRatio);
     }).sort(function (a, b) { return b.actionRatio - a.actionRatio; });
 
-    /* 整体水平：六科「班均 − 年级」的平均，教师可心算，只作文案修饰，不触发动作 */
+    /* 整体水平：六科「班均 − 学科组」的平均，教师可心算，只作文案修饰，不触发动作 */
     var diffs = shown.filter(function (s) { return isNum(s.diff); }).map(function (s) { return s.diff; });
     var meanDiff = diffs.length ? diffs.reduce(function (a, v) { return a + v; }, 0) / diffs.length : null;
 
     /*
-      证据是否足以坐实绝对弱：
-        · 低分面通道：2 份作业即可确认；
-        · 班均差通道：必须最近连续两次同向，只出现一次或仅 1 份作业都标「待确认」。
-      绝对弱与相对弱都是清单，不再只取一科。
+      证据是否足以坐实明确短板：
+        · 低分面通道：至少 2 份作业即可确认；
+        · 班均差通道：最近连续同向次数须达到本科设置，否则标「待确认」。
+      明确短板与相对短板都是清单，不再只取一科。
     */
     var absolute = [];
     var pending = [];
     candidates.forEach(function (s) {
       var unconfirmed = s.evidence === 'C' ||
-        (classGapHit(s) && s.lowShare < CLASS_LOW_SHARE_MIN && !s.actionConfirmed);
+        (classGapHit(s) && s.lowShare < s.lowShareMin && !s.actionConfirmed);
       (unconfirmed ? pending : absolute).push(s);
     });
 
@@ -551,13 +752,13 @@
     };
   }
 
-  /* 学科只标能力判定与数据状态，不输出教学组织方式 */
+  /* 学科只标阶段性判定与数据状态，不输出教学组织方式 */
   function subjectConclusion(s, decision) {
-    if (s.missingQ > SUBMIT_Q_HIGH) return '先抓提交';
+    if (s.missingQ > s.missingLimit) return '先抓提交';
     if (s.timing === 'history') return '趋势复核';
-    if (decision.absolute.indexOf(s) >= 0) return '绝对弱';
-    if (decision.pending.indexOf(s) >= 0) return '绝对弱·待确认';
-    if (decision.relative.indexOf(s) >= 0) return '相对弱';
+    if (decision.absolute.indexOf(s) >= 0) return '明确短板';
+    if (decision.pending.indexOf(s) >= 0) return '短板待确认';
+    if (decision.relative.indexOf(s) >= 0) return '相对短板';
     return '正常';
   }
 
@@ -586,12 +787,12 @@
 
   /*
     逐生个人补弱：
-      · 重点提升：短板 = 本人得分率未达 85%，且 d ≤ −10pp；低分 = 得分率 <60%，两者均可独立触发。
-        多科过线时，先比较是否低分，低分比「距 60% ÷ 10pp」，短板比「−d ÷ 10pp」。
-      · 优先巩固：没有重点候选时，仍从有效科次中选一科。相对分 = d / 10pp，
+      · 重点提升：本人未达本科达标线且离均差达到本科提醒线，或低于本科低分线。
+        多科过线时先比是否低分，再用本科提醒线归一化偏离程度。
+      · 优先巩固：没有重点候选时，仍从有效科次中选一科。相对分 = d / 本科提醒线，
         数值最小者就是该生各科中的相对最弱；即使仍高于班均，也只表示优先巩固。
-      · 未交率 >30% 的科次先抓提交，长窗不参与推荐；满分区不单独豁免，
-        85% 闸门已避开高分小分差被误判；低分通道仍对满分区生效。
+      · 超过本科未交率闸门的科次先抓提交，长窗不参与推荐；满分区不单独豁免，
+        达标线闸门已避开高分小分差被误判；低分通道仍对满分区生效。
         完全无有效成绩时不编造结论，显示「待补数据」。
   */
   /*
@@ -610,7 +811,7 @@
     }
     var p = priority;
     if (p.fail) {
-      return '先把 ' + p.sub + ' 得分率拉到 60%（现在 ' + f1(p.v) + '%），其他科目先不动。';
+      return '先把 ' + p.sub + ' 得分率拉到 ' + f1(p.lowLine) + '%（现在 ' + f1(p.v) + '%），其他科目先不动。';
     }
     if (p.relative) {
       var tail = p.evidence === 'C' ? '（只有 1 份作业，方向暂定）' : '';
@@ -654,26 +855,28 @@
           cells.push({
             sub: st.name, v: null, d: null, exempt: st.exempt, t: st.trigger,
             evidence: st.evidence, timing: st.timing, q: q,
-            submitWarn: q > SUBMIT_Q_HIGH, severity: 0, relativeScore: null
+            submitWarn: q > st.missingLimit, severity: 0, relativeScore: null,
+            lowLine: st.lowLine, targetLine: st.targetLine
           });
           return;
         }
         var d = isNum(st.avg) ? v - st.avg : null;
         var recent = st.timing !== 'history';
-        var submitWarn = q > SUBMIT_Q_HIGH;
-        /* 相对判弱必须同时过两道闸门：本人未达 85%，且低于班均 10 个百分点。 */
+        var submitWarn = q > st.missingLimit;
+        /* 相对判弱使用该生本科达标线与差距线，低分线独立触发。 */
         var short = recent && !submitWarn && isNum(d) &&
-          v < CUT.excellent && d <= -st.trigger;
-        var relativeScale = STUDENT_TRIGGER_PP;
+          v < st.targetLine && d <= -st.trigger;
+        var relativeScale = st.trigger;
         var cell = {
           sub: st.name, v: v, d: d, exempt: st.exempt,
           t: st.trigger, sd: st.sd, evidence: st.evidence, timing: st.timing,
           q: q, submitWarn: submitWarn,
+          lowLine: st.lowLine, targetLine: st.targetLine,
           short: short,
-          fail: v < CUT.pass,
-          /* 不及格但没到提醒线的格次也要有严重度，否则多科不及格时退化成按分数排 */
+          fail: v < st.lowLine,
+          /* 低分严重度也按本科提醒线归一化，避免不同学科阈值导致排序偏斜。 */
           severity: short ? Math.max(0, -d / st.trigger) :
-            (v < CUT.pass ? Math.max(0, (CUT.pass - v) / relativeScale) : 0),
+            (v < st.lowLine ? Math.max(0, (st.lowLine - v) / relativeScale) : 0),
           relativeScore: isNum(d) ? d / relativeScale : null,
           relative: false
         };
@@ -716,7 +919,7 @@
       var temporary = !!(priority && !priority.relative && priority.evidence === 'C');
       var status = priority ? (priority.relative ?
         (priority.evidence === 'C' ? '优先巩固·暂定' : '优先巩固') :
-        (temporary ? '临时关注' : '优先提升')) :
+        (temporary ? '临时关注' : '重点提升')) :
         (submitOnly ? '先抓提交' : '待补数据');
 
       var shortCells = cells.filter(function (c) { return c.short; });
@@ -786,147 +989,36 @@
       '<span class="q-tip__bubble">' + body + '</span></span>';
   }
 
-  function hintHTML(opts, all) {
-    var hws = selectedHomeworks(opts.homeworks);
-    var submit = 0;
-    var due = 0;
-    all.forEach(function (s) {
-      submit += s.submitted;
-      due += s.due;
-    });
-
-    var ceiling = all.filter(function (s) { return s.exempt; });
-    var history = all.filter(function (s) { return s.timing === 'history'; });
-    var nonToday = all.filter(function (s) { return s.timing === 'recent' || s.timing === 'mixed'; });
-
-    return '<span class="prd-badge" data-prd="XK-04" title="查看 PRD XK-04：统计口径与判定规则">XK-04</span>' +
-      '<span class="q-tip q-tip--icon-only" tabindex="0" role="note" aria-label="查看统计口径">?' +
-      '<span class="q-tip__bubble">' +
-      '<span><b>统计范围</b>' + (opts.dateLabel || TODAY_LABEL) + '，覆盖 ' + all.length +
-        ' 个学科共 ' + hws.length + ' 份作业，作业提交率 ' + pctOf(submit, due) + '。</span>' +
-      '<span><b>学科得分率</b>把这一科所有作业的得分加起来，除以所有作业的满分加起来（满分大的作业占比重大）。没交的作业不按 0 分算，也不进分母。</span>' +
-      '<span><b>较年级</b>班级得分率减同卷年级得分率，单位是「个百分点」，正值高于年级、负值低于年级。</span>' +
-      '<span><b>班级怎么判弱科</b>两条路互不替代，达到任一即判绝对弱：全班 ' +
-        Math.round(CLASS_LOW_SHARE_MIN * 100) + '% 以上的学生得分率不到 60%，或' +
-        '班均未达 85%、且最近两次作业都比同卷年级低至少 ' + CLASS_ACTION_PP +
-        ' 个百分点。只出现一次或只有 1 份作业时标待确认；' +
-        '班均未达 85% 且低于年级但未达条件的，列为相对弱。' +
-        '某科未交超过 ' + Math.round(SUBMIT_Q_HIGH * 100) +
-        '% 先抓提交、不判学科强弱。</span>' +
-      '<span><b>学生怎么定补哪一科</b>每名有有效成绩的学生都必须有一科个人补弱方向：得分率不到 60%，或本人得分率未达 85%、又比班均低至少 ' +
-        STUDENT_TRIGGER_PP + ' 个百分点，就列为重点提升；没有过线学科时，再选出相对最弱的一科进行巩固。</span>' +
-      '<span><b>优先巩固不等同于薄弱学科</b>把「个人得分率 − 班均」除以 10 个百分点，得数最小的那一科就是个人最该先巩固的。它可能仍高于班均，只表示这是该生各科里最吃力的一科，不表示水平不足。</span>' +
-      (nonToday.length
-        ? '<span><b>非当日数据</b>' + nonToday.map(function (s) {
-            return s.name + '（' + timingText(s.timing) + '）';
-          }).join('、') + '：用的是近 3 天的作业，结论不能说成「今天」的表现。</span>'
-        : '') +
-      (history.length
-        ? '<span><b>只作趋势参考</b>' + history.map(function (s) {
-            return s.name;
-          }).join('、') + '：数据超出近 3 天，不参与自动排序。</span>'
-        : '') +
-      (ceiling.length
-        ? '<span><b>已接近满分</b>' + ceiling.map(function (s) {
-            return s.name + '（多数学生已达 ' + f1(s.p75) + '% 左右）';
-          }).join('、') + '：标为满分区，但因得分率普遍高于 85%，通常不会触发相对判弱；其中仍有学生低于 60% 或明显掉队时，照常进入个人建议。</span>'
-        : '') +
-      (DEMO
-        ? '<span><b>演示数据</b>各作业得分率由学科基准率拆分得出，是示意值，不是真实观测。</span>'
-        : '') +
-      '</span></span>';
-  }
-
-  /* 弱科逐科依据：班均差与低分面两条通道分别说明，不合并成行动指令 */
-  function weakSubjectLine(s, pendingFlag) {
-    var reasons = [];
-    if (classGapHit(s)) {
-      reasons.push('班均 ' + f1(s.avg) + '%，比年级低 ' + f1(s.gradeGap) + ' 个百分点' +
-        (s.actionConfirmed ? '，连续两次同向' : ''));
-    }
-    if (s.lowShare >= CLASS_LOW_SHARE_MIN) {
-      reasons.push('得分率不到 60% 的 ' + s.dist.weak + ' 人（' + pctOf(s.dist.weak, s.n) + '）');
-    }
-    return '<div class="diag-decision-note"><b>' + s.name + '</b>' +
-      (pendingFlag ? '（待确认）' : '') + '：' + reasons.join('；') +
-      '。依据 ' + evidenceText(s.evidence) + ' · ' + timingText(s.timing) +
-      (pendingFlag ? '，连续证据尚未形成' : '') + '。</div>';
-  }
-
-  /* 班级弱科清单：只回答「哪些科绝对弱、哪些科相对弱」，不给班级统一行动建议 */
-  function decisionHTML(decision) {
-    var absolute = decision.absolute;
-    var pending = decision.pending;
-    var relative = decision.relative;
-    var allWeak = absolute.concat(pending);
-    var html = '';
-
-    if (allWeak.length) {
-      html += '<b>绝对弱 ' + allWeak.length + ' 科：' +
-        allWeak.map(function (s) { return s.name; }).join('、') + '。</b>';
-      absolute.forEach(function (s) { html += weakSubjectLine(s, false); });
-      pending.forEach(function (s) { html += weakSubjectLine(s, true); });
-    } else {
-      html += '<b>本次没有绝对弱科目。</b>';
-    }
-
-    if (relative.length) {
-      html += '<div class="diag-decision-note"><b>相对弱 ' + relative.length + ' 科：</b>' +
-        relative.map(function (s) {
-          return s.name + '（比年级低 ' + f1(s.belowGrade) + ' 个百分点，未达绝对弱条件）';
-        }).join('、') + '。</div>';
-    } else if (!allWeak.length) {
-      html += '<div class="diag-decision-note">六科均未达到绝对弱或相对弱条件。</div>';
-    }
-
-    if (decision.submitWarn.length) {
-      html += '<div class="diag-decision-note">另有 ' + decision.submitWarn.map(function (s) {
-        return s.name + '（未交 ' + Math.round(s.missingQ * 100) + '%）';
-      }).join('、') + ' 未交率超过 ' + Math.round(SUBMIT_Q_HIGH * 100) +
-        '%，先抓提交，不判学科强弱。</div>';
-    }
-    return '<div class="diag-decision">' +
-      '<span class="prd-badge prd-badge-up" data-prd="XK-05" title="查看 PRD XK-05：班级弱科清单">XK-05</span>' +
-      html + '</div>';
-  }
-
   function kpiHTML(shown, weakInfo, decision) {
     var allWeak = decision.absolute.concat(decision.pending);
     var relative = decision.relative;
-    var below = decision.pool.filter(function (s) { return s.diff < 0; });
 
     var card = function (label, value, sub, opts) {
       opts = opts || {};
       return '<div class="kpi-card' + (opts.brand ? ' kpi-card--brand' : '') +
         (opts.jump ? ' kpi-card--link' : '') + '"' +
         (opts.jump ? ' data-focus-jump="' + opts.jump + '" role="button" tabindex="0"' : '') + '>' +
-        '<div class="kpi-card__label">' + label + (opts.tip ? tip(opts.tip) : '') + '</div>' +
+        '<div class="kpi-card__label">' + label + '</div>' +
         '<div class="kpi-card__value">' + value + '</div>' +
         '<div class="kpi-card__sub">' + sub + '</div>' +
         '</div>';
     };
 
-    return '<div class="kpi-row kpi-row--three">' +
+    return '<div class="kpi-row kpi-row--two">' +
       '<span class="prd-badge prd-badge-r" data-prd="XK-06" title="查看 PRD XK-06：KPI 概览卡片">XK-06</span>' +
-      card('班级弱科', allWeak.length + ' <small>科绝对弱</small>',
+      card('班级弱科', allWeak.length + ' <small>科明确短板</small>',
         (allWeak.length
-          ? '绝对弱：' + allWeak.map(function (s) { return s.name; }).join('、') +
+          ? '明确短板：' + allWeak.map(function (s) { return s.name; }).join('、') +
             (decision.pending.length ? '（含待确认 ' + decision.pending.length + ' 科）' : '')
-          : '无绝对弱科') +
-          (relative.length ? ' · 相对弱：' + relative.map(function (s) { return s.name; }).join('、') : '') +
-          (isNum(decision.meanDiff) ? ' · 六科平均' + (decision.meanDiff >= 0 ? '高于年级 ' : '低于年级 ') +
-            f1(Math.abs(decision.meanDiff)) + ' 个百分点' : ''),
-        { brand: true, tip: '绝对弱：班均未达 85% 且连续两次低于年级 5 个百分点，或得分率 60% 以下学生占比达到 30%；证据不足时标待确认。相对弱：班均未达 85% 且低于年级，但未达绝对弱条件。本卡只列弱科及判定依据。六科平均只是整体水平参考，不参与判定。' }) +
+          : (relative.length ? '无明确短板科' : '本次未发现明确或相对短板')) +
+          (relative.length ? ' · 相对短板：' + relative.map(function (s) { return s.name; }).join('、') : ''),
+        { brand: true }) +
       card('学生个人建议', weakInfo.recommendationTotal + ' <small>/ ' + STUDENTS.length + ' 人</small>',
         '重点提升 ' + weakInfo.priorityTotal + ' 人 · 优先巩固 ' + weakInfo.relativeTotal + ' 人' +
           (weakInfo.relativeAboveAllTotal ? '（含 ' + weakInfo.relativeAboveAllTotal + ' 人各科都高于班均）' : '') +
           (weakInfo.submitTotal ? ' · 先抓提交 ' + weakInfo.submitTotal + ' 人' : '') +
           ' · <span class="kpi-card__more">查看名单 ›</span>',
-        { jump: 'focusStudentSection', tip: '每名学生都会拿到一科个人建议，分两类：得分率不到 60%，或本人未达 85% 且比班均低至少 10 个百分点的学生列为重点提升，其余学生按相对最弱给出优先巩固。优先巩固不等同于薄弱学科。点卡片查看名单。' }) +
-      card('低于年级均学科', below.length + ' <small>/ ' + decision.pool.length + ' 科</small>',
-        below.length ? below.map(function (s) { return s.name; }).join('、') + '（略低不等于弱科）' :
-          '全部高于年级均',
-        { tip: '班级得分率低于同卷年级得分率的学科数。略低不等于绝对弱：是否绝对弱由班均绝对水平、连续两次同向证据与低分面占比决定。' }) +
+        { jump: 'focusStudentSection' }) +
       '</div>';
   }
 
@@ -934,8 +1026,8 @@
 
   function focusConclusionTag(label) {
     var cls = 'tag tag--none';
-    if (label === '绝对弱') cls = 'tag tag--danger';
-    else if (/待确认|相对弱|先抓提交/.test(label)) cls = 'tag tag--late';
+    if (label === '明确短板') cls = 'tag tag--danger';
+    else if (/待确认|相对短板|先抓提交/.test(label)) cls = 'tag tag--late';
     return '<span class="' + cls + '">' + label + '</span>';
   }
 
@@ -962,7 +1054,7 @@
         '<span class="bar-row__track">' +
           '<span class="bar-row__fill" style="width:' + w.toFixed(1) + '%"></span>' +
           '<span class="bar-row__mark" style="left:' + m.toFixed(1) + '%" ' +
-            'title="年级均 ' + f1(s.gradeAvg) + '%"></span>' +
+            'title="学科组均 ' + f1(s.gradeAvg) + '%"></span>' +
         '</span>' +
         '<span class="bar-row__value">' + f1(s.avg) + '%</span>' +
         '<span class="bar-row__delta ' + deltaCls(s.diff) + '">' + signed(s.diff) + '</span>' +
@@ -976,8 +1068,7 @@
         '<td class="cell-strong">' + s.name +
           ' <span class="cell-hint">' + s.hwCount + ' 份</span>' +
           (s.exempt ? ' <span class="tag tag--ceiling">满分区</span>' : '') + '</td>' +
-        '<td><span class="diag-evidence diag-evidence--' + s.evidence + '">' + evidenceText(s.evidence) +
-          '</span><br><span class="cell-hint">' + timingText(s.timing) + '</span></td>' +
+        '<td><span class="diag-evidence diag-evidence--' + s.evidence + '">' + evidenceText(s.evidence) + '</span></td>' +
         '<td class="cell-num">' + s.submitted + '/' + s.due + '</td>' +
         '<td class="cell-num">' + Math.round(s.missingQ * 100) + '%</td>' +
         '<td class="cell-num cell-strong">' + f1(s.avg) + '%</td>' +
@@ -997,94 +1088,38 @@
         '</tr>';
     }).join('');
 
-    /* 班级与学生结论分离：班级弱科清单不影响学生个别提升 */
-    var bullets = '';
-    var ceiling = shown.filter(function (s) { return s.exempt; });
-    var allWeak = decision.absolute.concat(decision.pending);
-    if (allWeak.length) {
-      bullets += '<li><span class="diagnosis__rank">1</span><b>绝对弱 ' + allWeak.length + ' 科：</b>' +
-        allWeak.map(function (s) {
-          var reasons = [];
-          if (classGapHit(s)) {
-            reasons.push('班均 ' + f1(s.avg) + '%，比年级低 ' + f1(s.gradeGap) +
-              ' 个百分点' + (s.actionConfirmed ? '，连续两次同向' : ''));
-          }
-          if (s.lowShare >= CLASS_LOW_SHARE_MIN) {
-            reasons.push('得分率不到 60% 的 ' + s.dist.weak + ' 人（' + pctOf(s.dist.weak, s.n) + '）');
-          }
-          return '<b>' + s.name + '</b>（' + reasons.join('；') +
-            (decision.pending.indexOf(s) >= 0 ? '；待确认，连续证据尚未形成' : '') + '）';
-        }).join('、') + '。</li>';
-    } else {
-      bullets += '<li><span class="diagnosis__rank">1</span><b>没有绝对弱科。</b></li>';
-    }
-    if (decision.relative.length) {
-      bullets += '<li>相对弱：<b>' + decision.relative.map(function (s) {
-        return s.name + '（比年级低 ' + f1(s.belowGrade) + ' 个百分点）';
-      }).join('、') + '</b>，班均未达 85% 且低于年级，但未达绝对弱条件。</li>';
-    }
-
-    var w1 = weakInfo.weakTop[0];
-    var w2 = weakInfo.weakTop[1];
-    bullets += '<li>学生侧：<b>' + weakInfo.recommendationTotal + ' 人</b>均有个人补弱学科，其中重点提升 <b>' +
-      weakInfo.priorityTotal + ' 人</b>、优先巩固 <b>' + weakInfo.relativeTotal + ' 人</b>' +
-      (weakInfo.relativeAboveAllTotal ? '（其中 ' + weakInfo.relativeAboveAllTotal + ' 人各科都高于班均）' : '') + '；' +
-      (w1 ? '明确短板集中在 <b>' + w1.name + '（' + w1.count + ' 科次）</b>' +
-        (w2 ? ' 与 <b>' + w2.name + '（' + w2.count + ' 科次）</b>' : '') + '。' :
-        '当前没有科次同时达到「未达 85% 且低于班均 10 个百分点」，未触发学生仍按相对最弱科安排巩固。') +
-      '班级弱科与学生个人方向分开看，互不影响。</li>';
-
-    if (decision.submitWarn.length) {
-      bullets += '<li>提交预警：<b>' + decision.submitWarn.map(function (s) {
-        return s.name + '（' + Math.round(s.missingQ * 100) + '%）';
-      }).join('、') + '</b> 未交率超过 ' + Math.round(SUBMIT_Q_HIGH * 100) +
-        '%，先抓提交，不用零分拉低能力判断。</li>';
-    }
-
-    if (ceiling.length) {
-      bullets += '<li>满分区科目（多数学生已近满分）：<b>' + ceiling.map(function (s) {
-        return s.name + '（多数学生已达 ' + f1(s.p75) + '% 左右）';
-      }).join('、') + '</b> 常规小分差不会触发相对判弱；但其中学生低于 60% 时照常进入个人建议，低分面达到 ' +
-        Math.round(CLASS_LOW_SHARE_MIN * 100) + '% 时该科仍判绝对弱。</li>';
-    }
-
-    return '<section class="focus-section">' +
+    return '<section class="focus-section" id="focusSubjectSection">' +
       '<span class="prd-badge" data-prd="XK-07" title="查看 PRD XK-07：班级各学科得分率与分布">XK-07</span>' +
       '<div class="focus-section__head">' +
         '<span class="focus-section__idx">一</span>' +
         '<h2 class="focus-section__title">班级各学科得分率与分布</h2>' +
-        tip('<span>条形从低到高排，长短是班均得分率；竖线是年级均得分率；最右边数字是班级比年级高或低多少个百分点。</span>' +
+        tip('<span>条形从低到高排，长短是班均得分率；竖线是学科组均得分率；最右边数字是班级比学科组高或低多少个百分点。</span>' +
           '<span>表格里的「学生分化」是标准差：数值越大，说明这一科学生之间分数拉得越开，只看班均会漏掉两头。</span>' +
-          '<span>「提升提醒线」固定为 ' + STUDENT_TRIGGER_PP + ' 个百分点，但还必须同时满足本人得分率未达 85%：高分学生之间的小分差不会被当成短板。</span>' +
-          '<span>判断顺序：达到两条件之一即判绝对弱——班均未达 85% 且最近两次都比年级低 ' + CLASS_ACTION_PP +
-            ' 个百分点以上，或得分率 60% 以下的学生达到 ' + Math.round(CLASS_LOW_SHARE_MIN * 100) +
-            '%；班均未达 85% 且低于年级但未达条件的列为相对弱。只出现一次或只有 1 份作业时标待确认，超过近 3 天的数据只作趋势参考。</span>' +
+          '<span>「提醒线」按学科独立设置；相对判弱还必须同时满足本人未达本科达标线。</span>' +
+          '<span>每科的低分面、班均差、未交率闸门与证据次数均使用本次保存的教师规则。仅 1 份作业，或班均差连续次数不足本科要求时标待确认；超过近 3 天的数据只作趋势参考。</span>' +
           '<span>「可提升空间」= 100 − 班均：同样低 3 个百分点，一科还剩 30 个百分点的提升空间、另一科只剩 5 个百分点，该先抓哪个一目了然。</span>') +
       '</div>' +
-      '<div class="focus-split">' +
+      '<div class="focus-split focus-split--full">' +
         '<div>' +
           '<div class="bar-list">' + bars + '</div>' +
           '<div class="bar-legend">' +
             '<span><i></i>班级均得分率</span>' +
-            '<span><i class="is-mark"></i>年级均</span>' +
-            '<span>条形右端为较年级的百分点</span>' +
+            '<span><i class="is-mark"></i>学科组均</span>' +
+            '<span>条形右端为较学科组的百分点</span>' +
           '</div>' +
         '</div>' +
-        '<aside class="diagnosis">' +
-          '<h3 class="diagnosis__title">班级弱科与判定依据</h3>' +
-          '<ul class="diagnosis__list">' + bullets + '</ul>' +
-        '</aside>' +
       '</div>' +
       '<div class="table-card">' +
         '<div class="table-scroll">' +
           '<table class="data-table data-table--compact data-table--stat">' +
             '<thead><tr>' +
-              '<th>学科</th><th title="有效作业份数，下方小字为数据时效">作业份数</th><th title="交上来的人次 / 应交人次">提交</th><th title="未交人次 ÷ 应交人次">未交率</th>' +
-              '<th title="这一科所有作业的得分合计 ÷ 满分合计">班均得分率</th><th title="同一套作业的年级得分率">年级得分率</th><th title="班级 − 年级，单位：个百分点">较年级</th>' +
+              '<th>学科</th><th title="有效作业份数">作业份数</th><th title="交上来的人次 / 应交人次">提交</th><th title="未交人次 ÷ 应交人次">未交率</th>' +
+              '<th title="这一科所有作业的得分合计 ÷ 满分合计">班均得分率</th><th title="同一套作业的学科组得分率">学科组得分率</th><th title="班级 − 学科组，单位：个百分点">较学科组</th>' +
               '<th title="100 − 班均得分率：这一科全班一共还有多少分可提升">可提升空间</th>' +
               '<th title="把全班得分率从低到高排，正中间那个数">中位数</th><th title="标准差：越大说明学生之间分数拉得越开">学生分化</th><th>最高</th><th>最低</th>' +
-              '<th>优 ≥85%</th><th>良 70–84%</th><th>中 60–69%</th><th>低分 &lt;60%</th>' +
-              '<th title="固定 10 个百分点；同时要求本人得分率未达 85%，才算相对短板">提醒线</th><th title="绝对弱 / 相对弱为能力判定；先抓提交、趋势复核为数据状态">班级判定</th>' +
+              '<th title="固定展示线：优为得分率 ≥85%">优</th><th title="固定展示线：良为 70% 至 85% 以下">良</th>' +
+              '<th title="中档下限使用各学科低分线，上限为 70%">中</th><th title="低分线按各学科本次设置">低分</th>' +
+              '<th title="学生差距线按学科设置；同时要求本人未达本科达标线">提醒线</th><th title="明确短板 / 相对短板为阶段性学科判定；先抓提交、趋势复核为数据状态">班级判定</th>' +
             '</tr></thead>' +
             '<tbody>' + trs + '</tbody>' +
           '</table>' +
@@ -1104,7 +1139,29 @@
       items.map(function (it) {
         return '<em>·</em><i class="' + it[0] + '">' + it[1] + '</i>';
       }).join('') +
-      '<em>·</em><span>红色越深 = 离班均越远（统一按 10 个百分点分档；满分区里接近满分的格子淡化显示）</span></div>';
+      '<em>·</em><span>红色越深 = 离班均越远（按各学科学生差距线分档；满分区里接近满分的格子淡化显示）</span></div>';
+  }
+
+  /* 补弱原因一句话：热力表「补弱学科与原因」列与学生表导出共用同一口径 */
+  function weakReason(r) {
+    var p = r.priority;
+    if (!p) return r.submitOnly ? '先补交作业再判定' : '暂无有效成绩';
+    if (p.fail) {
+      return '低于 ' + f1(p.lowLine) + '%' + (p.short ? ' · 低于班均 ' + f1(Math.abs(p.d)) + ' 个百分点' : '');
+    }
+    if (p.short) {
+      return '低于班均 ' + f1(Math.abs(p.d)) + ' 个百分点';
+    }
+    return '个人相对靠后' + (Math.abs(p.d) < 0.05 ? ' · 与班均持平' :
+      ' · ' + (p.d < 0 ? '低于' : '高于') + '班均 ' + f1(Math.abs(p.d)) + ' 个百分点');
+  }
+
+  /* 姓名前「关注」小星星：点亮=已关注，点击切换并本地持久化（无图标字体，用内联 SVG） */
+  var STAR_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.6l2.5 5.1 5.6.8-4 3.9.9 5.6-5-2.6-5 2.6.9-5.6-4-3.9 5.6-.8z"/></svg>';
+  function watchStar(id, on) {
+    return '<button type="button" class="watch-star' + (on ? ' is-on' : '') + '" ' +
+      'data-watch-stu="' + id + '" aria-pressed="' + (on ? 'true' : 'false') + '" ' +
+      'title="' + (on ? '取消关注' : '关注该生') + '">' + STAR_SVG + '</button>';
   }
 
   function sectionTwo(shown, weakInfo) {
@@ -1117,16 +1174,17 @@
     var head = '<tr><th>学号</th><th>姓名</th>' +
       shown.map(function (s) {
         /* 表头只留两项：班均与作业份数；提醒线数值放到鼠标悬停说明，列宽不做宽 */
-        var headTip = s.name + '：班级均 ' + f1(s.avg) + '%（' + evidenceText(s.evidence) + '作业）' +
-          (s.exempt ? '，多数学生已近满分；相对判弱仍以未达 85% 为前提' :
-            '，未达 85% 且低于班均 ' + f1(s.trigger) + ' 个百分点算需要提升');
+        var headTip = s.name + '：班级均 ' + f1(s.avg) + '%（' + evidenceText(s.evidence) + '作业），' +
+          difficultyLabel(s.rule) + '，达标线 ' + f1(s.targetLine) + '%，低分线 ' + f1(s.lowLine) + '%，' +
+          '未达达标线且低于班均 ' + f1(s.trigger) + ' 个百分点算需要提升';
         /* 「满分区」只在表头统一标一次，格子内不再逐格打角标 */
         return '<th title="' + headTip + '">' + s.name +
           (s.exempt ? ' <span class="th-sub">满分区</span>' : '') +
           '<br><span class="th-sub">班均 ' + f1(s.avg) + '% · ' +
           evidenceText(s.evidence) + '</span></th>';
       }).join('') +
-      '<th>个人补弱学科</th><th>该科得分率</th><th>建议类型</th></tr>';
+      '<th class="weak-subject-col">补弱学科与原因</th>' +
+      '<th class="weak-score-col">该科得分率</th><th class="weak-tag-col">建议类型</th></tr>';
 
     var body = list.map(function (r) {
       var cells = r.cells.map(function (c) {
@@ -1134,7 +1192,7 @@
           return '<td class="heat-cell heat-na">—' +
             (c.submitWarn ? '<em>先抓提交</em>' : '') + '</td>';
         }
-        /* 所有学科统一用固定 10 个百分点作色阶刻度，σ 不再参与颜色或判定。 */
+        /* 色阶使用各学科学生差距线，σ 不参与颜色或判定。 */
         var scale = isNum(c.t) ? c.t : STUDENT_TRIGGER_PP;
         /* 满分区里真正接近满分的格才淡化字色；已经明显偏低的格保持清晰，不能又淡又说“不判” */
         var dim = c.exempt && Math.abs(c.d) <= scale;
@@ -1142,8 +1200,8 @@
           (c.fail ? ' is-fail' : '') + (dim ? ' is-ceiling' : '');
         var cellTip = c.sub + '：得分率 ' + f1(c.v) + '%，比班均' +
           (c.d >= 0 ? '高 ' : '低 ') + f1(Math.abs(c.d)) + ' 个百分点，提醒线 ' +
-          f1(c.t) + ' 个百分点；相对判弱同时要求本人未达 85%' +
-          '，' + timingText(c.timing) + (c.fail ? '，低分' : '');
+          f1(c.t) + ' 个百分点；相对判弱同时要求本人未达 ' + f1(c.targetLine) + '%' +
+          '，低分线 ' + f1(c.lowLine) + '%，' + timingText(c.timing) + (c.fail ? '，低分' : '');
         return '<td class="heat-cell ' + cls + '" title="' + cellTip + '">' +
           '<b>' + signed(c.d) + '</b><span>' + f1(c.v) + '%</span>' +
           (c.fail ? '<em>低分</em>' : (c.short ? '<em>短板</em>' : '')) +
@@ -1155,21 +1213,20 @@
         (r.submitOnly ? 'tag tag--late' : 'tag tag--none');
       var tag = '<span class="' + tagCls + '">' + r.status + '</span>';
       var p = r.priority;
+      var reason = weakReason(r);
 
+      var watched = !!ui.watched[r.stu.id];
       return '<tr' + (r.urgent ? ' class="is-urgent"' : '') + '>' +
         '<td class="cell-num">' + r.stu.id + '</td>' +
-        '<td>' + r.stu.name + '</td>' +
+        '<td class="cell-name">' + watchStar(r.stu.id, watched) + r.stu.name + '</td>' +
         cells +
-        '<td class="cell-strong">' + (p ? p.sub +
-          ' <span class="cell-hint">' +
-          (p.relative ? (Math.abs(p.d) < 0.05 ? '相对最弱 · 与班均持平' :
-            '相对最弱 · ' + (p.d < 0 ? '低于班均 ' : '仍高于班均 ') +
-            f1(Math.abs(p.d)) + ' 个百分点') :
-            (p.short ? '重点 · 低于班均 ' + f1(Math.abs(p.d)) + ' 个百分点' : '重点 · 低分')) +
-          '</span>' : '—') + '</td>' +
-        '<td class="cell-num' + (p && p.fail ? ' cell-dev-down' : '') + '">' +
-          (p ? f1(p.v) + '%' + (p.fail ? ' <span class="cell-hint">低分</span>' : '') : '—') + '</td>' +
-        '<td>' + tag + '<span class="cell-advice">' + r.advice + '</span></td>' +
+        '<td class="weak-subject-cell">' +
+          '<span class="weak-subject__name">' + (p ? p.sub : '—') + '</span>' +
+          '<span class="weak-subject__reason">' + reason + '</span></td>' +
+        '<td class="cell-num weak-score-cell' + (p && p.fail ? ' cell-dev-down' : '') + '">' +
+          (p ? '<span class="weak-score__value">' + f1(p.v) + '%</span>' +
+            (isNum(p.d) ? '<span class="weak-score__avg">班均 ' + f1(p.v - p.d) + '%</span>' : '') : '—') + '</td>' +
+        '<td class="weak-tag-cell" title="' + r.advice + '">' + tag + '</td>' +
         '</tr>';
     }).join('');
 
@@ -1183,16 +1240,22 @@
         '<span class="focus-section__idx">二</span>' +
         '<h2 class="focus-section__title">学生各科得分与班均对比（热力图）</h2>' +
         tip('<span>格子上排数字 = 该生这一科得分率减去班均得分率，正数高于班均，单位是百分点；下排数字 = 该生这一科的得分率。</span>' +
-          '<span>颜色按与班均的差距分档：相差不到 10 个百分点的为灰色（接近班均），低 10～15 个百分点浅红，低 15～30 个百分点偏红，低 30 个百分点以上深红；高于班均的一侧用绿色对称表示。</span>' +
-          '<span>个人补弱学科怎么选：先看有没有低分（得分率不到 60%），或本人未达 85% 且低于班均 10 个百分点的重点提升项；若没有，再按「（个人 − 班均）÷ 10」选出相对最弱的一科。</span>' +
+          '<span>颜色按与班均的差距及本科学生差距线分档，高于班均的一侧用绿色对称表示。</span>' +
+          '<span>个人补弱学科怎么选：先看是否低于本科低分线，或未达本科达标线且低于班均达到本科学生差距线；若没有，再按「（个人 − 班均）÷ 本科学生差距线」选出相对最弱的一科。</span>' +
           '<span>「优先巩固」只表示个人各科里的学习优先级，不等同于薄弱学科；即使该科仍高于班均，也可作为巩固方向。只有 1 份作业时显示「暂定」。</span>' +
-          '<span>未交超过 ' + Math.round(SUBMIT_Q_HIGH * 100) +
-            '% 的科目先抓提交；超过近 3 天的数据不进推荐。满分区仍标在表头，但其中学生低于 60% 或明显掉队时，照常进入个人建议。</span>') +
+          '<span>未交率超过本科设定闸门的科目先抓提交；超过近 3 天的数据不进推荐。满分区仍标在表头，但低于本科低分线或明显掉队时，照常进入个人建议。</span>') +
         '<div class="focus-section__actions">' +
           '<label class="checkbox checkbox--inline">' +
             '<input type="checkbox" data-focus-weak' + (ui.weakOnly ? ' checked' : '') + ' />' +
             '<span class="checkbox__box"></span><span>只看重点提升学生（' + weakInfo.priorityTotal + ' 人）</span>' +
           '</label>' +
+          '<button type="button" class="btn btn--ghost btn--sm focus-export-stu" data-focus-export-stu ' +
+            'title="把本表（学生各科得分与班均对比）单独导出为 CSV">' +
+            '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" ' +
+              'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+              '<path d="M12 3.5v11M8 11l4 4 4-4M4.5 19.5h15" /></svg>' +
+            '导出本表' +
+          '</button>' +
         '</div>' +
       '</div>' +
       heatLegend() +
@@ -1245,7 +1308,7 @@
         '<td class="cell-num cell-strong">' + f1(rate) + '%</td>' +
         '<td class="cell-num cell-muted">' + f1(hw.gradeRate) + '%</td>' +
         '<td class="cell-num ' + deltaCls(diff) + '">' + (isNum(diff) ? signed(diff) : '—') + '</td>' +
-        '<td class="cell-num cell-muted">' + hw.graded + '</td>' +
+        '<td class="cell-num cell-muted">' + (hw.scannedAt || '—') + '</td>' +
         '</tr>';
     }).join('');
 
@@ -1263,7 +1326,7 @@
         '<span class="focus-section__idx">三</span>' +
         '<h2 class="focus-section__title">作业列表</h2>' +
         tip('<span>同一学科可以有多份作业，没有主次，都按满分计入该科得分率；学科后面的 1/2 表示这一科在当前筛选里的第几份。</span>' +
-          '<span>「较年级」= 这份作业的得分率减去这份作业的年级得分率，和学科层的「较年级」同一个口径，改筛选后两边一起重算。</span>') +
+          '<span>「较学科组」= 这份作业的得分率减去这份作业的学科组得分率，和学科层的「较学科组」同一个口径，改筛选后两边一起重算。</span>') +
         '<span class="focus-section__note">共 ' + list.length + ' 份作业 · 合计提交 ' +
           submit + '/' + due + '（' + pctOf(submit, due) + '）</span>' +
       '</div>' +
@@ -1272,7 +1335,7 @@
           '<table class="data-table data-table--compact">' +
             '<thead><tr>' +
               '<th>学科</th><th>作业名称</th><th>满分</th><th>提交</th><th>提交率</th>' +
-              '<th>平均分</th><th>得分率</th><th>年级得分率</th><th>较年级</th><th>批改时间</th>' +
+              '<th>平均分</th><th>得分率</th><th>学科组得分率</th><th>较学科组</th><th>扫描时间</th>' +
             '</tr></thead><tbody>' + trs + '</tbody>' +
           '</table>' +
         '</div>' +
@@ -1290,10 +1353,10 @@
     var ids = opts.homeworks || HOMEWORKS.map(function (h) { return h.id; });
     var all = computeAll(ids);
 
-    /* 口径说明收进标题行：写进壳页预留的槽位；独立报表页无槽位则不显示 */
+    /* PRD 入口徽章写进标题行：写进壳页预留的槽位；独立报表页无槽位则不显示 */
     var doc = root.ownerDocument || document;
     var slot = doc.getElementById('focusHintSlot');
-    if (slot) slot.innerHTML = hintHTML(opts, all);
+    if (slot) slot.innerHTML = '<span class="prd-badge" data-prd="XK-04" title="查看 PRD XK-04：统计口径与判定规则">XK-04</span>';
 
     if (!all.length) {
       root.innerHTML = '<div class="focus-section"><div class="empty-state">' +
@@ -1304,7 +1367,6 @@
     var html = '';
     var weakInfo = weakestOf(all);
     var decision = decideClass(all);
-    html += decisionHTML(decision);
     html += kpiHTML(all, weakInfo, decision);
     html += sectionOne(all, weakInfo, decision);
     html += sectionTwo(all, weakInfo);
@@ -1319,6 +1381,21 @@
     if (!input || !lastRender) return;
     ui.weakOnly = input.checked;
     render(lastRender.root, lastRender.opts);
+  });
+
+  /* 姓名前「关注」星标：就地切换点亮态并持久化，不整表重渲染（避免滚动跳动） */
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('[data-watch-stu]') : null;
+    if (!btn) return;
+    e.stopPropagation();
+    e.preventDefault();
+    var id = btn.getAttribute('data-watch-stu');
+    var on = !ui.watched[id];
+    if (on) { ui.watched[id] = 1; } else { delete ui.watched[id]; }
+    btn.classList.toggle('is-on', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.title = on ? '取消关注' : '关注该生';
+    saveWatched(ui.watched);
   });
 
   /* KPI 卡下钻：点「学生个人建议」直达下方学生名单，落点闪一次供定位 */
@@ -1356,35 +1433,35 @@
     var decision = decideClass(all);
     var allWeak = decision.absolute.concat(decision.pending);
     var classSummary = (allWeak.length
-      ? '绝对弱：' + allWeak.map(function (s) {
+      ? '明确短板：' + allWeak.map(function (s) {
           return s.name + (decision.pending.indexOf(s) >= 0 ? '(待确认)' : '');
         }).join('、')
-      : '无绝对弱科') +
+      : '无明确短板科') +
       (decision.relative.length
-        ? '；相对弱：' + decision.relative.map(function (s) { return s.name; }).join('、')
+        ? '；相对短板：' + decision.relative.map(function (s) { return s.name; }).join('、')
         : '');
     var rows = [[
       '跨学科分析 · 班级报表 · ' + TODAY,
-      classSummary +
-      '；绝对弱 = 班均 <85% 且连续两次低于年级 ' + CLASS_ACTION_PP +
-      ' 个百分点，或得分率 60% 以下学生 ≥' + Math.round(CLASS_LOW_SHARE_MIN * 100) +
-      '%；相对弱 = 班均 <85% 且低于年级但未达绝对弱；学生提醒线：' + STUDENT_TRIGGER_PP +
-      ' 个百分点，仅适用于本人得分率 <85%；证据不足时标待确认'
+      classSummary + '；本次按学科使用独立难度与判弱指标：' + rulesText(all) +
+      '；明确短板与重点提升均以逐科实际阈值为准；证据不足时标待确认；判定只表示阶段性表现，不代表能力定型'
     ]];
-    rows.push(['学科', '作业份数', '证据（作业份数）', '数据时效', '提交(人次)', '未交率',
-      '班均得分率', '年级得分率', '较年级(百分点)', '可提升空间', '中位数', '学生分化(标准差)', '75 分位',
-      '最高', '最低', '优(得分率≥85%)', '良(70~84%)', '中(60~69%)', '低分(<60%)', '低分学生占比', '提醒线(百分点)', '满分区(P75≥95%)', '班级判定']);
+    rows.push(['学科', '难度', '达标线(%)', '低分线(%)', '班级差距线(百分点)', '学生提醒线(百分点)',
+      '低分面阈值(%)', '未交率闸门(%)', '连续确认次数', '作业份数', '证据（作业份数）', '数据时效', '提交(人次)', '未交率',
+      '班均得分率', '学科组得分率', '较学科组(百分点)', '可提升空间', '中位数', '学生分化(标准差)', '75 分位',
+      '最高', '最低', '优(得分率≥85%)', '良(70~85%)', '中(低分线~70%)', '低分(逐科低分线)', '低分学生占比', '满分区(P75≥95%)', '班级判定']);
     all.slice().sort(function (a, b) {
       var ad = isNum(a.diff) ? a.diff : 999;
       var bd = isNum(b.diff) ? b.diff : 999;
       return ad - bd;
     }).forEach(function (s) {
-      rows.push([s.name, s.hwCount, evidenceText(s.evidence), timingText(s.timing),
+      rows.push([s.name, difficultyLabel(s.rule), f1(s.targetLine), f1(s.lowLine), f1(s.actionLine), f1(s.trigger),
+        Math.round(s.lowShareMin * 100), Math.round(s.missingLimit * 100), s.confirmTimes,
+        s.hwCount, evidenceText(s.evidence), timingText(s.timing),
         s.submitted + '/' + s.due, Math.round(s.missingQ * 100) + '%',
         f1(s.avg), f1(s.gradeAvg), signed(s.diff), f1(100 - s.avg),
         f1(s.median), f1(s.sd), f1(s.p75), f1(s.max), f1(s.min),
         s.dist.ex, s.dist.good, s.dist.pass, s.dist.weak, pctOf(s.dist.weak, s.n),
-        s.exempt ? '—' : f1(s.trigger), s.exempt ? '是' : '否', subjectConclusion(s, decision)]);
+        s.exempt ? '是' : '否', subjectConclusion(s, decision)]);
     });
 
     rows.push([]);
@@ -1407,7 +1484,7 @@
     });
 
     rows.push([]);
-    rows.push(['学科', '作业名称', '满分', '提交', '得分率', '年级率', '较年级', '批改时间']);
+    rows.push(['学科', '作业名称', '满分', '提交', '得分率', '学科组率', '较学科组', '扫描时间']);
     selectedHomeworks(ids).forEach(function (hw) {
       var st = null;
       all.forEach(function (s) { if (s.name === hw.subject) st = s; });
@@ -1415,7 +1492,33 @@
       rows.push([hw.subject, hw.name, hw.full,
         (st ? (st.hwCounts[hw.id] || 0) : 0) + '/' + hw.due,
         f1(rate), f1(hw.gradeRate),
-        isNum(rate) ? signed(rate - hw.gradeRate) : '—', hw.graded]);
+        isNum(rate) ? signed(rate - hw.gradeRate) : '—', hw.scannedAt || '—']);
+    });
+    return rows;
+  }
+
+  /* 学生热力表专属导出：只出「学生各科得分与班均对比」一张表，供 section 内「导出本表」按钮调用 */
+  function exportStudentRows(ids) {
+    var all = computeAll(ids);
+    var info = weakestOf(all);
+    var rows = [[
+      '跨学科分析 · 学生各科得分与班均对比 · ' + TODAY,
+      '单元格上排 = 个人得分率 − 班均（百分点），下排 = 个人得分率；色阶、低分线、达标线与提醒线均按各学科本次设置；' +
+        '「优先巩固」只表示学习优先级，不等同于薄弱学科；仅 1 份作业标「暂定」'
+    ]];
+    var header = ['关注', '学号', '姓名'];
+    all.forEach(function (s) { header.push(s.name + '得分率'); });
+    all.forEach(function (s) { header.push(s.name + '较班均'); });
+    header = header.concat(['补弱学科', '补弱原因', '该科得分率', '该科班均', '建议类型', '一句话建议']);
+    rows.push(header);
+    info.rows.slice().sort(compareStudentRows).forEach(function (r) {
+      var p = r.priority;
+      var line = [ui.watched[r.stu.id] ? '★' : '', r.stu.id, r.stu.name];
+      r.cells.forEach(function (c) { line.push(isNum(c.v) ? f1(c.v) : '—'); });
+      r.cells.forEach(function (c) { line.push(isNum(c.d) ? signed(c.d) : '—'); });
+      line.push(p ? p.sub : '—', weakReason(r), p ? f1(p.v) : '—',
+        (p && isNum(p.d)) ? f1(p.v - p.d) : '—', r.status, r.advice);
+      rows.push(line);
     });
     return rows;
   }
@@ -1426,14 +1529,29 @@
     真实接入入口。渲染层只吃这份契约，换数据源不改任何渲染代码。
       configure({
         demo: false,                        // 关闭演示生成，逐作业得分率必须来自 rows[i].hw
-        homeworks: [{ id, subject, name, full, due, handed, date, graded, gradeRate }],
+        homeworks: [{ id, subject, name, full, due, handed, date, scannedAt, gradeRate }],
         rows: [['学号', '姓名', 语, 数, 英, 物, 化, 生, { hwId: 得分率, ... }]]
       })
     约定：
-      · gradeRate 必须是「同一份作业」的年级得分率，否则差值列又变成不同源的两个数；
+      · gradeRate 必须是「同一份作业」的学科组得分率，否则差值列又变成不同源的两个数；
+      · scannedAt = 平台扫描完成时间字符串，仅展示、不参与判定；旧字段 graded 若仍为字符串会被兼容读取；
       · rows[i] 第 9 位起为逐作业得分率映射，缺项按未提交处理（不按 0 分计）；
       · HOMEWORKS / SUBJECTS 数组身份保持不变，壳页（app.js）持有的引用继续有效。
   */
+  /* 切换演示班级：恢复班级独立的作业与逐生数据，并保持 DEMO 拆分口径 */
+  function setDemoClass(clazz) {
+    var data = demoClassData(clazz);
+    if (!data) return false;
+    DEMO = true;
+    HOMEWORKS.length = 0;
+    Array.prototype.push.apply(HOMEWORKS, data.homeworks);
+    ROWS.length = 0;
+    Array.prototype.push.apply(ROWS, data.rows);
+    rebuildHwIndex();
+    if (lastRender) render(lastRender.root, lastRender.opts);
+    return true;
+  }
+
   function configure(patch) {
     patch = patch || {};
     if (patch.demo === false) DEMO = false;
@@ -1457,11 +1575,18 @@
     HW_BY_SUBJECT: HW_BY_SUBJECT,
     STUDENTS: STUDENTS,
     CUT: CUT,
+    DIFFICULTY_PRESETS: DIFFICULTY_PRESETS,
+    getRules: getRules,
+    getRulePreset: getRulePreset,
+    configureRules: configureRules,
+    difficultyLabel: difficultyLabel,
     computeAll: computeAll,
     weakestOf: weakestOf,
     decideClass: decideClass,
     exportRows: exportRows,
+    exportStudentRows: exportStudentRows,
     configure: configure,
+    setDemoClass: setDemoClass,
     render: render,
     isDemo: function () { return DEMO; }
   };

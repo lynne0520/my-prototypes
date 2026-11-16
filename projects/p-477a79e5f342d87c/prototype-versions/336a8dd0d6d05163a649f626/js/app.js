@@ -497,7 +497,8 @@
 
   /* ==================== 4b. 跨学科分析（当日诊断） ==================== */
 
-  var FOCUS_CLASSES = ['高三31班', '高三32班', '高三33班', '高三34班'];
+  var FOCUS_CLASSES = ['高三31班', '高三32班', '高三33班', '高三34班', '高三35班', '高三36班'];
+  var MIN_FOCUS_SUBJECTS = 3;
 
   /* 跨学科分析筛选条只此一份：口径状态与页面结构一一对应 */
   var FILTER_BARS = [
@@ -570,10 +571,17 @@
     else if (names.length === FocusReport.SUBJECTS.length) subText = names.length + ' 个（全部）';
     else subText = names.length + ' 个（' + names.join('、') + '）';
 
+    var rules = FocusReport.getRules();
+    var changed = names.filter(function (name) { return rules[name].difficulty !== 'normal'; });
+    var ruleText = changed.length
+      ? changed.map(function (name) { return name + FocusReport.difficultyLabel(rules[name]); }).join('、')
+      : '各科常规';
+
     return [
       ['时间', focusEchoTime(s)],
       ['学科', subText],
-      ['作业', list.length + ' 份']
+      ['作业', list.length + ' 份'],
+      ['规则', ruleText]
     ].map(function (it) {
       return '<span class="echo__item"><b>' + it[0] + '</b><span>' + it[1] + '</span></span>';
     }).join('');
@@ -599,10 +607,34 @@
     $('#focusTitle').textContent = '跨学科分析诊断——' + focusScope.clazz;
   }
 
-  /* ---------- 弹窗：时间范围 + 作业清单统一处理 ---------- */
+  /* ---------- 弹窗：时间 + 分学科作业 + 教师判弱规则 ---------- */
 
-  var focusDraft = null;   // 弹窗编辑态，点「应用筛选」才写回 state
+  var focusDraft = null;
   var FOCUS_PRESETS = [['today', '今天'], ['3d', '近3天'], ['7d', '近7天'], ['14d', '近14天'], ['30d', '近30天'], ['custom', '自定义']];
+
+  function teacherAccount() {
+    var el = $('.user-name');
+    return el && el.textContent.trim() ? el.textContent.trim() : 'guest';
+  }
+
+  function teacherRuleKey() {
+    return 'xkFocusSubjectRules_v1:' + teacherAccount();
+  }
+
+  function loadTeacherRules() {
+    try {
+      var raw = window.localStorage.getItem(teacherRuleKey());
+      var data = raw ? JSON.parse(raw) : {};
+      return data && typeof data === 'object' ? data : {};
+    } catch (e) { return {}; }
+  }
+
+  function saveTeacherRules(rules) {
+    try {
+      window.localStorage.setItem(teacherRuleKey(), JSON.stringify(rules));
+      return true;
+    } catch (e) { return false; }
+  }
 
   function draftHomeworks() {
     if (!focusDraft) return [];
@@ -611,66 +643,167 @@
     });
   }
 
-  function draftTaskGroupsHTML() {
-    var hws = draftHomeworks();
-    var bySub = {};
-    hws.forEach(function (hw) {
-      if (!bySub[hw.subject]) bySub[hw.subject] = [];
-      bySub[hw.subject].push(hw);
+  function subjectNamesOf(hws) {
+    return FocusReport.SUBJECTS.filter(function (subject) {
+      return hws.some(function (hw) { return hw.subject === subject; });
     });
+  }
 
-    var html = FocusReport.SUBJECTS.filter(function (s) { return bySub[s]; }).map(function (s) {
-      var items = bySub[s];
-      var on = items.filter(function (hw) { return focusDraft.tasks[hw.id]; }).length;
+  function ensureDraftSubject() {
+    var names = subjectNamesOf(draftHomeworks());
+    if (names.indexOf(focusDraft.activeSubject) < 0) focusDraft.activeSubject = names[0] || null;
+    return focusDraft.activeSubject;
+  }
 
-      return '<div class="task-group">' +
-        '<div class="task-group__head">' +
-          '<label class="checkbox checkbox--inline">' +
-            '<input type="checkbox" data-modal-subject="' + s + '"' +
-              (on === items.length ? ' checked' : '') + ' />' +
-            '<span class="checkbox__box"></span>' +
-            '<span class="task-group__name">' + s + '</span>' +
-          '</label>' +
-          '<span class="task-group__meta">' + items.length + ' 份 · 已选 ' + on + '/' + items.length + '</span>' +
-        '</div>' +
-        items.map(function (hw) {
-          return '<label class="checkbox task-item">' +
-            '<input type="checkbox" data-modal-task="' + hw.id + '"' +
-              (focusDraft.tasks[hw.id] ? ' checked' : '') + ' />' +
-            '<span class="checkbox__box"></span>' +
-            '<span class="task-item__name">' + hw.name + '</span>' +
-            '<span class="task-item__meta">满分 ' + hw.full + ' · 已交 ' + hw.handed + '/' + hw.due +
-              ' 人 · 批改率 <b class="task-item__rate' + (hw.gradePct != null && hw.gradePct < 100 ? ' is-low' : '') + '">' +
-              (hw.gradePct == null ? '—' : hw.gradePct + '%') + '</b></span>' +
-            '</label>';
-        }).join('') +
-        '</div>';
+  function ruleError(rule) {
+    var limits = {
+      targetLine: ['基本达标线', 1, 100, '%'],
+      lowLine: ['学生低分线', 1, 69, '%'],
+      classGap: ['班级差距线', 1, 30, ' 个百分点'],
+      studentGap: ['学生差距线', 1, 30, ' 个百分点'],
+      lowShare: ['低分人数占比', 1, 100, '%'],
+      missingRate: ['未交率闸门', 0, 100, '%'],
+      confirmTimes: ['连续确认次数', 1, 5, ' 次']
+    };
+    var fields = Object.keys(limits);
+    for (var i = 0; i < fields.length; i++) {
+      var field = fields[i];
+      var value = rule[field];
+      var limit = limits[field];
+      if (typeof value !== 'number' || !isFinite(value)) return '请完整填写各项数字';
+      if (value < limit[1] || value > limit[2]) {
+        return limit[0] + '需在 ' + limit[1] + '～' + limit[2] + limit[3] + '之间';
+      }
+    }
+    if (rule.lowLine >= rule.targetLine) return '低分线必须低于达标线';
+    if (rule.confirmTimes % 1) return '连续确认次数需为 1～5 的整数';
+    return '';
+  }
+
+  function draftRuleError() {
+    var names = Object.keys(focusDraft.rules);
+    for (var i = 0; i < names.length; i++) {
+      var error = ruleError(focusDraft.rules[names[i]]);
+      if (error) return names[i] + '：' + error;
+    }
+    return '';
+  }
+
+  function ruleField(subject, field, label, value, unit, min, max, step, note, locked) {
+    return '<label class="rule-field' + (locked ? ' is-locked' : '') + '">' +
+      '<span class="rule-field__label">' + label + '</span>' +
+      '<span class="rule-field__control"><input type="number" data-rule-subject="' + subject +
+        '" data-rule-field="' + field + '" value="' + value + '" min="' + min + '" max="' + max +
+        '" step="' + step + '"' + (locked ? ' disabled' : '') + ' /><span>' + unit + '</span></span>' +
+      '<span class="rule-field__note">' + note + '</span></label>';
+  }
+
+  function subjectRuleSettingsHTML(subject, rule, panels) {
+    var difficulties = [['normal', '常规'], ['hard', '偏难'], ['easy', '偏易'], ['custom', '自定义']];
+    var locked = rule.difficulty !== 'custom';
+    var difficultyOpen = panels.difficulty ? ' open' : '';
+    var advancedOpen = panels.advanced ? ' open' : '';
+    var buttons = difficulties.map(function (item) {
+      return '<button type="button" class="difficulty-btn' + (rule.difficulty === item[0] ? ' is-active' : '') +
+        '" data-difficulty="' + item[0] + '" aria-pressed="' + (rule.difficulty === item[0]) + '">' + item[1] + '</button>';
     }).join('');
 
-    return html || '<div class="empty-state">该时间范围内暂无已批改作业</div>';
+    return '<div class="subject-rules">' +
+      '<div class="subject-rules__head"><div><h4>该科判弱规则</h4>' +
+        '<p>只影响判定，不修改原始成绩；预设值仅可查看，自定义可修改全部指标。</p></div>' +
+        '<button type="button" class="link" data-rule-reset="' + subject + '">恢复常规</button></div>' +
+      '<details class="rule-disclosure rule-difficulty" data-rule-panel="difficulty" data-rule-subject="' + subject + '"' + difficultyOpen + '>' +
+        '<summary><span>难度设置</span><small>' + FocusReport.difficultyLabel(rule) + '</small></summary>' +
+        '<div class="rule-disclosure__body">' +
+          '<div class="difficulty-row"><span>本次整体难度</span><div class="difficulty-group">' + buttons + '</div></div>' +
+          '<div class="rule-grid">' +
+            ruleField(subject, 'targetLine', '基本达标线', rule.targetLine, '%', 1, 100, 1, '班均或个人未达此线，才进入相对判弱', locked) +
+            ruleField(subject, 'lowLine', '学生低分线', rule.lowLine, '%', 1, 69, 1, '低于此线直接列为重点提升', locked) +
+            ruleField(subject, 'classGap', '班级差距线', rule.classGap, '个百分点', 1, 30, 1, '班均低于同学科组达到此差距', locked) +
+            ruleField(subject, 'studentGap', '学生差距线', rule.studentGap, '个百分点', 1, 30, 1, '个人低于班均达到此差距', locked) +
+            ruleField(subject, 'lowShare', '低分人数占比', rule.lowShare, '%', 1, 100, 1, '达到此比例判为班级低分面短板', locked) +
+          '</div>' +
+        '</div></details>' +
+      '<details class="rule-disclosure rule-advanced" data-rule-panel="advanced" data-rule-subject="' + subject + '"' + advancedOpen + '>' +
+        '<summary><span>高级设置</span><small>数据有效性与证据要求</small></summary>' +
+        '<div class="rule-disclosure__body"><div class="rule-grid">' +
+          ruleField(subject, 'missingRate', '未交率闸门', rule.missingRate, '%', 0, 100, 1, '超过此比例先抓提交，不判强弱', locked) +
+          ruleField(subject, 'confirmTimes', '连续确认次数', rule.confirmTimes, '次', 1, 5, 1, '班均差连续达到此次数才确认', locked) +
+        '</div></div></details>' +
+      '<div class="rule-error" id="focusRuleError"></div></div>';
+  }
+
+  function rulePanelState(subject) {
+    if (!focusDraft.rulePanels[subject]) {
+      focusDraft.rulePanels[subject] = { difficulty: false, advanced: false };
+    }
+    return focusDraft.rulePanels[subject];
+  }
+
+  function rememberRulePanels() {
+    if (!focusDraft || !focusDraft.rulePanels) return;
+    $$('#focusModalTasks details[data-rule-panel]').forEach(function (panel) {
+      rulePanelState(panel.dataset.ruleSubject)[panel.dataset.rulePanel] = panel.open;
+    });
+  }
+
+  function draftTaskGroupsHTML() {
+    var hws = draftHomeworks();
+    var names = subjectNamesOf(hws);
+    var active = ensureDraftSubject();
+    if (!active) return '<div class="empty-state">该时间范围内暂无已批改作业</div>';
+
+    var tabs = names.map(function (name) {
+      var count = hws.filter(function (hw) { return hw.subject === name && focusDraft.tasks[hw.id]; }).length;
+      var total = hws.filter(function (hw) { return hw.subject === name; }).length;
+      var rule = focusDraft.rules[name];
+      return '<button type="button" role="tab" aria-selected="' + (name === active) +
+        '" class="subject-tab' + (name === active ? ' is-active' : '') + '" data-modal-subject-tab="' + name + '">' +
+        '<span>' + name + '</span><small>' + FocusReport.difficultyLabel(rule) + ' · 已选 ' + count + '/' + total + '</small></button>';
+    }).join('');
+
+    var items = hws.filter(function (hw) { return hw.subject === active; });
+    var on = items.filter(function (hw) { return focusDraft.tasks[hw.id]; }).length;
+    var list = items.map(function (hw) {
+      return '<label class="checkbox task-item">' +
+        '<input type="checkbox" data-modal-task="' + hw.id + '"' + (focusDraft.tasks[hw.id] ? ' checked' : '') + ' />' +
+        '<span class="checkbox__box"></span><span class="task-item__name">' + hw.name + '</span>' +
+        '<span class="task-item__meta">满分 ' + hw.full + ' · 已交 ' + hw.handed + '/' + hw.due +
+          ' 人 · 批改率 <b class="task-item__rate' + (hw.gradePct != null && hw.gradePct < 100 ? ' is-low' : '') + '">' +
+          (hw.gradePct == null ? '—' : hw.gradePct + '%') + '</b></span></label>';
+    }).join('');
+
+    return '<div class="subject-tabs" role="tablist" aria-label="按学科设置作业与判弱规则">' + tabs + '</div>' +
+      '<div class="subject-panel" role="tabpanel">' +
+        '<div class="task-group"><div class="task-group__head">' +
+          '<label class="checkbox checkbox--inline"><input type="checkbox" data-modal-subject="' + active + '"' +
+            (on === items.length ? ' checked' : '') + ' /><span class="checkbox__box"></span>' +
+            '<span class="task-group__name">' + active + '作业</span></label>' +
+          '<span class="task-group__meta">' + items.length + ' 份 · 已选 ' + on + '/' + items.length + '</span></div>' + list + '</div>' +
+        subjectRuleSettingsHTML(active, focusDraft.rules[active], rulePanelState(active)) + '</div>';
   }
 
   function updateFocusModalHint() {
     var hws = draftHomeworks();
     var picked = hws.filter(function (hw) { return focusDraft.tasks[hw.id]; });
-    var names = {};
-    picked.forEach(function (hw) { names[hw.subject] = true; });
-
+    var count = subjectNamesOf(picked).length;
+    var error = draftRuleError();
     var hint = $('#focusModalHint');
-    hint.innerHTML = picked.length
-      ? '已选 <b>' + picked.length + '/' + hws.length + '</b> 份作业 · 覆盖 <b>' +
-        Object.keys(names).length + '</b> 个学科'
-      : '<b class="text-danger">至少保留一份作业</b>';
-
-    $('#focusModalApply').disabled = !picked.length;
+    if (error) hint.innerHTML = '<b class="text-danger">' + error + '</b>';
+    else if (!picked.length) hint.innerHTML = '<b class="text-danger">至少保留一份作业</b>';
+    else hint.innerHTML = '已选 <b>' + picked.length + '/' + hws.length + '</b> 份作业 · 覆盖 <b>' + count + '</b> 个学科' +
+      (count < MIN_FOCUS_SUBJECTS ? '<span class="modal-hint-warning">；不足 3 科，应用后显示缺省页</span>' : '；设置将保存到当前教师账号');
+    var activeError = $('#focusRuleError');
+    if (activeError) activeError.textContent = focusDraft.activeSubject ? ruleError(focusDraft.rules[focusDraft.activeSubject]) : '';
+    $('#focusModalApply').disabled = !picked.length || !!error;
   }
 
   function renderModalTasks() {
+    rememberRulePanels();
     $('#focusModalTasks').innerHTML = draftTaskGroupsHTML();
     updateFocusModalHint();
   }
 
-  // 弹窗容器设了 overflow:hidden，上沿越界的徽章会被裁；改为视口定位并按弹窗实际位置同步
   function placeFocusModalBadge() {
     var modal = document.querySelector('#focusModal .modal');
     var badge = modal && modal.querySelector('.prd-badge');
@@ -682,41 +815,29 @@
 
   function openFocusModal(scopeKey) {
     var f = scopeOf(scopeKey);
-    focusDraft = { scopeKey: scopeKey, range: f.range, start: f.start, end: f.end, tasks: {} };
+    focusDraft = { scopeKey: scopeKey, range: f.range, start: f.start, end: f.end, tasks: {},
+      rules: FocusReport.getRules(), activeSubject: null, rulePanels: {} };
     initScopeTasks(f);
     Object.keys(f.tasks).forEach(function (k) { focusDraft.tasks[k] = f.tasks[k]; });
+    ensureDraftSubject();
 
     var presets = FOCUS_PRESETS.map(function (p) {
       return '<button class="chip' + (p[0] === focusDraft.range ? ' is-active' : '') +
         '" type="button" data-range="' + p[0] + '">' + p[1] + '</button>';
     }).join('');
-
+    $('#focusModalTitle').textContent = '调整时间、作业与判弱规则';
+    $('.modal__desc', $('#focusModal')).textContent = '当前账号 ' + teacherAccount() + ' · 各学科独立设置并保存教师使用习惯';
     $('#focusModalBody').innerHTML =
-      '<div class="modal__section">' +
-        '<h3 class="modal__subtitle">时间范围</h3>' +
-        '<div class="modal__range">' +
-          '<div class="chips" id="modalRange">' + presets + '</div>' +
-          '<div class="date-range date-range--input">' +
-            '<input class="date-input" type="date" id="modalStart" value="' + focusDraft.start +
-              '" aria-label="开始日期" />' +
-            '<span class="date-range__sep">~</span>' +
-            '<input class="date-input" type="date" id="modalEnd" value="' + focusDraft.end +
-              '" aria-label="结束日期" />' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-      '<div class="modal__section">' +
-        '<div class="modal__subtitle-row">' +
-          '<h3 class="modal__subtitle">作业清单' +
-            '<span class="modal__subtitle-note">（同一学科支持选择多份作业）</span></h3>' +
-          '<div class="modal__bulk">' +
-            '<button class="link" type="button" data-modal-bulk="all">全选</button>' +
-            '<button class="link" type="button" data-modal-bulk="none">清空</button>' +
-          '</div>' +
-        '</div>' +
-        '<div id="focusModalTasks"></div>' +
-      '</div>';
-
+      '<div class="modal__section"><h3 class="modal__subtitle">时间范围</h3><div class="modal__range">' +
+        '<div class="chips" id="modalRange">' + presets + '</div><div class="date-range date-range--input">' +
+          '<input class="date-input" type="date" id="modalStart" value="' + focusDraft.start + '" aria-label="开始日期" />' +
+          '<span class="date-range__sep">~</span><input class="date-input" type="date" id="modalEnd" value="' + focusDraft.end + '" aria-label="结束日期" />' +
+        '</div></div></div>' +
+      '<div class="modal__section"><div class="modal__subtitle-row">' +
+        '<h3 class="modal__subtitle">分学科设置<span class="modal__subtitle-note">（切换 Tab 分别选作业、设难度与指标）</span></h3>' +
+        '<div class="modal__bulk"><button class="link" type="button" data-modal-bulk="all">全部全选</button>' +
+          '<button class="link" type="button" data-modal-bulk="none">全部清空</button></div></div>' +
+        '<div id="focusModalTasks"></div></div>';
     renderModalTasks();
     $('#focusModal').style.display = '';
     document.body.classList.add('is-modal-open');
@@ -732,45 +853,48 @@
   }
 
   function syncModalRangeChips() {
-    $$('#modalRange .chip').forEach(function (b) {
-      b.classList.toggle('is-active', b.dataset.range === focusDraft.range);
-    });
+    $$('#modalRange .chip').forEach(function (b) { b.classList.toggle('is-active', b.dataset.range === focusDraft.range); });
   }
 
   function applyFocusModal() {
     var picked = draftHomeworks().filter(function (hw) { return focusDraft.tasks[hw.id]; });
-    if (!picked.length) {
-      toast('至少保留一份作业');
-      return;
-    }
+    var error = draftRuleError();
+    if (!picked.length || error) { toast(error || '至少保留一份作业'); return; }
+    var count = subjectNamesOf(picked).length;
     var f = scopeOf(focusDraft.scopeKey);
     f.range = focusDraft.range;
     f.start = focusDraft.start;
     f.end = focusDraft.end;
     f.tasks = focusDraft.tasks;
-
+    FocusReport.configureRules(focusDraft.rules);
+    var saved = saveTeacherRules(FocusReport.getRules());
     closeFocusModal();
     $('#content').scrollTo({ top: 0 });
     render();
-    toast('已应用：' + focusEchoTime(f) + ' · ' + picked.length + ' 份作业');
+    toast((saved ? '已保存教师设置' : '设置已应用，但浏览器未允许持久保存') + ' · ' + picked.length + ' 份作业' +
+      (count < MIN_FOCUS_SUBJECTS ? ' · 学科不足 3 科' : ''));
+  }
+
+  function renderFocusEmpty(root, names) {
+    $('#focusHintSlot').innerHTML = '';
+    root.innerHTML = '<section class="focus-section focus-empty"><div class="focus-empty__icon" aria-hidden="true">' +
+      '<svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.6">' +
+      '<rect x="8" y="7" width="32" height="34" rx="4"/><path d="M16 18h16M16 25h10M16 32h7"/>' +
+      '<path d="M32 31l8 8M40 31l-8 8"/></svg></div>' +
+      '<h2>暂无法进行跨学科分析</h2><p>当前有作业的科目仅 <b>' + names.length + ' 科</b>，跨学科分析至少需要 <b>3 个学科</b>。</p>' +
+      '<button type="button" class="btn btn--primary" data-focus-open-settings>调整时间、作业与规则</button></section>';
   }
 
   function renderFocusReport() {
     var root = $('#focusRoot');
     var f = scopeOf('focus');
     var hws = pickedHomeworks(f);
-
-    if (!hws.length) {
-      root.innerHTML = '<div class="focus-section"><div class="empty-state">' +
-        '未选择任何作业，请点「调整时间与作业」至少保留一份</div></div>';
-      return;
-    }
-
+    var names = subjectNamesOf(hws);
+    $('#focusExport').disabled = names.length < MIN_FOCUS_SUBJECTS;
+    if (names.length < MIN_FOCUS_SUBJECTS) { renderFocusEmpty(root, names); return; }
     FocusReport.render(root, {
       homeworks: hws.map(function (hw) { return hw.id; }),
-      dateLabel: focusTimeText(f),
-      start: f.start,
-      end: f.end
+      dateLabel: focusTimeText(f), start: f.start, end: f.end
     });
   }
 
@@ -837,14 +961,29 @@
   function exportFocusCsv() {
     var f = scopeOf('focus');
     var hws = pickedHomeworks(f);
-    if (!hws.length) {
-      toast('未选择任何作业');
+    if (subjectNamesOf(hws).length < MIN_FOCUS_SUBJECTS) {
+      toast('至少有 3 个学科的作业后才能导出跨学科分析');
       return;
     }
     var rows = FocusReport.exportRows(hws.map(function (hw) { return hw.id; }));
     rows.unshift(['跨学科分析 · 班级报表 · ' + f.clazz, focusEchoTime(f),
       hws.length + ' 份作业 · 学科得分率 = 得分合计 ÷ 满分合计 · 当日/近3天证据 · 仅 1 份作业时只作临时建议']);
     downloadCsv(rows, '跨学科分析_' + f.clazz + '_' + f.start +
+      (f.start === f.end ? '' : '_' + f.end));
+  }
+
+  /* 学生热力表专属导出：只出「学生各科得分与班均对比」一张表，含首列「关注」星标 */
+  function exportStudentCsv() {
+    var f = scopeOf('focus');
+    var hws = pickedHomeworks(f);
+    if (subjectNamesOf(hws).length < MIN_FOCUS_SUBJECTS) {
+      toast('至少有 3 个学科的作业后才能导出学生对比');
+      return;
+    }
+    var rows = FocusReport.exportStudentRows(hws.map(function (hw) { return hw.id; }));
+    rows.unshift(['跨学科分析 · 学生各科得分与班均对比 · ' + f.clazz, focusEchoTime(f),
+      hws.length + ' 份作业 · 单元格上排=个人−班均(百分点)、下排=个人得分率 · 首列★=已关注 · 仅 1 份作业时标「暂定」']);
+    downloadCsv(rows, '学生各科得分对比_' + f.clazz + '_' + f.start +
       (f.start === f.end ? '' : '_' + f.end));
   }
 
@@ -984,6 +1123,14 @@
     $('#exportBtn').addEventListener('click', exportCsv);
     $('#focusExport').addEventListener('click', exportFocusCsv);
 
+    /* 「导出本表」按钮随热力表动态渲染，用 document 事件委托绑定 */
+    document.addEventListener('click', function (e) {
+      var btn = e.target && e.target.closest ? e.target.closest('[data-focus-export-stu]') : null;
+      if (btn) exportStudentCsv();
+      var settings = e.target && e.target.closest ? e.target.closest('[data-focus-open-settings]') : null;
+      if (settings) openFocusModal('focus');
+    });
+
     /* ---------- 跨学科分析视图：筛选层（只有一份筛选条） ---------- */
 
     FILTER_BARS.forEach(function (bar) {
@@ -992,12 +1139,12 @@
         toast('统计周期已切换为 ' + this.value);
       });
 
-      // 年级：演示数据仅覆盖高三34班
+      // 年级：演示数据仅覆盖高三年级
       $(bar.levels).addEventListener('click', function (e) {
         var btn = e.target.closest('.chip');
         if (!btn) return;
         if (btn.dataset.level !== '高三') {
-          toast('演示数据仅覆盖高三34班');
+          toast('演示数据仅覆盖高三年级');
           return;
         }
         scopeOf(bar.key).level = btn.dataset.level;
@@ -1008,11 +1155,16 @@
       $(bar.classes).addEventListener('click', function (e) {
         var btn = e.target.closest('[data-clazz]');
         if (!btn) return;
-        if (btn.dataset.clazz !== scopeOf(bar.key).clazz) {
-          toast('演示数据仅覆盖高三34班');
+        var clazz = btn.dataset.clazz;
+        if (clazz === scopeOf(bar.key).clazz) return;
+        if (!FocusReport.setDemoClass(clazz)) {
+          toast('演示数据仅覆盖高三34班、35班与36班（缺省示例）');
           return;
         }
-        renderFilterBars();
+        scopeOf(bar.key).clazz = clazz;
+        scopeOf(bar.key).tasks = {};
+        render();
+        toast('已加载 ' + clazz + ' 的演示数据');
       });
     });
 
@@ -1052,6 +1204,31 @@
         return;
       }
 
+      var tab = e.target.closest('[data-modal-subject-tab]');
+      if (tab) {
+        focusDraft.activeSubject = tab.dataset.modalSubjectTab;
+        renderModalTasks();
+        return;
+      }
+
+      var difficulty = e.target.closest('[data-difficulty]');
+      if (difficulty) {
+        var activeSubject = ensureDraftSubject();
+        if (!activeSubject) return;
+        focusDraft.rules[activeSubject] = FocusReport.getRulePreset(
+          difficulty.dataset.difficulty, focusDraft.rules[activeSubject]);
+        renderModalTasks();
+        return;
+      }
+
+      var reset = e.target.closest('[data-rule-reset]');
+      if (reset) {
+        var resetSubject = reset.dataset.ruleReset;
+        focusDraft.rules[resetSubject] = FocusReport.getRulePreset('normal', {});
+        renderModalTasks();
+        return;
+      }
+
       var bulk = e.target.closest('[data-modal-bulk]');
       if (bulk) {
         var on = bulk.dataset.modalBulk === 'all';
@@ -1078,6 +1255,16 @@
         return;
       }
 
+      var ruleInput = e.target.closest('input[data-rule-field]');
+      if (ruleInput) {
+        var ruleSubject = ruleInput.dataset.ruleSubject;
+        var field = ruleInput.dataset.ruleField;
+        focusDraft.rules[ruleSubject][field] = ruleInput.value === '' ? NaN : Number(ruleInput.value);
+        focusDraft.rules[ruleSubject].difficulty = 'custom';
+        renderModalTasks();
+        return;
+      }
+
       var sub = e.target.closest('input[data-modal-subject]');
       if (sub) {
         var name = sub.dataset.modalSubject;
@@ -1099,6 +1286,7 @@
 
   /* ==================== 启动 ==================== */
   function init() {
+    FocusReport.configureRules(loadTeacherRules());
     bindEvents();
     render();
   }
