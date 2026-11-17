@@ -720,7 +720,7 @@
             ruleField(subject, 'targetLine', '基本达标线', rule.targetLine, '%', 1, 100, 1, '班均或个人未达此线，才进入相对判弱', locked) +
             ruleField(subject, 'lowLine', '学生低分线', rule.lowLine, '%', 1, 69, 1, '低于此线直接列为重点提升', locked) +
             ruleField(subject, 'classGap', '班级差距线', rule.classGap, '个百分点', 1, 30, 1, '班均低于同学科组达到此差距', locked) +
-            ruleField(subject, 'studentGap', '学生差距线', rule.studentGap, '个百分点', 1, 30, 1, '个人低于班均达到此差距', locked) +
+            ruleField(subject, 'studentGap', '学生差距线', rule.studentGap, '个百分点', 1, 30, 1, '个人低于班均达到此差距即判相对偏低；报表中「提醒线」列即此值', locked) +
             ruleField(subject, 'lowShare', '低分人数占比', rule.lowShare, '%', 1, 100, 1, '达到此比例判为班级低分面短板', locked) +
           '</div>' +
         '</div></details>' +
@@ -987,6 +987,309 @@
       (f.start === f.end ? '' : '_' + f.end));
   }
 
+  /* ==================== 4.5 导出设置（格式 PDF / Excel + 颜色样式 黑白 / 彩色） ==================== */
+
+  var exportFormat = 'pdf';
+  var exportColor = 'mono';
+
+  /* 导出设置本地记住上次确认的选择；存储不可读时回退默认（PDF + 黑白） */
+  function loadExportPrefs() {
+    try {
+      var p = JSON.parse(window.localStorage.getItem('xkFocusExportPrefs_v1') || '{}');
+      if (p && (p.format === 'pdf' || p.format === 'excel')) exportFormat = p.format;
+      if (p && (p.color === 'mono' || p.color === 'color')) exportColor = p.color;
+    } catch (e) { /* 默认值兜底 */ }
+  }
+
+  function saveExportPrefs() {
+    try {
+      window.localStorage.setItem('xkFocusExportPrefs_v1',
+        JSON.stringify({ format: exportFormat, color: exportColor }));
+    } catch (e) { /* 存储不可写不阻断导出 */ }
+  }
+  loadExportPrefs();
+
+  function openExportModal() {
+    var f = scopeOf('focus');
+    var hws = pickedHomeworks(f);
+    var names = subjectNamesOf(hws);
+    if (names.length < MIN_FOCUS_SUBJECTS) {
+      toast('至少有 3 个学科的作业后才能导出跨学科分析');
+      return;
+    }
+    $('#exportModalDesc').textContent = '导出当前跨学科分析报表 · ' + f.clazz;
+    $('#exportModalHint').innerHTML = '导出范围：<b>' + focusEchoTime(f) + '</b> · <b>' +
+      hws.length + '</b> 份作业 · <b>' + names.length + '</b> 个学科';
+    syncExportFormat();
+    $('#exportModal').style.display = '';
+    document.body.classList.add('is-modal-open');
+  }
+
+  function closeExportModal() {
+    $('#exportModal').style.display = 'none';
+    document.body.classList.remove('is-modal-open');
+  }
+
+  function syncExportFormat() {
+    $$('#exportFormats .export-format').forEach(function (card) {
+      var on = card.dataset.format === exportFormat;
+      card.classList.toggle('is-active', on);
+      $('input', card).checked = on;
+    });
+    $$('#exportColors .export-format').forEach(function (card) {
+      var on = card.dataset.color === exportColor;
+      card.classList.toggle('is-active', on);
+      $('input', card).checked = on;
+    });
+    /* Excel 为纯数据无颜色：整组隐藏颜色样式 */
+    $('#exportModal').classList.toggle('is-excel', exportFormat === 'excel');
+  }
+
+  function applyExportFormat() {
+    var fmt = exportFormat;
+    saveExportPrefs();
+    closeExportModal();
+    if (fmt === 'excel') exportFocusCsv();
+    else exportFocusHtml();
+  }
+
+  /* 收集 tokens/app 样式全文：优先经 CSSOM 内联，使导出页自包含、可离线调样式；
+     个别浏览器禁止读取时退回相对 link（新窗口继承壳页基地址，仍可解析） */
+  function collectExportCss() {
+    var wanted = ['tokens.css', 'app.css'];
+    var inline = [];
+    var links = [];
+    for (var i = 0; i < document.styleSheets.length; i++) {
+      var sheet = document.styleSheets[i];
+      var href = sheet.href || '';
+      var match = null;
+      for (var j = 0; j < wanted.length; j++) {
+        if (href.indexOf(wanted[j]) >= 0) match = wanted[j];
+      }
+      if (!match) continue;
+      var text = null;
+      try {
+        var rules = sheet.cssRules || sheet.rules;
+        var parts = [];
+        for (var k = 0; k < rules.length; k++) parts.push(rules[k].cssText);
+        text = parts.join('\n');
+      } catch (err) { text = null; }
+      if (text) inline.push('/* ===== ' + match + '（内联快照，可直接修改） ===== */\n' + text);
+      else links.push('<link rel="stylesheet" href="styles/' + match + '" />');
+    }
+    return { inline: inline.join('\n\n'), links: links.join('\n') };
+  }
+
+  /* 报表主体静态化：去掉 PRD 徽章、导出/筛选控件与下钻交互，关注星标转为静态标记 */
+  function buildExportReportHtml() {
+    var clone = $('#focusRoot').cloneNode(true);
+    /* 图例尾注随颜色版式改写：黑白版说明整页黑白灰，彩色版指引工具栏切换；
+       两版文案写入 data 属性，供导出页一键切换时同步更新 */
+    var notes = clone.querySelectorAll('.heat-legend > span');
+    var note = notes[notes.length - 1];
+    if (note) {
+      var noteRule = '（按各学科学生差距线分档；满分区里接近满分的格子淡化显示）';
+      note.id = 'expHeatNote';
+      note.setAttribute('data-note-mono', '颜色越深 = 离班均越远' + noteRule +
+        '；本版为黑白版：全页黑白灰，七档按灰度深浅区分，越深越低');
+      note.setAttribute('data-note-color', '红色越深 = 离班均越远' + noteRule +
+        '；本版为彩色版，黑白打印请在工具栏切换为黑白版');
+      note.textContent = note.getAttribute(exportColor === 'mono' ? 'data-note-mono' : 'data-note-color');
+    }
+    $$('.prd-badge', clone).forEach(function (el) { el.parentNode.removeChild(el); });
+    $$('[data-focus-export-stu]', clone).forEach(function (el) { el.parentNode.removeChild(el); });
+    $$('[data-focus-weak]', clone).forEach(function (input) {
+      var label = input.closest('label');
+      if (label && label.parentNode) label.parentNode.removeChild(label);
+    });
+    $$('.watch-star', clone).forEach(function (btn) {
+      var span = document.createElement('span');
+      span.className = btn.className;
+      span.innerHTML = btn.innerHTML;
+      span.setAttribute('aria-hidden', 'true');
+      btn.parentNode.replaceChild(span, btn);
+    });
+    $$('[data-focus-jump]', clone).forEach(function (el) {
+      el.removeAttribute('data-focus-jump');
+      el.removeAttribute('role');
+      el.removeAttribute('tabindex');
+      el.classList.remove('kpi-card--link');
+    });
+    /* 下钻文案「查看名单 ›」随交互一并移除，并清掉句尾残留的分隔点 */
+    $$('.kpi-card__more', clone).forEach(function (el) { el.parentNode.removeChild(el); });
+    $$('.kpi-card__sub', clone).forEach(function (sub) {
+      var last = sub.lastChild;
+      if (last && last.nodeType === 3) last.nodeValue = last.nodeValue.replace(/[\s·]+$/, '');
+    });
+    $$('.q-tip', clone).forEach(function (el) { el.removeAttribute('tabindex'); });
+    return clone.innerHTML;
+  }
+
+  /* PDF 导出 = 生成自包含 HTML 打印页：新窗口呈现报表，顶部工具栏提供
+     「打印 / 保存为 PDF」与「下载 HTML」；样式集中在 export-style 块便于二次调整 */
+  function exportFocusHtml() {
+    var f = scopeOf('focus');
+    var hws = pickedHomeworks(f);
+    var names = subjectNamesOf(hws);
+    if (names.length < MIN_FOCUS_SUBJECTS) {
+      toast('至少有 3 个学科的作业后才能导出跨学科分析');
+      return;
+    }
+    var win = window.open('', '_blank');
+    if (!win) {
+      toast('浏览器拦截了弹出窗口，请允许本站弹窗后重试');
+      return;
+    }
+
+    var css = collectExportCss();
+    var reportHtml = buildExportReportHtml();
+    var fileBase = '跨学科分析_' + f.clazz + '_' + f.start +
+      (f.start === f.end ? '' : '_' + f.end);
+    var now = new Date();
+    var pad = function (n) { return ('0' + n).slice(-2); };
+    var stamp = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) +
+      ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    var title = f.clazz + ' · 跨学科分析诊断报表（' + focusTimeText(f) + '）';
+
+    /* 导出页外壳与打印规则：全部集中在 export-style 块，改这里即可调导出样式 */
+    var exportStyle = [
+      '/* ========== 导出样式调整区：修改本块后重新打印即可生效 ========== */',
+      'body { min-width: 0; margin: 0; background: var(--color-bg-app); }',
+      '.report { width: 100%; max-width: 1320px; margin: 0 auto; padding: 76px var(--pr-space-7) var(--pr-space-13); }',
+      '.report__head { padding: var(--pr-space-5) var(--pr-space-6); border: 1px solid var(--focus-card-border); border-left: 5px solid var(--color-brand); border-radius: var(--pr-radius-md); background: var(--color-bg-surface); box-shadow: var(--shadow-raised); margin-bottom: var(--pr-space-4); }',
+      '.report__title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--pr-space-3); margin: 0 0 var(--pr-space-2); font-size: 26px; font-weight: var(--pr-fw-bold); color: var(--color-text-title); }',
+      '.report__meta { margin: 0; font-size: var(--pr-fs-sm); line-height: 1.9; color: var(--color-text-secondary); }',
+      '.report__meta b { color: var(--color-text-body); font-weight: var(--pr-fw-medium); }',
+      '.report__foot { margin-top: var(--pr-space-4); font-size: var(--pr-fs-xs); line-height: 1.9; color: var(--color-text-muted); }',
+      '/* 顶部工具栏：仅屏幕显示，不进入打印 */',
+      '.export-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 99; display: flex; align-items: center; flex-wrap: wrap; gap: var(--pr-space-3); padding: 10px var(--pr-space-5); background: var(--pr-gray-900); color: var(--pr-white); box-shadow: var(--shadow-float); }',
+      '.export-bar__title { font-size: var(--pr-fs-sm); font-weight: var(--pr-fw-semibold); }',
+      '.export-bar__hint { flex: 1 1 auto; min-width: 200px; font-size: var(--pr-fs-xs); color: var(--pr-gray-300); }',
+      '.export-bar__btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 var(--pr-space-4); border: 1px solid var(--pr-gray-600); border-radius: var(--pr-radius-sm); background: transparent; color: var(--pr-white); font-size: var(--pr-fs-sm); font-family: inherit; cursor: pointer; }',
+      '.export-bar__btn:hover { border-color: var(--pr-gray-400); background: var(--pr-gray-700); }',
+      '.export-bar__btn--primary { border-color: var(--color-brand-solid); background: var(--color-brand-solid); }',
+      '.export-bar__btn--primary:hover { border-color: var(--color-brand); background: var(--color-brand); }',
+      '.export-bar__style { padding: 3px 10px; border: 1px solid var(--pr-gray-600); border-radius: var(--pr-radius-pill); font-size: var(--pr-fs-xs); color: var(--pr-gray-300); white-space: nowrap; }',
+      '/* 交互元素静态化 */',
+      '.watch-star { pointer-events: none; cursor: default; }',
+      '.kpi-card { cursor: default; }',
+      '/* 打印 / 另存 PDF 规则：默认 A4 横向（报表较宽），可改 portrait；保留热力底色 */',
+      '@page { size: A4 landscape; margin: 10mm; }',
+      '@media print {',
+      '  body { background: #fff; }',
+      '  .export-bar { display: none !important; }',
+      '  .report { max-width: none; padding: 0; --bar-height: 10px; }',
+      '  .report__head, .focus-section, .kpi-card { box-shadow: none; }',
+      '  .heat-scroll, .table-scroll { max-height: none; overflow: visible; }',
+      '  .table-card { zoom: var(--print-zoom, 1); margin-top: 10px; }',
+      '  .focus-section { break-inside: avoid; }',
+      '  .data-table tr { break-inside: avoid; }',
+      '  /* 首页聚合：报表头 + KPI 卡 + 第一节同页；纵向紧凑只压行高/内距/条高，不改字号与列宽，宽表 --print-zoom 口径保持不变 */',
+      '  .report__head { break-after: avoid; padding: 10px 16px; margin-bottom: 10px; }',
+      '  .report__title { font-size: 22px; margin-bottom: 4px; }',
+      '  .report__meta { line-height: 1.6; }',
+      '  .kpi-row { gap: 10px; margin-bottom: 10px; break-inside: avoid; break-after: avoid; }',
+      '  .kpi-card { padding: 6px 14px; }',
+      '  .kpi-card__value { font-size: 22px; }',
+      '  .kpi-card__sub { line-height: 1.5; }',
+      '  .focus-section { padding: 10px 16px 12px; margin-bottom: 10px; }',
+      '  .focus-section__head { margin-bottom: 8px; }',
+      '  .bar-list { min-height: 0; gap: 4px; }',
+      '  .bar-legend { margin-top: 8px; }',
+      '  .data-table--compact thead tr:first-child th { height: 30px; }',
+      '  .data-table--compact tbody tr { height: 30px; }',
+      '  .data-table--heat thead tr:first-child th { height: 34px; }',
+      '  .data-table--heat tbody tr { height: 40px; }',
+      '  .q-tip { display: none; }',
+      '  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }',
+      '}'
+    ].join('\n');
+
+    var barHtml =
+      '<div class="export-bar">' +
+        '<span class="export-bar__title">' + title + '</span>' +
+        '<span class="export-bar__style" id="expStyleChip">' +
+          (exportColor === 'mono' ? '黑白打印版' : '彩色版') + '</span>' +
+        '<span class="export-bar__hint">调整导出样式：修改本页源码中 &lt;style id="export-style"&gt; 块（或下载 HTML 后修改），再重新打印' +
+        (css.links ? '；当前浏览器限制样式内联，本页以相对链接引用工程样式，下载后请放在工程目录内打开' : '') +
+        '</span>' +
+        '<button type="button" class="export-bar__btn" id="expStyle">' +
+          (exportColor === 'mono' ? '切换为彩色版' : '切换为黑白版') + '</button>' +
+        '<button type="button" class="export-bar__btn" id="expDownload">下载 HTML</button>' +
+        '<button type="button" class="export-bar__btn export-bar__btn--primary" id="expPrint">打印 / 保存为 PDF</button>' +
+      '</div>';
+
+    var script =
+      '<script>' +
+      '(function () {' +
+      '  var fileBase = ' + JSON.stringify(fileBase) + ';' +
+      '  var printBtn = document.getElementById("expPrint");' +
+      '  var dlBtn = document.getElementById("expDownload");' +
+      /* 宽表打印自适应：A4 横向可印宽约 1047px，再扣除所在 section 的左右内边距与边框，
+         实测表宽超过该目标时写入缩放变量，由 export-style 的 @media print zoom 规则生效；离线打开亦自适应 */
+      '  var cards = document.querySelectorAll(".table-card");' +
+      '  for (var i = 0; i < cards.length; i++) {' +
+      '    var table = cards[i].querySelector("table");' +
+      '    if (!table) continue;' +
+      '    var sec = cards[i].closest(".focus-section");' +
+      '    var cs = sec ? getComputedStyle(sec) : null;' +
+      '    var inset = cs ? parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth) : 0;' +
+      '    var target = 1040 - inset;' +
+      '    var w = table.scrollWidth || 0;' +
+      '    var z = w > target ? Math.max(0.5, Math.floor((target / w) * 100) / 100) : 1;' +
+      '    cards[i].style.setProperty("--print-zoom", String(z));' +
+      '  }' +
+      '  if (printBtn) printBtn.addEventListener("click", function () { window.print(); });' +
+      /* 颜色版式一键切换：body 类名驱动整页版式（黑白版全页灰阶 / 彩色版全彩），切换结果随下载 HTML 与打印一起带走 */
+      '  var styleBtn = document.getElementById("expStyle");' +
+      '  var styleChip = document.getElementById("expStyleChip");' +
+      '  if (styleBtn) styleBtn.addEventListener("click", function () {' +
+      '    var mono = document.body.classList.toggle("print-mono");' +
+      '    document.body.classList.toggle("print-color", !mono);' +
+      '    if (styleChip) styleChip.textContent = mono ? "黑白打印版" : "彩色版";' +
+      '    styleBtn.textContent = mono ? "切换为彩色版" : "切换为黑白版";' +
+      '    var heatNote = document.getElementById("expHeatNote");' +
+      '    if (heatNote) heatNote.textContent = heatNote.getAttribute(mono ? "data-note-mono" : "data-note-color");' +
+      '  });' +
+      '  if (dlBtn) dlBtn.addEventListener("click", function () {' +
+      '    var html = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;' +
+      '    var blob = new Blob([html], { type: "text/html;charset=utf-8;" });' +
+      '    var url = URL.createObjectURL(blob);' +
+      '    var a = document.createElement("a");' +
+      '    a.href = url; a.download = fileBase + ".html";' +
+      '    document.body.appendChild(a); a.click(); document.body.removeChild(a);' +
+      '    URL.revokeObjectURL(url);' +
+      '  });' +
+      '})();' +
+      '<\/script>';
+
+    var html = '<!DOCTYPE html>\n' +
+      '<html lang="zh-CN">\n<head>\n<meta charset="UTF-8" />\n' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0" />\n' +
+      '<title>' + title + '</title>\n' +
+      (css.inline ? '<style id="base-style">\n' + css.inline + '\n</style>\n' : '') +
+      (css.links ? css.links + '\n' : '') +
+      '<style id="export-style">\n' + exportStyle + '\n</style>\n' +
+      '</head>\n<body class="print-' + exportColor + '">\n' + barHtml + '\n' +
+      '<div class="report">\n' +
+        '<header class="report__head">\n' +
+          '<h1 class="report__title">' + f.clazz + ' · 跨学科分析诊断报表' +
+            '<span class="focus-scope">' + focusEchoTime(f) + '</span></h1>\n' +
+          '<p class="report__meta">时间范围：<b>' + focusTimeText(f) + '</b>　·　作业：<b>' +
+            hws.length + ' 份 / ' + names.length + ' 学科（' + names.join('、') + '）</b>　·　生成时间：' + stamp + '</p>\n' +
+        '</header>\n' +
+        '<div id="reportRoot">' + reportHtml + '</div>\n' +
+        '<p class="report__foot">本报表含学生姓名与学号，仅限校内使用，请勿外传。' +
+          '缺交 / 未批改显示「—」，不按 0 分参与均分与能力判定；仅 1 份作业的结论为临时建议。' +
+          '本页为导出快照，筛选与「只看重点提升学生」状态以导出时页面为准。</p>\n' +
+      '</div>\n' + script + '\n</body>\n</html>';
+
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    toast('已生成 PDF 打印页，可在新页面打印或下载 HTML');
+  }
+
   function bindEvents() {
     // 顶部导航
     $('#topNav').addEventListener('click', function (e) {
@@ -1121,7 +1424,38 @@
 
     // 操作按钮
     $('#exportBtn').addEventListener('click', exportCsv);
-    $('#focusExport').addEventListener('click', exportFocusCsv);
+    $('#focusExport').addEventListener('click', openExportModal);
+
+    // 导出格式选择弹窗
+    $('#exportModalClose').addEventListener('click', closeExportModal);
+    $('#exportModalCancel').addEventListener('click', closeExportModal);
+    $('#exportModalApply').addEventListener('click', applyExportFormat);
+    $('#exportModal').addEventListener('click', function (e) {
+      if (e.target === this) closeExportModal();
+    });
+    $('#exportFormats').addEventListener('click', function (e) {
+      var card = e.target.closest('.export-format');
+      if (!card) return;
+      exportFormat = card.dataset.format;
+      syncExportFormat();
+    });
+    $('#exportFormats').addEventListener('change', function () {
+      var checked = $('#exportFormats input:checked');
+      if (checked) { exportFormat = checked.value; syncExportFormat(); }
+    });
+    $('#exportColors').addEventListener('click', function (e) {
+      var card = e.target.closest('.export-format');
+      if (!card) return;
+      exportColor = card.dataset.color;
+      syncExportFormat();
+    });
+    $('#exportColors').addEventListener('change', function () {
+      var checked = $('#exportColors input:checked');
+      if (checked) { exportColor = checked.value; syncExportFormat(); }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && $('#exportModal').style.display !== 'none') closeExportModal();
+    });
 
     /* 「导出本表」按钮随热力表动态渲染，用 document 事件委托绑定 */
     document.addEventListener('click', function (e) {

@@ -59,6 +59,17 @@
   --pr-heat-p3-bg: #b6e5ca;
   --pr-heat-p3-fg: #0d6b3f;
 
+  /* 黑白版七档：纯灰、亮度单调递增（越深 = 越低于班均）；黑白版整页均为黑白灰 */
+  --pr-heat-mono-n3-bg: #acacac;
+  --pr-heat-mono-n2-bg: #bbbbbb;
+  --pr-heat-mono-n1-bg: #cbcbcb;
+  --pr-heat-mono-flat-bg: #d9d9d9;
+  --pr-heat-mono-p1-bg: #e9e9e9;
+  --pr-heat-mono-p2-bg: #f2f2f2;
+  --pr-heat-mono-p3-bg: #fbfbfb;
+  --pr-heat-mono-n3-fg: #242424;
+  --pr-heat-mono-n2-fg: #2e2e2e;
+
   --pr-space-1: 4px;
   --pr-space-2: 8px;
   --pr-space-3: 12px;

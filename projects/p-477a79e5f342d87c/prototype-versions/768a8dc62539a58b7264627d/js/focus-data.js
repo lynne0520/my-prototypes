@@ -431,6 +431,13 @@
     return round1(v).toFixed(1);
   }
 
+  /* 表头区间用：整数不带小数点，非整数保留一位 */
+  function numText(v) {
+    if (!isNum(v)) return '—';
+    var r = round1(v);
+    return r % 1 === 0 ? String(r) : r.toFixed(1);
+  }
+
   function signed(v) {
     if (!isNum(v)) return '—';
     if (Math.abs(v) < 0.05) return '0.0';
@@ -1061,6 +1068,31 @@
         '</div>';
     }).join('');
 
+    /* 四档表头的得分率区间：优/良为固定展示线；中/低分下限取逐科低分线，全科一致才直接写数值 */
+    var lowLineSet = [];
+    shown.forEach(function (s) {
+      var t = numText(s.lowLine);
+      if (lowLineSet.indexOf(t) < 0) lowLineSet.push(t);
+    });
+    var lowLineSame = lowLineSet.length === 1;
+    var lowBare = lowLineSame ? lowLineSet[0] : '低分线';
+    var lowLineDetail = shown.map(function (s) {
+      return s.name + ' ' + numText(s.lowLine) + '%';
+    }).join(' · ');
+    var bandHeads = [
+      ['优', '≥' + numText(CUT.excellent) + '%',
+        '等级分档（按得分率）：优为 ≥' + numText(CUT.excellent) + '%，固定展示线'],
+      ['良', numText(CUT.good) + '–' + numText(CUT.excellent - 0.1) + '%',
+        '等级分档（按得分率）：良为 ' + numText(CUT.good) + '% 至 ' + numText(CUT.excellent) + '% 以下'],
+      ['中', lowBare + '–' + numText(CUT.good - 0.1) + '%',
+        '等级分档（按得分率）：中档下限用各学科低分线，上限为 ' + numText(CUT.good) + '% 以下；本次低分线 ' + lowLineDetail],
+      ['低分', '<' + lowBare + (lowLineSame ? '%' : ''),
+        '等级分档（按得分率）：低于各学科低分线即为低分；本次低分线 ' + lowLineDetail]
+    ].map(function (h) {
+      return '<th title="' + h[2] + '">' + h[0] +
+        '<br><span class="th-sub th-sub--nowrap">' + h[1] + '</span></th>';
+    }).join('');
+
     var trs = tableRows.map(function (s) {
       var weakRow = decision.candidates.indexOf(s) >= 0;
       var conclusion = subjectConclusion(s, decision);
@@ -1117,9 +1149,8 @@
               '<th title="这一科所有作业的得分合计 ÷ 满分合计">班均得分率</th><th title="同一套作业的学科组得分率">学科组得分率</th><th title="班级 − 学科组，单位：个百分点">较学科组</th>' +
               '<th title="100 − 班均得分率：这一科全班一共还有多少分可提升">可提升空间</th>' +
               '<th title="把全班得分率从低到高排，正中间那个数">中位数</th><th title="标准差：越大说明学生之间分数拉得越开">学生分化</th><th>最高</th><th>最低</th>' +
-              '<th title="固定展示线：优为得分率 ≥85%">优</th><th title="固定展示线：良为 70% 至 85% 以下">良</th>' +
-              '<th title="中档下限使用各学科低分线，上限为 70%">中</th><th title="低分线按各学科本次设置">低分</th>' +
-              '<th title="学生差距线按学科设置；同时要求本人未达本科达标线">提醒线</th><th title="明确短板 / 相对短板为阶段性学科判定；先抓提交、趋势复核为数据状态">班级判定</th>' +
+              bandHeads +
+              '<th title="提醒线即设置里的学生差距线，按学科可调；另需本人未达本科达标线">提醒线</th><th title="明确短板 / 相对短板为阶段性学科判定；先抓提交、趋势复核为数据状态">班级判定</th>' +
             '</tr></thead>' +
             '<tbody>' + trs + '</tbody>' +
           '</table>' +
@@ -1139,10 +1170,10 @@
       items.map(function (it) {
         return '<em>·</em><i class="' + it[0] + '">' + it[1] + '</i>';
       }).join('') +
-      '<em>·</em><span>红色越深 = 离班均越远（按各学科学生差距线分档；满分区里接近满分的格子淡化显示）</span></div>';
+      '<em>·</em><span>红色越深 = 离班均越远（按各学科学生差距线分档；满分区里接近满分的格子淡化显示）；黑白打印时七档按灰度深浅区分，越深越低</span></div>';
   }
 
-  /* 补弱原因一句话：热力表「补弱学科与原因」列与学生表导出共用同一口径 */
+  /* 建议原因一句话：热力表「建议学科」列悬停提示与学生表导出共用同一口径 */
   function weakReason(r) {
     var p = r.priority;
     if (!p) return r.submitOnly ? '先补交作业再判定' : '暂无有效成绩';
@@ -1173,17 +1204,17 @@
 
     var head = '<tr><th>学号</th><th>姓名</th>' +
       shown.map(function (s) {
-        /* 表头只留两项：班均与作业份数；提醒线数值放到鼠标悬停说明，列宽不做宽 */
-        var headTip = s.name + '：班级均 ' + f1(s.avg) + '%（' + evidenceText(s.evidence) + '作业），' +
+        /* 表头：学科名后跟（n 份），下行只留班均，不再重复作业份数；提醒线数值放到鼠标悬停说明 */
+        var headTip = s.name + '：班级均 ' + f1(s.avg) + '%（' + s.hwCount + ' 份作业），' +
           difficultyLabel(s.rule) + '，达标线 ' + f1(s.targetLine) + '%，低分线 ' + f1(s.lowLine) + '%，' +
           '未达达标线且低于班均 ' + f1(s.trigger) + ' 个百分点算需要提升';
         /* 「满分区」只在表头统一标一次，格子内不再逐格打角标 */
         return '<th title="' + headTip + '">' + s.name +
+          ' <span class="th-sub">（' + s.hwCount + ' 份）</span>' +
           (s.exempt ? ' <span class="th-sub">满分区</span>' : '') +
-          '<br><span class="th-sub">班均 ' + f1(s.avg) + '% · ' +
-          evidenceText(s.evidence) + '</span></th>';
+          '<br><span class="th-sub">班均 ' + f1(s.avg) + '%</span></th>';
       }).join('') +
-      '<th class="weak-subject-col">补弱学科与原因</th>' +
+      '<th class="weak-subject-col" title="该生唯一一科建议学科（重点提升或优先巩固）；悬停单元格可查看建议原因">建议学科</th>' +
       '<th class="weak-score-col">该科得分率</th><th class="weak-tag-col">建议类型</th></tr>';
 
     var body = list.map(function (r) {
@@ -1220,9 +1251,8 @@
         '<td class="cell-num">' + r.stu.id + '</td>' +
         '<td class="cell-name">' + watchStar(r.stu.id, watched) + r.stu.name + '</td>' +
         cells +
-        '<td class="weak-subject-cell">' +
-          '<span class="weak-subject__name">' + (p ? p.sub : '—') + '</span>' +
-          '<span class="weak-subject__reason">' + reason + '</span></td>' +
+        '<td class="weak-subject-cell" title="' + reason + '">' +
+          '<span class="weak-subject__name">' + (p ? p.sub : '—') + '</span></td>' +
         '<td class="cell-num weak-score-cell' + (p && p.fail ? ' cell-dev-down' : '') + '">' +
           (p ? '<span class="weak-score__value">' + f1(p.v) + '%</span>' +
             (isNum(p.d) ? '<span class="weak-score__avg">班均 ' + f1(p.v - p.d) + '%</span>' : '') : '—') + '</td>' +
@@ -1241,7 +1271,7 @@
         '<h2 class="focus-section__title">学生各科得分与班均对比（热力图）</h2>' +
         tip('<span>格子上排数字 = 该生这一科得分率减去班均得分率，正数高于班均，单位是百分点；下排数字 = 该生这一科的得分率。</span>' +
           '<span>颜色按与班均的差距及本科学生差距线分档，高于班均的一侧用绿色对称表示。</span>' +
-          '<span>个人补弱学科怎么选：先看是否低于本科低分线，或未达本科达标线且低于班均达到本科学生差距线；若没有，再按「（个人 − 班均）÷ 本科学生差距线」选出相对最弱的一科。</span>' +
+          '<span>个人建议学科怎么选：先看是否低于本科低分线，或未达本科达标线且低于班均达到本科学生差距线；若没有，再按「（个人 − 班均）÷ 本科学生差距线」选出相对最弱的一科。</span>' +
           '<span>「优先巩固」只表示个人各科里的学习优先级，不等同于薄弱学科；即使该科仍高于班均，也可作为巩固方向。只有 1 份作业时显示「暂定」。</span>' +
           '<span>未交率超过本科设定闸门的科目先抓提交；超过近 3 天的数据不进推荐。满分区仍标在表头，但低于本科低分线或明显掉队时，照常进入个人建议。</span>') +
         '<div class="focus-section__actions">' +
@@ -1467,7 +1497,7 @@
     rows.push([]);
     rows.push(['学号', '姓名'].concat(all.map(function (s) { return s.name + '得分率'; }))
       .concat(all.map(function (s) { return s.name + '较班均'; }))
-      .concat(['个人补弱学科', '建议类型', '证据强度', '该科得分率', '该科较班均', '建议科低于班均(百分点)',
+      .concat(['个人建议学科', '建议类型', '证据强度', '该科得分率', '该科较班均', '建议科低于班均(百分点)',
         '短板', '低分科目', '个人建议类型', '一句话建议']));
 
     var info = weakestOf(all);
@@ -1509,7 +1539,7 @@
     var header = ['关注', '学号', '姓名'];
     all.forEach(function (s) { header.push(s.name + '得分率'); });
     all.forEach(function (s) { header.push(s.name + '较班均'); });
-    header = header.concat(['补弱学科', '补弱原因', '该科得分率', '该科班均', '建议类型', '一句话建议']);
+    header = header.concat(['建议学科', '建议原因', '该科得分率', '该科班均', '建议类型', '一句话建议']);
     rows.push(header);
     info.rows.slice().sort(compareStudentRows).forEach(function (r) {
       var p = r.priority;
