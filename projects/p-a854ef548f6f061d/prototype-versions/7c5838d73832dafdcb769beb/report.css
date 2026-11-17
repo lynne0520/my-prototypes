@@ -1,0 +1,552 @@
+/* ════════════════════════════════════════════════════════════════
+   report.css · 讲评试卷 4.0 单次作业报告（班级报告 / 年级报告 / 作文报告）共享样式
+   引用面：仅 class-report / grade-report / essay-report 三页（index / list / 学生页不引用），
+   v3 密度令牌与工具类（.rp-cols / .rp-mt / .rp-row / .rp-ol）的回归面即这三页 + index 的 iframe 嵌入
+   视觉基准（§18 对齐后）：与讲评工作台同源的企业级扁平版式 ——
+   - 主色 #2468f2；卡片描边代替阴影；圆角统一 4px；表头浅灰 #fafafa
+   - 字体系统中中文栈（PingFang SC / Microsoft YaHei）；图表纯 SVG（打印友好）
+   ════════════════════════════════════════════════════════════════ */
+:root {
+    --rp-primary: #2468f2;
+    --rp-primary-bg: #ecf3ff;
+    --rp-primary-bd: #b5d0fb;
+    --rp-lead: #3d434b;          /* 领导版徽章（中性深灰，非第二主色） */
+    --rp-lead-bg: #f0f2f5;
+    --rp-text: #303133;
+    --rp-text2: #606266;
+    --rp-text3: #909399;
+    --rp-border: #dcdfe6;
+    --rp-bg: #f5f7fa;
+    --rp-good: #389e0d;
+    --rp-warn: #d46b08;
+    --rp-bad: #cf1322;
+    --rp-shadow: 0 1px 3px rgba(48, 49, 51, .06), 0 1px 2px rgba(48, 49, 51, .04);
+
+    /* ── 版式节奏令牌（v2 密度改造）：全站间距只取这三档，不再逐处写死像素 ── */
+    --rp-gap: 8px;               /* 模块之间 */
+    --rp-sub: 10px;              /* 模块内块与块之间 */
+    --rp-pad-x: 16px;            /* 模块左右内边距（导航与卡片同一数值，保证左缘对齐） */
+    --rp-pad-y: 10px;            /* 模块内容区上下内边距（v3：12 → 10，与 --rp-sub 同档，模块体不再比块间距松） */
+    --rp-head-h: 36px;           /* 锚点导航条高度 */
+    --rp-radius: 4px;            /* 全站圆角只此一档 */
+}
+
+body.rp-body {
+    margin: 0;
+    background: var(--rp-bg);
+    color: var(--rp-text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+/* ── 满屏铺满：报告页取消左右留白，内容贴屏幕两侧（与 style.css §14「满屏布局」同一规范）
+   面包屑 / 报告头（标题 + 基本信息）已取消，首屏直接是模块锚点导航 + 模块内容 */
+.rp-wrap { max-width: none; margin: 0; padding: 0 0 8px; }
+
+/* ── 顶部 sticky 锚点导航（扁平文字 tab + 主色下划线，与讲评工作台主功能 tab 同语言）
+      序号只作定位线索：不做描边、不做底色，取消原来「外框套序号框」的双层描边 ── */
+.rp-anchor {
+    position: sticky; top: 52px; z-index: 280;
+    display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+    background: #fff;
+    border-bottom: 1px solid #ebeef5; border-radius: 0;
+    padding: 0 var(--rp-pad-x); margin-bottom: 6px;
+    box-shadow: none;
+}
+.rp-anchor a {
+    position: relative;
+    display: inline-flex; align-items: center; gap: 6px;
+    height: var(--rp-head-h); padding: 0;
+    font-size: 13px; color: var(--rp-text2); text-decoration: none;
+    background: none; border: 0; border-radius: 0; white-space: nowrap;
+    transition: color .15s;
+}
+.rp-anchor a:hover { color: var(--rp-primary); }
+.rp-anchor a:focus-visible { outline: 2px solid var(--rp-primary-bd); outline-offset: 2px; border-radius: 2px; }
+.rp-anchor a.on { color: var(--rp-primary); font-weight: 600; }
+.rp-anchor a.on::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -1px;
+    height: 2px; background: var(--rp-primary); border-radius: 2px 2px 0 0;
+}
+/* 序号：导航与模块标题共用同一条声明（纯数字 / 灰色 700 / 无底色无描边 / 等宽数字），
+   两处必须同源，避免同一页出现两种序号语言 */
+.rp-anchor a .no,
+.mod-no {
+    font-size: 12px; font-weight: 700; color: #9aa0ab; letter-spacing: .3px;
+    font-variant-numeric: tabular-nums;
+}
+.rp-anchor a .no { transition: color .15s; }
+.rp-anchor a:hover .no, .rp-anchor a.on .no { color: var(--rp-primary); }
+.rp-anchor .rp-anchor-act { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* ── 模块卡片：描边扁平，去阴影；表头与序号签同一浅蓝语言 ── */
+.mod { background: #fff; border: 1px solid #ebeef5; border-radius: var(--rp-radius); box-shadow: none; margin-bottom: var(--rp-gap); scroll-margin-top: 94px; }
+.mod-h { display: flex; align-items: center; gap: var(--rp-gap); flex-wrap: wrap; padding: 6px var(--rp-pad-x); border-bottom: 1px solid #f0f2f5; }
+/* 模块序号：与锚点导航同一写法（字号/字重/颜色在上方共享声明里），此处只清掉旧的序号签外观 */
+.mod-no {
+    flex-shrink: 0; min-width: 0; height: auto; padding: 0; border: 0; border-radius: 0; background: none;
+    display: inline-flex; align-items: center;
+}
+.mod-title { font-size: 15px; font-weight: 600; }
+/* 标题行说明统一水平居右（行内最右）：标题吃掉剩余空间，把「?」/操作区/说明整组推到行尾；
+   说明再用 order 排到操作区之后，成为行内最后一个元素；故 .mod-aside 不再自推，避免两个 auto 均分把说明停在行中 */
+.mod-title { font-size: 15px; font-weight: 600; margin-right: auto; }
+.mod-sub { font-size: 12px; color: var(--rp-text3); text-align: right; order: 1; }
+.mod-h > .mod-aside { margin-left: 0; order: 0; }
+
+/* ── 标题行「?」：统计方法 / 判定规则 / 数据来源统一收进这里，正文只留结论与数据
+      hover、focus、点击三种打开方式；点开后可移入弹层阅读（外层 padding 作鼠标桥） ── */
+.mod-help { position: relative; display: inline-flex; align-items: center; flex-shrink: 0; }
+.mh-btn {
+    width: 16px; height: 16px; padding: 0; border-radius: 50%;
+    border: 1px solid #c8ccd4; background: #fff; color: var(--rp-text3);
+    font: inherit; font-size: 11px; font-weight: 700; line-height: 1; cursor: help;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.mh-btn:hover, .mh-btn:focus-visible { color: var(--rp-primary); border-color: var(--rp-primary-bd); background: var(--rp-primary-bg); outline: none; }
+.mh-pop { display: none; position: absolute; top: 100%; left: -10px; z-index: 320; padding-top: 6px; }
+.mod-help:hover .mh-pop, .mod-help:focus-within .mh-pop, .mod-help.open .mh-pop { display: block; }
+.mh-box {
+    display: block; background: #fff; border: 1px solid var(--rp-border); border-radius: 4px;
+    padding: 10px 12px; box-shadow: 0 8px 24px rgba(48, 49, 51, .14);
+    font-size: 12px; line-height: 1.6; color: var(--rp-text2); text-align: left;
+    max-height: min(60vh, 480px); overflow-y: auto;
+}
+.mh-t { display: block; font-size: 12px; font-weight: 600; color: var(--rp-text); }
+.mh-row { display: flex; gap: 8px; margin-top: 5px; }
+.mh-k { flex: 0 0 auto; min-width: 62px; white-space: nowrap; color: var(--rp-text3); }
+.mh-v { flex: 1; min-width: 0; }
+.mh-v b { color: var(--rp-text); }
+.mod-aside { margin-left: auto; display: flex; align-items: center; gap: var(--rp-gap); flex-wrap: wrap; }
+.mod-b { padding: var(--rp-pad-y) var(--rp-pad-x); }
+.mod-b.tight { padding-top: var(--rp-sub); }
+/* 重点模块标记：线性星形（与全站 SVG 图标同一语言，不再用 emoji） */
+.mod .star { display: inline-flex; align-items: center; color: var(--rp-warn); }
+.mod .star svg { display: block; }
+/* 模块内小标题：统一节奏，替代正文里逐处写死的 h5 style */
+.sub-h { display: flex; align-items: center; gap: var(--rp-gap); margin: var(--rp-sub) 0 5px; font-size: 13px; font-weight: 600; color: var(--rp-text); }
+.sub-h:first-child { margin-top: 0; }
+
+/* ── 布局工具类（v3）：取代正文里逐处写死的 style="display:flex;gap:16px…" / margin-top:10px
+      .rp-cols      图 | 表 左右结构（默认 1.4 : 1，左图右表）
+      .rp-cols.eq   等分两列（两张图并排、两组卡片并排）
+      .rp-cols.side 固定 230px 侧栏（环形图）| 余量；.side-lg 340px（雷达图）
+      1024px 以下全部回落单列；767px 以下 .chart-box 隐藏，右栏表格自然占满 ── */
+.rp-cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--rp-sub) var(--rp-pad-x); align-items: start; }
+.rp-cols.eq { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.rp-cols.side { grid-template-columns: 230px minmax(0, 1fr); }
+.rp-cols.side-lg { grid-template-columns: 340px minmax(0, 1fr); }
+.rp-cols > * { min-width: 0; }
+.rp-cols > .concl { margin-top: 0; }     /* 汇总结论入栏时与右栏顶对齐 */
+.rp-mt { margin-top: var(--rp-sub); }
+.rp-row { display: flex; gap: var(--rp-gap); flex-wrap: wrap; align-items: center; }
+.rp-ol { margin: 4px 0 0 18px; padding: 0; }
+.rp-ol li + li { margin-top: 2px; }
+/* 环形图 / 雷达图这类有 max-width 的方形 SVG：容器居中，不靠 style 居中 */
+.chart-box.center { display: flex; justify-content: center; }
+/* 内嵌折叠明细（领导版「展开教师视角明细」）：与 details.basis 同语言，取消行内 style */
+details.rp-fold { border: 1px solid var(--rp-border); border-radius: var(--rp-radius); padding: 6px 12px; background: var(--rp-bg); }
+details.rp-fold > summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--rp-text); }
+details.rp-fold > .fold-b { margin-top: var(--rp-sub); }
+
+/* ── KPI 大数卡：白底描边小圆角；班级 / 年级概览为 5 卡（.five 固定五列：平均分 / 得分率 / 优秀 / 及格 / 低分），
+      作文页 6 卡仍走 auto-fit；.four 仅为旧版四卡布局保留 ── */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--rp-gap); }
+.kpi-grid.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.kpi-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.kpi { background: #fff; border: 1px solid #ebeef5; border-radius: var(--rp-radius); padding: 6px 10px 5px; }
+.kpi .k-lb { font-size: 12px; color: var(--rp-text2); display: flex; align-items: center; gap: 5px; }
+/* 标签尾注（如「满分 105」）：降字号降色，不占副标行，窄卡时跟随标签换行 */
+.kpi .k-lb .k-lb-note { font-size: 11px; font-weight: 400; color: var(--rp-text3); white-space: nowrap; }
+.kpi .k-v { font-size: 20px; line-height: 1.25; font-weight: 700; letter-spacing: 0; margin: 1px 0 0; font-variant-numeric: tabular-nums; }
+.kpi .k-v small { font-size: 12px; font-weight: 600; color: var(--rp-text2); }
+.kpi .k-ref { font-size: 12px; color: var(--rp-text3); min-height: 16px; }
+.kpi .k-ref .up { color: var(--rp-good); font-weight: 600; }
+.kpi .k-ref .dn { color: var(--rp-bad); font-weight: 600; }
+.kpi.warn .k-v { color: var(--rp-warn); }
+.kpi.bad .k-v { color: var(--rp-bad); }
+.kpi .rank-bdg { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--rp-lead); background: var(--rp-lead-bg); border: 1px solid #c0c4cc; border-radius: 3px; padding: 1px 8px; vertical-align: 3px; }
+.kpi .na { font-size: 13px; font-weight: 600; color: var(--rp-text3); }
+/* 主卡（平均分）：浅主色底 + 大一号数值，概览第一眼落在平均分上；警示色仍优先于主卡色 */
+.kpi.hero { border-color: var(--rp-primary-bd); background: var(--rp-primary-bg); }
+.kpi.hero .k-v { font-size: 24px; color: var(--rp-primary); }
+
+/* ── m1 概览 KPI 卡：统一浅蓝底（班级报告 / 年级报告 / 作文报告概览）
+   作用域限定 .m1-kpi（仅三页 m1 概览的卡片容器），
+   报告内其他 .kpi-grid 不带该类，仍保持白底；
+   主卡不再另设底色，层级改由「更大字号 + 主色数字」表达 ── */
+.m1-kpi > .kpi,
+.m1-kpi > .kpi.hero { background: var(--rp-primary-bg); border-color: var(--rp-primary-bd); }
+.kpi.hero.warn .k-v { color: var(--rp-warn); }
+.kpi.hero.bad .k-v { color: var(--rp-bad); }
+.kpi.hero .k-ref { color: var(--rp-text2); }
+/* 次级信息小注行：提交率与有效样本不再占卡片，降级为一行脚注；未交名单等交互链接保留 */
+.kpi-foot { display: flex; flex-wrap: wrap; gap: 3px 18px; margin-top: 6px; font-size: 12px; color: var(--rp-text2); }
+.kpi-foot b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.kpi-foot .warn { color: var(--rp-warn); font-weight: 600; }
+.kpi-foot a { color: var(--rp-primary); }
+
+/* ── 概览「汇总结论」：每条结论独立一行（序号圆自动编号），非表格 / 非清单 ——
+      条序仍按 ①水平与结构 ②讲评安排 ③数据可信度组织，数值直接嵌进句子；
+      不设判定项列、本次取值列、分隔线与列对齐；判定规则 / 统计口径统一收进标题旁「?」 ── */
+.concl { border: 1px solid #ebeef5; border-left: 3px solid var(--rp-primary); border-radius: var(--rp-radius); background: #fff; padding: 9px 12px; margin: var(--rp-sub) 0 0; counter-reset: cpno; }
+/* 每条结论独立一行：CSS counter 自动编号，行首主色序号圆标识「第几条」，条间加大间距替代原连续行文 */
+.concl .cp { margin: 0; font-size: 13px; line-height: 1.75; text-align: justify; position: relative; padding-left: 22px; counter-increment: cpno; }
+.concl .cp + .cp { margin-top: 7px; }
+.concl .cp::before { content: counter(cpno); position: absolute; left: 0; top: 3.5px; width: 16px; height: 16px; border-radius: 50%; background: var(--rp-primary-bg); color: var(--rp-primary); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+.concl .cp b { font-weight: 700; font-variant-numeric: tabular-nums; }
+/* 句内判定强调：文字着色 + 浅色高亮底，突出预警结论；不出胶囊徽标 */
+.concl .cp .cp-t.warn { color: var(--rp-warn); background: #fff7e6; padding: 0 4px; border-radius: 3px; }
+.concl .cp .cp-t.bad { color: var(--rp-bad); background: #fff1f0; padding: 0 4px; border-radius: 3px; }
+/* 标签行独立成行：角色标不再混入第 1 条结论，序号圆从正文首条起算 */
+.concl .concl-head { margin: 0 0 7px; }
+.concl .concl-tag { display: inline-block; font-size: 11px; font-weight: 700; line-height: 17px; color: var(--rp-primary); background: var(--rp-primary-bg); border: 1px solid var(--rp-primary-bd); border-radius: 3px; padding: 0 7px; white-space: nowrap; }
+
+/* ── 表格：表头浅灰、正文深灰（与工作台 data-table 同口径） ── */
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th, .tbl td { border: 1px solid #ebeef5; padding: 4px 8px; text-align: left; vertical-align: top; line-height: 1.5; }
+.tbl th { background: #fafafa; font-weight: 600; color: var(--rp-text); white-space: nowrap; }
+.tbl td.num, .tbl th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tbl tr.hl td { background: var(--rp-primary-bg); }
+.tbl tr.dim td { color: var(--rp-text3); background: #fafafa; }
+.tbl tr.dim td .why { font-size: 11px; color: var(--rp-warn); }
+.tbl .pos { color: var(--rp-good); font-weight: 600; }
+.tbl .neg { color: var(--rp-bad); font-weight: 600; }
+.tbl-wrap { overflow-x: auto; }
+
+/* ── seg 分段控件：描边胶囊组，选中浅蓝底（同工作台层级 tab） ── */
+.seg { display: inline-flex; background: #fff; border: 1px solid var(--rp-border); border-radius: var(--rp-radius); padding: 2px; }
+.seg button { border: none; background: none; font: inherit; font-size: 12px; color: var(--rp-text2); padding: 3px 11px; border-radius: 3px; cursor: pointer; }
+.seg button.on { background: var(--rp-primary-bg); color: var(--rp-primary); font-weight: 600; box-shadow: none; }
+
+/* ── 知识点维度切换（同步 / 复习…）：标题行右侧「标签 + 分段控件」；
+     打印时 .seg 整体隐藏，由 .kp-dim-cur 输出当前维度名，保证纸上仍能看出本页按哪个维度统计 ── */
+.kp-dim { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.kp-dim-lb { font-size: 12px; color: var(--rp-text3); white-space: nowrap; }
+.kp-dim .seg { padding: 1px; }
+.kp-dim .seg button { padding: 2px 9px; font-size: 12px; }
+.kp-dim-cur { display: none; font-size: 12px; font-weight: 600; color: var(--rp-primary); white-space: nowrap; }
+/* 无标题行可挂时（依存模块）的行内维度说明：左侧细线 + 浅底，不抢正文 */
+.dim-line { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin: 0 0 var(--rp-sub); padding: 4px 10px; font-size: 12px; line-height: 1.6; color: var(--rp-text2); background: #f7f9fc; border: 1px solid #eef1f5; border-left: 3px solid var(--rp-primary); border-radius: 3px; }
+.dim-line b { color: var(--rp-text); }
+.dim-line .dim-why { color: var(--rp-text3); }
+
+/* ── 知识点 chip：逐题得分率「知识点」列内并列小标（多知识点、多维度）──
+     色点标出所属维度（同步蓝 / 复习紫）：同一题可能同时挂两个维度的知识点，色点是唯一不靠文字的区分 */
+.kp-chip { display: inline-block; font-size: 11px; line-height: 17px; color: var(--rp-text2); background: #f5f7fa; border: 1px solid var(--rp-border); border-radius: 3px; padding: 0 5px; margin: 1px 3px 1px 0; white-space: nowrap; }
+.kp-chip[data-dim]::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 2px; margin-right: 4px; vertical-align: 1px; }
+.kp-chip[data-dim="sync"]::before { background: #2468f2; }
+.kp-chip[data-dim="review"]::before { background: #722ed1; }
+
+/* ── tab 切换面板（知识点诊断：掌握率图 ↔ 知识点明细；打印时两视图同出） ── */
+.tab-pane { display: none; }
+.tab-pane.on { display: block; margin-top: var(--rp-sub); }
+
+/* ── 按钮 ── */
+.rp-btn { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: var(--rp-radius); border: 1px solid var(--rp-border); background: #fff; color: var(--rp-text2); cursor: pointer; }
+.rp-btn:hover { color: var(--rp-primary); border-color: var(--rp-primary-bd); background: var(--rp-primary-bg); }
+.rp-btn.primary { background: var(--rp-primary); border-color: var(--rp-primary); color: #fff; }
+.rp-btn.primary:hover { background: #1a56db; }
+.rp-btn.sm { padding: 3px 9px; font-size: 12px; }
+.rp-btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+/* ── 标签 / 徽章 ── */
+.tag-lv { font-size: 11px; font-weight: 600; border-radius: 3px; padding: 1px 7px; white-space: nowrap; }
+.tag-lv.master { color: var(--rp-good); background: #f6ffed; border: 1px solid #b7eb8f; }
+.tag-lv.weak { color: var(--rp-warn); background: #fffbe6; border: 1px solid #ffd591; }
+.tag-lv.none { color: var(--rp-bad); background: #fff1f0; border: 1px solid #ffccc7; }
+.tag-flag { font-size: 11px; font-weight: 600; color: #722ed1; background: #f9f0ff; border: 1px solid #efdbff; border-radius: 3px; padding: 1px 7px; white-space: nowrap; }
+.tag-flag.gray { color: var(--rp-text2); background: var(--rp-bg); border-color: var(--rp-border); }
+.sig { font-weight: 700; color: var(--rp-bad); letter-spacing: 1px; }
+.sig.one { color: var(--rp-warn); }
+
+/* ── 图表容器 ── */
+.chart-box { width: 100%; overflow-x: auto; overflow-y: hidden; }
+.chart-box svg { width: 100%; height: auto; display: block; }
+.chart-legend { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--rp-text2); margin: 2px 0 0; }
+.chart-legend .legend-act { margin-left: auto; display: inline-flex; align-items: center; }
+.chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.chart-legend i.line { height: 0; border-top: 2px dashed var(--rp-text2); border-radius: 0; vertical-align: 3px; }
+.chart-alt { display: none; font-size: 12px; color: var(--rp-text2); background: var(--rp-bg); border: 1px dashed var(--rp-border); border-radius: var(--rp-radius); padding: 7px 10px; }
+.chart-note { font-size: 11px; color: var(--rp-text3); margin-top: 4px; }
+
+/* ── 逐题下钻面板 ── */
+.drill { border: 1px solid #ebeef5; border-left: 3px solid var(--rp-primary); border-radius: var(--rp-radius); background: var(--rp-bg); padding: 8px 12px; margin-top: var(--rp-sub); }
+.drill-h { display: flex; align-items: center; gap: var(--rp-gap); flex-wrap: wrap; font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+.drill-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--rp-sub) var(--rp-pad-x); }
+.drill h5 { font-size: 12px; color: var(--rp-text2); font-weight: 600; margin: 0 0 5px; }
+/* 行内下钻：紧跟被点击的题目行，整行 colspan 占满表格；不再追加到模块底部 */
+.drill-row > td { padding: 2px 0 8px; background: #fff; }
+.drill-row .drill { margin-top: 0; }
+.opt-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 3px; }
+.opt-row .bar { flex: 1; height: 8px; background: #e6e9f0; border-radius: 4px; overflow: hidden; }
+.opt-row .bar i { display: block; height: 100%; background: var(--rp-primary); border-radius: 4px; }
+.opt-row.correct .bar i { background: var(--rp-good); }
+.opt-row .pc { width: 44px; text-align: right; color: var(--rp-text2); font-variant-numeric: tabular-nums; }
+.stu-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.stu-chip { font-size: 12px; background: #fff; border: 1px solid var(--rp-border); border-radius: 3px; padding: 2px 8px; display: inline-flex; align-items: center; gap: 5px; }
+.stu-chip input { margin: 0; accent-color: var(--rp-primary); }
+
+/* ── 讲评清单 ── */
+.lect-item { border: 1px solid #ebeef5; border-radius: var(--rp-radius); padding: 6px 10px; margin-bottom: 4px; display: flex; gap: 10px; align-items: flex-start; }
+.lect-item .qno { flex-shrink: 0; font-weight: 700; color: var(--rp-primary); font-size: 13px; padding-top: 1px; }
+.lect-item .li-body { flex: 1; min-width: 0; }
+.lect-item .li-body > div + div { margin-top: 3px; }   /* 多条建议行间距，替代页内 style="margin-bottom" */
+.lect-item .li-rate { font-size: 12px; color: var(--rp-text2); margin: 2px 0; }
+.lect-item .li-rate b.low { color: var(--rp-bad); }
+.lect-item .li-how { font-size: 12px; color: var(--rp-text); background: var(--rp-primary-bg); border-radius: 3px; padding: 4px 8px; margin-top: 4px; }
+.lect-item .li-act { flex-shrink: 0; display: flex; flex-direction: column; gap: 5px; }
+/* 手动设置的「重点讲评」题：暖色左边框 + 浅底 + 眉标，与「需讲评」的红色判定区分开 */
+.lect-item.key { border-color: #ffd591; background: #fffbf0; box-shadow: inset 3px 0 0 #fa8c16; }
+.lect-item.key .qno { color: #d46b08; }
+.lect-item .tag-key { display: inline-block; font-size: 11px; font-weight: 600; line-height: 15px; color: #d46b08; background: #fff7e6; border: 1px solid #ffd591; border-radius: 3px; padding: 0 6px; margin-right: 5px; vertical-align: 1px; white-space: nowrap; }
+.thr-ctl { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--rp-text2); }
+.thr-ctl input { width: 58px; font: inherit; font-size: 12px; padding: 2px 6px; border: 1px solid var(--rp-border); border-radius: var(--rp-radius); }
+
+/* ── 四象限判定 / 规则依据 ── */
+.quad-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--rp-gap); }
+.quad { border: 1px solid #ebeef5; border-radius: var(--rp-radius); padding: 7px 10px; background: var(--rp-bg); }
+.quad.hit { border-color: var(--rp-primary-bd); background: var(--rp-primary-bg); }
+.quad .q-t { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.quad .q-t .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rp-text3); }
+.quad.hit .q-t .dot { background: var(--rp-primary); }
+.quad .q-c { font-size: 12px; color: var(--rp-text2); margin: 3px 0 5px; }
+.quad .q-a { font-size: 12px; }
+details.basis { margin-top: 4px; font-size: 12px; color: var(--rp-text2); }
+details.basis summary { cursor: pointer; color: var(--rp-primary); }
+details.basis .basis-b { background: #fff; border: 1px solid #ebeef5; border-radius: 4px; padding: 8px 10px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+
+/* ── 灰度功能 ── */
+.gray-banner { display: flex; gap: 8px; align-items: flex-start; background: #fffbe6; border: 1px solid #ffd591; border-radius: var(--rp-radius); padding: 8px 11px; font-size: 12px; color: #873800; margin-bottom: var(--rp-sub); }
+.gray-off { border: 1px dashed var(--rp-border); border-radius: var(--rp-radius); padding: 10px 12px; text-align: center; color: var(--rp-text3); font-size: 13px; background: var(--rp-bg); }
+.switch { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: 12px; color: var(--rp-text2); }
+.switch .track { width: 34px; height: 19px; border-radius: 999px; background: #c0c4cc; position: relative; transition: background .2s; }
+.switch .track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; transition: left .2s; }
+.switch.on .track { background: var(--rp-primary); }
+.switch.on .track::after { left: 17px; }
+
+/* ── 折叠区（保留供扩展；页底「数据质量说明」已撤，口径全文见 PRD QT-01 / ES-02）/ 提示条 ── */
+details.collapse { background: #fff; border: 1px solid #ebeef5; border-radius: var(--rp-radius); box-shadow: none; padding: 8px var(--rp-pad-x); font-size: 12px; color: var(--rp-text2); }
+details.collapse summary { cursor: pointer; font-weight: 600; color: var(--rp-text2); }
+details.collapse .cb { padding: 6px 0 4px; }
+.rp-note { font-size: 12px; color: var(--rp-text3); background: var(--rp-bg); border-radius: var(--rp-radius); padding: 5px 9px; margin-top: 6px; line-height: 1.6; }
+.rp-note b { color: var(--rp-text2); }
+
+/* ── 讲评来源微标签：学生标记 / 教师标记 / 得分率默认（三种来源一眼可辨） ── */
+.tag-src { font-size: 11px; font-weight: 600; border-radius: 3px; padding: 1px 6px; white-space: nowrap; border: 1px solid; }
+.tag-src.stu { color: #1d39c4; background: #f0f5ff; border-color: #adc6ff; }
+.tag-src.tea { color: #722ed1; background: #f9f0ff; border-color: #efdbff; }
+.tag-src.rate { color: var(--rp-text2); background: var(--rp-bg); border-color: var(--rp-border); }
+textarea.rp-ta { width: 100%; box-sizing: border-box; min-height: 62px; font: inherit; font-size: 13px; border: 1px solid var(--rp-border); border-radius: var(--rp-radius); padding: 7px 9px; resize: vertical; }
+textarea.rp-ta:focus { outline: none; border-color: var(--rp-primary-bd); box-shadow: 0 0 0 2px rgba(36, 104, 242, .12); }
+
+/* ══════════ 模块 5 · 错因分析（按题目汇总 / 按学生下钻） ══════════
+   两个视图共用一份「逐题 × 逐生错因归属」，组件按「共用件 → 按题目 → 按学生」分组：
+     ① 共用件：色点 .m5-dot、标签 .m5-tag、堆叠条 .m5-bar
+     ② 按题目：错因×题目矩阵 .m5-mtx、逐题错因卡 .m5-qcard
+     ③ 按学生：名单侧栏 .m5-stu-*、逐题错因明细 .m5-how
+   配色沿用 --rp-primary 系 + 错因自身色（RP_CAUSES.color），不另起色板 */
+
+/* ── ① 共用件 ── */
+.m5-dot { display: inline-block; flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+.m5-tag { display: inline-block; font-size: 12px; color: var(--rp-text2); background: var(--rp-bg); border: 1px solid #eef1f5; border-radius: 3px; padding: 1px 7px; white-space: nowrap; }
+.m5-tag b { color: var(--rp-text); font-variant-numeric: tabular-nums; }
+.m5-qmeta2 { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+/* 错因构成堆叠条：每段宽度 = 该错因占本题错因的百分比（色 = 错因色，纸面需保留） */
+.m5-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #eef1f5; margin: 6px 0 0; }
+.m5-bar > i { display: block; height: 100%; }
+
+/* ── ② 按题目视图 ── */
+/* 错因 × 题目矩阵：单元格 = 该题该错因人次，底色深浅 = 人次多少，数字可点直达题卡 */
+.m5-mtx { font-size: 12.5px; }
+.m5-mtx th, .m5-mtx td { padding: 3px 5px; }
+.m5-mtx th:first-child, .m5-mtx td:first-child { text-align: left; white-space: nowrap; }
+.m5-cell { padding: 0 !important; }
+.m5-cell.is-zero { color: #c9cdd4; }
+.m5-cellb { display: block; width: 100%; min-width: 26px; padding: 3px 0; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 600; color: var(--rp-text); cursor: pointer; border-radius: 3px; font-variant-numeric: tabular-nums; }
+.m5-cellb:hover { background: rgba(36, 104, 242, .16); }
+.m5-cellb:focus-visible { outline: 2px solid var(--rp-primary-bd); outline-offset: -2px; }
+/* 逐题错因卡：卡头可点展开，卡内含错因明细表 + 做错学生分组 */
+.m5-qcard { border: 1px solid #ebeef5; border-radius: var(--rp-radius); margin-top: 6px; background: #fff; }
+.m5-qcard.on { border-color: var(--rp-primary-bd); }
+.m5-qcard-h { display: flex; align-items: center; gap: var(--rp-gap); flex-wrap: wrap; width: 100%; padding: 7px 10px; border: 0; border-radius: var(--rp-radius); background: none; font: inherit; text-align: left; cursor: pointer; }
+.m5-qcard-h:hover { background: #f7f9fc; }
+.m5-qcard.on > .m5-qcard-h { background: var(--rp-primary-bg); border-bottom: 1px solid #ebeef5; }
+.m5-qno { flex-shrink: 0; font-size: 13px; font-weight: 700; color: var(--rp-primary); white-space: nowrap; }
+.m5-qstem { flex: 1 1 240px; min-width: 0; font-size: 13px; color: var(--rp-text); }
+.m5-qtags { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-left: auto; }
+.m5-qtog { flex-shrink: 0; font-size: 12px; color: var(--rp-primary); white-space: nowrap; }
+.m5-qcard-b { display: none; padding: 8px 10px 10px; }
+.m5-qcard.on > .m5-qcard-b { display: block; }
+/* 做错学生按错因分组 */
+.m5-grps-h { margin: var(--rp-sub) 0 5px; font-size: 12px; font-weight: 600; color: var(--rp-text2); }
+.m5-grp { border: 1px solid #eef1f5; border-radius: var(--rp-radius); background: #fcfdff; padding: 5px 8px; margin-bottom: 4px; }
+.m5-grp-h { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.m5-grp-h b { font-size: 13px; }
+.m5-grp-n { font-size: 12px; color: var(--rp-text3); font-variant-numeric: tabular-nums; }
+.stu-chip.m5-chip { cursor: pointer; }
+.stu-chip.m5-chip:hover { color: var(--rp-primary); border-color: var(--rp-primary-bd); background: var(--rp-primary-bg); }
+.m5-chip-r { font-size: 11px; color: var(--rp-text3); font-variant-numeric: tabular-nums; }
+
+/* ── ③ 按学生视图 ── */
+.m5-cause-filter { display: flex; align-items: center; gap: var(--rp-gap); flex-wrap: wrap; margin: 0 0 var(--rp-sub); }
+.m5-cf-lb { font-size: 12px; color: var(--rp-text3); white-space: nowrap; }
+.m5-cause-filter .seg { flex-wrap: wrap; }
+/* 左名单（260px）+ 右明细；1024px 以下回落单列 */
+.rp-cols.m5-cols { grid-template-columns: 268px minmax(0, 1fr); }
+.m5-stu-search { margin-bottom: 6px; }
+.m5-stu-search input { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; padding: 4px 8px; border: 1px solid var(--rp-border); border-radius: var(--rp-radius); background: #fff; }
+.m5-stu-search input:focus { outline: none; border-color: var(--rp-primary-bd); box-shadow: 0 0 0 2px rgba(36, 104, 242, .12); }
+.m5-stu-list { max-height: 560px; overflow-y: auto; border: 1px solid #eef1f5; border-radius: var(--rp-radius); background: #fff; }
+.m5-stu-item { display: block; width: 100%; padding: 5px 9px; border: 0; border-bottom: 1px solid #f2f4f7; background: #fff; font: inherit; text-align: left; cursor: pointer; }
+.m5-stu-item:last-child { border-bottom: 0; }
+.m5-stu-item:hover { background: #f7f9fc; }
+.m5-stu-item.on { background: var(--rp-primary-bg); box-shadow: inset 2px 0 0 var(--rp-primary); }
+.m5-si-nm { display: flex; align-items: baseline; gap: 6px; font-size: 13px; color: var(--rp-text); }
+.m5-si-lk { font-size: 11px; color: var(--rp-text3); }
+.m5-si-sub { display: block; font-size: 11.5px; color: var(--rp-text3); font-variant-numeric: tabular-nums; }
+.m5-si-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.m5-stu-head { border: 1px solid var(--rp-primary-bd); background: var(--rp-primary-bg); border-radius: var(--rp-radius); padding: 7px 10px; margin-bottom: var(--rp-sub); }
+.m5-sh-nm { font-size: 15px; font-weight: 700; }
+.m5-sh-sub { font-size: 12px; color: var(--rp-text2); margin-top: 1px; }
+.m5-sh-sub b { color: var(--rp-text); font-variant-numeric: tabular-nums; }
+.m5-sh-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.m5-how { font-size: 12px; color: var(--rp-text2); min-width: 150px; }
+
+/* ── toast ── */
+#rp-toast { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); z-index: 1200; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+#rp-toast .t { background: rgba(48, 49, 51, .94); color: #fff; font-size: 13px; border-radius: 4px; padding: 8px 16px; box-shadow: 0 6px 18px rgba(48, 49, 51, .25); animation: rp-tin .22s ease; }
+#rp-toast .t.warn { background: rgba(180, 83, 9, .95); }
+@keyframes rp-tin { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #rp-toast .t { animation: none; } }
+
+/* ── 响应式：767px 以下隐藏 PC 图表并给提示；900px 以下结论行改紧凑排版 ── */
+@media (max-width: 1024px) {
+    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+    .kpi-grid.five { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .drill-grid, .quad-grid { grid-template-columns: 1fr; }
+    .rp-cols, .rp-cols.eq, .rp-cols.side, .rp-cols.side-lg { grid-template-columns: 1fr; }
+    /* 模块 5：名单侧栏与明细区在窄屏回落上下排列（名单改横向不滚动） */
+    .rp-cols.m5-cols { grid-template-columns: 1fr; }
+    .m5-stu-list { max-height: 300px; }
+    /* 窄屏表格横向滚动时，下钻内容限宽在视口内并单列，避免跟着表格横滚才能读完 */
+    .drill-row .drill { max-width: calc(100vw - 64px); }
+}
+@media (max-width: 900px) {
+    /* 汇总结论：窄屏收紧字号与内边距，长句在窄栏里更耐读 */
+    .concl { padding: 8px 10px; }
+    .concl .cp { font-size: 12.5px; line-height: 1.7; }
+    .concl .cp::before { top: 2.5px; }
+    /* 窄屏 tab 会折行，下划线指示会悬在半空：改浅蓝胶囊选中 */
+    .rp-anchor { gap: 6px; padding: 6px 12px; }
+    .rp-anchor a { height: 30px; padding: 0 10px; border-radius: 4px; font-size: 12.5px; }
+    .rp-anchor a:hover { background: #f5f7fa; }
+    .rp-anchor a.on { background: var(--rp-primary-bg); }
+    .rp-anchor a.on::after { display: none; }
+    .rp-anchor .rp-anchor-act { margin-left: 0; }
+}
+@media (max-width: 767px) {
+    /* 手机端只收窄左右内边距：改令牌一处，导航 / 模块头 / 模块体 / 折叠区同步生效，不再逐条覆盖 */
+    :root { --rp-pad-x: 12px; }
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .kpi-grid.five { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kpi-grid.four { grid-template-columns: repeat(2, 1fr); }
+    .chart-box { display: none; }
+    .chart-alt { display: block; }
+    /* 模块 5：窄屏下题卡标签换行到题干下方，展开提示靠右 */
+    .m5-qtags { margin-left: 0; }
+    .m5-qtog { margin-left: auto; }
+}
+
+/* ══════════ 导出设置面板 / 抽屉 / 指标条（班级·年级·作文三页共用） ══════════
+   面板与抽屉均为屏幕控件：不参与打印（见 @media print） */
+html.rp-noscroll, html.rp-noscroll body { overflow: hidden; }
+
+/* 作文页 6 卡：170px 会在 1100px 宽挤出第二行，压到 158px 保单行；班级 / 年级 4 卡由 .four 固定列数，不受此影响 */
+.kpi-grid { grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); }
+
+/* 图表上方一行极简数值条（最高 / 最低 / 标准差）：不进表格列，不撑列宽 */
+.stat-row { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--rp-text3); margin: 2px 0 6px; }
+.stat-row b { color: var(--rp-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* 表头口径小字（如「≥该档」）：只降字号与字重，不改列宽节奏 */
+.th-note { display: block; font-size: 10.5px; font-weight: 400; color: var(--rp-text3); }
+
+/* 合计行（年级横向对比） */
+.tbl tfoot td { background: #fafafa; font-weight: 600; }
+
+/* ── 导出设置面板 ── */
+.exp-mask { position: fixed; inset: 0; z-index: 900; background: rgba(20, 22, 26, .42); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.exp-panel { width: min(520px, 100%); max-height: 84vh; display: flex; flex-direction: column; background: #fff; border-radius: 6px; box-shadow: 0 12px 40px rgba(20, 22, 26, .22); }
+.exp-h { display: flex; align-items: baseline; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #ebeef5; }
+.exp-h b { font-size: 14px; }
+.exp-h span { font-size: 12px; color: var(--rp-text3); }
+.exp-x { margin-left: auto; border: 0; background: none; font-size: 14px; line-height: 1; color: var(--rp-text3); cursor: pointer; padding: 0 2px; }
+.exp-x:hover { color: var(--rp-text); }
+.exp-all { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #fafafa; border-bottom: 1px solid #ebeef5; font-size: 13px; cursor: pointer; }
+.exp-cnt { margin-left: auto; font-size: 12px; color: var(--rp-text3); font-variant-numeric: tabular-nums; }
+.exp-list { overflow: auto; padding: 4px 8px; }
+.exp-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+.exp-item:hover { background: var(--rp-primary-bg); }
+.exp-no { flex: 0 0 20px; text-align: right; font-size: 12px; font-weight: 700; color: #9aa0ab; font-variant-numeric: tabular-nums; }
+.exp-t { color: var(--rp-text); }
+.exp-f { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid #ebeef5; }
+.exp-tip { flex: 1; min-width: 0; font-size: 11.5px; color: var(--rp-text3); line-height: 1.5; }
+.exp-mask input[type=checkbox] { width: 14px; height: 14px; accent-color: var(--rp-primary); }
+
+/* ── 右侧抽屉（未交名单等，按需打开） ── */
+.dr-mask { position: fixed; inset: 0; z-index: 880; background: rgba(20, 22, 26, .36); display: flex; justify-content: flex-end; }
+.dr-panel { width: min(460px, 100%); height: 100%; display: flex; flex-direction: column; background: #fff; box-shadow: -8px 0 32px rgba(20, 22, 26, .18); }
+.dr-h { display: flex; align-items: baseline; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #ebeef5; }
+.dr-h b { font-size: 14px; }
+.dr-h span { font-size: 12px; color: var(--rp-text3); }
+.dr-x { margin-left: auto; border: 0; background: none; font-size: 14px; color: var(--rp-text3); cursor: pointer; }
+.dr-b { flex: 1; overflow: auto; padding: 10px 16px 20px; }
+.dr-b .tbl { font-size: 12.5px; }
+
+/* ── 嵌入讲评工作台（iframe · embed=1）：无全局顶栏，锚点栏吸顶归零 ── */
+body.rp-embed .rp-anchor { top: 0; }
+/* 嵌入态无全局顶栏：吸顶高度 = 锚点条 36 + 留白 12，与 .mod 默认的 94（52 顶栏 + 36 锚点 + 6 间距）同源推导 */
+body.rp-embed .mod { scroll-margin-top: 48px; }
+
+/* ── 打印：隐藏导航与操作，折叠区展开由 JS beforeprint 处理 ── */
+@media print {
+    body.rp-body { background: #fff; }
+    .topnav, .rp-anchor, .no-print, #rp-toast, .li-act, .seg, .switch, .mod-help,
+    .exp-mask, .dr-mask { display: none !important; }
+    /* 维度切换控件在纸上退化为文字：标签保留、当前维度名显式输出 */
+    .kp-dim { display: inline-flex !important; }
+    .kp-dim-cur { display: inline !important; }
+    .tab-pane { display: block !important; margin-top: var(--rp-sub); }
+    .rp-wrap { max-width: none; padding: 0; }
+    .mod, details.collapse { box-shadow: none; border: 1px solid #d3d8e0; break-inside: avoid; }
+    /* 左右结构在纸上维持两列（导出壳页为 A4 横向）；单元内部不跨页切断 */
+    .rp-cols > * { break-inside: avoid; }
+    details.rp-fold { border-color: #d3d8e0; background: #fff; }
+    .concl { break-inside: auto; }
+    .concl .cp { break-inside: avoid; }
+    /* 省墨：结论序号圆与句内高亮底去色（序号圆转灰描边），判定词保留红 / 橙文字 */
+    .concl .cp::before { background: none; color: #606266; box-shadow: inset 0 0 0 1px #c9cdd4; }
+    .concl .cp .cp-t.warn, .concl .cp .cp-t.bad { background: none; padding: 0; }
+    /* 省墨：结论标签行去浅底、描边转灰；标签行不与首条结论跨页分离 */
+    .concl .concl-tag { background: none; border-color: #c9cdd4; }
+    .concl .concl-head { break-after: avoid; }
+    /* 省墨：重点讲评条去掉浅底与彩色描边，保留眉标（边框转灰） */
+    .lect-item.key { background: none; border-color: #d3d8e0; box-shadow: inset 3px 0 0 #d3d8e0; }
+    .lect-item .tag-key { background: none; }
+    .chart-box { overflow: visible; }
+    .chart-box svg { width: 100%; }
+    /* ── 模块 5 打印 ──
+       两个视图同出（.tab-pane 已在上面统一放开）；题卡强制全部展开、名单去滚动、搜索框与筛选条不打印 */
+    .m5-qcard-b { display: block !important; }
+    .m5-qcard-h { cursor: default; }
+    .m5-qtog, .m5-cause-filter, .m5-stu-search { display: none; }
+    .m5-stu-list { max-height: none; overflow: visible; }
+    .m5-stu-item.on { box-shadow: inset 2px 0 0 #606266; }
+    .m5-qcard, .m5-grp, .m5-stu-head { break-inside: avoid; }
+    /* 省墨例外：堆叠条与热力格保留错因配色——去掉颜色后这两种图都读不出信息 */
+    .m5-bar > i, .m5-cell { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    /* 悬浮 PRD 入口是屏幕控件，纸上会遮挡图表右下角；正文里的 PRD 编号徽章保留 */
+    .prd-fab { display: none !important; }
+}

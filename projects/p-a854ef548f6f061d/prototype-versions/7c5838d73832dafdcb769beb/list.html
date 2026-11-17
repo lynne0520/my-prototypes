@@ -1,0 +1,3161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>作业列表 · 讲评试卷 4.0 入口页</title>
+<style>
+/* ==========================================================
+   作业报告 · 作业列表页（班级任务聚合版）
+   设计系统延续 Ant Design 体系，主色 #1890ff
+   ========================================================== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:14px;color:rgba(0,0,0,.88);background:#f0f2f5;line-height:1.5715;
+}
+a{color:#1890ff;text-decoration:none;cursor:pointer}
+a:hover{color:#40a9ff}
+button{font-family:inherit}
+
+:root{
+  --primary:#1890ff;--primary-hover:#40a9ff;--primary-active:#096dd9;
+  --primary-bg:#e6f4ff;--primary-bd:#91caff;
+  --success:#52c41a;--success-bg:#f6ffed;--success-bd:#b7eb8f;
+  --warning:#faad14;--warning-bg:#fff7e6;--warning-bd:#ffd591;
+  --error:#ff4d4f;--error-bg:#fff1f0;--error-bd:#ffccc7;
+  --purple:#722ed1;--purple-bg:#f9f0ff;--cyan:#13c2c2;
+  --border:#f0f0f0;--border2:#e8e8e8;--bg:#f0f2f5;--card:#fff;
+  --text:rgba(0,0,0,.88);--text2:rgba(0,0,0,.65);--text3:rgba(0,0,0,.45);--text4:rgba(0,0,0,.25);
+  --nav-h:52px;
+  --sh1:0 1px 2px rgba(0,0,0,.03),0 1px 6px -1px rgba(0,0,0,.02);
+  --sh2:0 6px 16px rgba(0,0,0,.08);
+  --r:8px;--r-sm:6px;
+}
+
+/* ── 顶栏 ── */
+.topnav{
+  height:var(--nav-h);background:#fff;border-bottom:1px solid var(--border2);
+  display:flex;align-items:center;padding:0 16px;position:sticky;top:0;z-index:900;
+}
+.logo{display:flex;align-items:baseline;gap:8px;margin-right:28px;flex-shrink:0;cursor:pointer}
+.logo-mark{font-size:17px;font-weight:700;color:var(--primary);letter-spacing:2px}
+.logo-name{font-size:16px;font-weight:600;color:#1f2937;letter-spacing:.5px}
+.menu{display:flex;align-items:stretch;height:var(--nav-h);flex:1;overflow-x:auto;scrollbar-width:none}
+.menu::-webkit-scrollbar{display:none}
+/* 菜单整体右靠：首项自动外边距吸收剩余空间（空间不足时归零，退化为横向滚动） */
+.menu-item:first-child{margin-left:auto}
+.menu-item{
+  padding:0 13px;display:flex;align-items:center;font-size:14px;color:var(--text2);
+  cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:.2s;
+}
+.menu-item:hover{color:var(--primary)}
+.menu-item.on{color:var(--primary);border-bottom-color:var(--primary);font-weight:500}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0;padding-left:12px}
+.nav-ico{
+  width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+  color:var(--text2);cursor:pointer;border-radius:var(--r-sm);
+}
+.nav-ico:hover{background:#f5f5f5;color:var(--primary)}
+.nav-ico svg{width:17px;height:17px}
+.nav-sep{width:1px;height:16px;background:var(--border2)}
+/* ── 账户区：身份徽章 + 下拉菜单（角色切换已从顶部 role-seg 迁入） ── */
+.user-wrap{position:relative;flex-shrink:0}
+.user{
+  display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 7px;
+  border:1px solid transparent;background:none;border-radius:var(--r-sm);
+  font-size:13px;line-height:1;color:var(--text);cursor:pointer;
+  transition:background .15s,border-color .15s;
+}
+.user:hover,.user:focus-visible,.user[aria-expanded="true"]{background:#f5f5f5;border-color:var(--border2)}
+.user:focus-visible{outline:none}
+/* 当前身份常显：角色决定报告口径（R1/R3 vs R2/R4），不能只藏在下拉里 */
+.role-badge{
+  font-size:11px;font-weight:600;line-height:15px;padding:1px 6px;border-radius:5px;
+  color:var(--primary);background:var(--primary-bg);border:1px solid var(--primary-bd);white-space:nowrap;
+}
+.caret{width:14px;height:14px;flex-shrink:0;color:var(--text3);transition:transform .2s}
+.user[aria-expanded="true"] .caret{transform:rotate(180deg)}
+
+.user-menu{
+  position:absolute;top:calc(100% + 10px);right:0;z-index:920;display:none;width:208px;padding:6px;
+  background:#fff;border:1px solid var(--border2);border-radius:10px;
+  box-shadow:0 12px 32px rgba(15,23,42,.14),0 2px 6px rgba(15,23,42,.06);
+}
+.user-menu.open{display:block;animation:umIn .16s ease}
+@keyframes umIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.um-head{padding:7px 10px 9px}
+.um-name{font-size:13px;font-weight:600;color:var(--text)}
+.um-sub{margin-top:2px;font-size:11.5px;color:var(--text3)}
+.um-label{padding:4px 10px 5px;font-size:11px;color:var(--text3);letter-spacing:.3px}
+.um-item{
+  display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:none;background:none;
+  border-radius:7px;font-size:13px;line-height:1.5;color:var(--text2);text-align:left;cursor:pointer;
+  transition:background .15s,color .15s;
+}
+.um-item:hover,.um-item:focus-visible{background:#fafafa;color:var(--primary);outline:none}
+.um-item.on{background:var(--primary-bg);color:var(--primary);font-weight:600}
+.um-item .um-t{flex:1;min-width:0}
+.um-check{width:15px;height:15px;flex-shrink:0;color:var(--primary);opacity:0}
+.um-item.on .um-check{opacity:1}
+.um-sep{height:1px;margin:6px 4px;background:var(--border2)}
+.role-note{
+  display:none;align-items:center;gap:9px;padding:9px 14px;margin-bottom:14px;border-radius:8px;
+  background:var(--warning-bg);border:1px solid var(--warning-bd);color:#d46b08;font-size:12.5px;line-height:1.7;
+}
+.role-note.show{display:flex}
+.role-note.leader{background:var(--primary-bg);border-color:var(--primary-bd);color:#0958d9}
+.role-note b{font-weight:600}
+.role-note .sp{margin-left:auto;display:flex;gap:10px;flex-shrink:0}
+.role-note .link{color:#0958d9;cursor:pointer}
+.role-note .link:hover{text-decoration:underline}
+
+/* ── 页面骨架 ── */
+.page{padding:14px 20px 40px;max-width:1560px;margin:0 auto}
+
+/* ── 筛选卡片 ── */
+.filter-card{
+  background:#fff;border:1px solid var(--border);border-radius:var(--r);
+  box-shadow:var(--sh1);padding:12px 18px;margin-bottom:14px;
+  display:flex;flex-direction:column;gap:4px;
+}
+.f-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;padding:5px 0}
+.f-row + .f-row{border-top:1px dashed var(--border)}
+.f-label{color:var(--text3);white-space:nowrap;font-size:13px;width:56px;flex-shrink:0}
+.f-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+.sel{position:relative;display:inline-flex;align-items:center}
+.sel select{
+  appearance:none;border:1px solid #d9d9d9;border-radius:var(--r-sm);height:30px;
+  padding:0 26px 0 11px;font-size:13px;color:var(--text);background:#fff;cursor:pointer;outline:none;
+}
+.sel select:hover,.sel select:focus{border-color:var(--primary)}
+.sel::after{content:"▾";position:absolute;right:9px;color:var(--text3);font-size:11px;pointer-events:none}
+
+.chip-grp{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+.chip{
+  display:inline-flex;align-items:center;height:26px;padding:0 12px;border-radius:13px;
+  border:1px solid #e4e4e4;background:#fff;font-size:12.5px;color:var(--text2);cursor:pointer;transition:.15s;
+}
+.chip:hover{border-color:var(--primary);color:var(--primary)}
+.chip.on{background:var(--primary);border-color:var(--primary);color:#fff}
+
+.grade-seg{display:inline-flex;gap:0}
+.grade-seg span{
+  padding:4px 14px;font-size:13px;color:var(--text2);cursor:pointer;border-radius:var(--r-sm);transition:.15s;
+}
+.grade-seg span:hover{color:var(--primary)}
+.grade-seg span.on{color:var(--primary);font-weight:500;background:var(--primary-bg)}
+
+.date-range{
+  display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 11px;
+  border:1px solid #d9d9d9;border-radius:var(--r-sm);font-size:13px;color:var(--text2);
+  background:#fff;cursor:pointer;white-space:nowrap;
+}
+.date-range:hover{border-color:var(--primary)}
+.date-range svg{width:14px;height:14px;color:var(--text3)}
+.date-range .sep{color:var(--text4)}
+
+.search-box{
+  display:inline-flex;align-items:center;height:30px;border:1px solid #d9d9d9;
+  border-radius:var(--r-sm);padding:0 10px;background:#fff;gap:6px;width:230px;
+}
+.search-box:focus-within{border-color:var(--primary);box-shadow:0 0 0 2px rgba(24,144,255,.1)}
+.search-box input{border:none;outline:none;flex:1;min-width:0;font-size:13px;background:transparent}
+.search-box svg{width:14px;height:14px;color:var(--text3);flex-shrink:0}
+
+/* ── 控制条卡片 ── */
+.ctrl-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--sh1)}
+.list-hd{
+  display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid var(--border);flex-wrap:wrap;
+}
+.tabs{display:flex;align-items:center;gap:24px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs .tab{
+  padding:13px 0 12px;font-size:14px;color:var(--text2);cursor:pointer;white-space:nowrap;
+  border-bottom:2px solid transparent;display:flex;align-items:center;gap:5px;transition:.2s;
+}
+.tabs .tab:hover{color:var(--primary)}
+.tabs .tab.on{color:var(--primary);border-bottom-color:var(--primary);font-weight:500}
+.tabs .tab .n{font-size:12px;color:var(--text3)}
+.tabs .tab.on .n{color:var(--primary)}
+.list-hd .right{margin-left:auto;display:flex;align-items:center;gap:8px;padding:8px 0}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  height:32px;padding:0 15px;border-radius:var(--r-sm);font-size:13.5px;
+  cursor:pointer;border:1px solid transparent;white-space:nowrap;transition:.2s;background:none;
+}
+.btn-primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+.btn-primary:hover{background:var(--primary-hover);border-color:var(--primary-hover)}
+.btn-default{background:#fff;color:var(--text2);border-color:#d9d9d9}
+.btn-default:hover{color:var(--primary);border-color:var(--primary)}
+.btn svg{width:13px;height:13px}
+
+/* ── 排序行 ── */
+.sort-row{
+  display:flex;align-items:center;gap:18px;padding:9px 18px;
+  border-top:1px solid var(--border);font-size:12.5px;flex-wrap:wrap;
+}
+.sort-lb{color:var(--text3)}
+.sort-item{
+  display:inline-flex;align-items:center;gap:4px;color:var(--text2);cursor:pointer;
+  border:none;background:none;font-size:12.5px;padding:3px 2px;border-radius:4px;transition:.15s;
+}
+.sort-item svg{width:11px;height:11px}
+.sort-item:hover{color:var(--primary)}
+.sort-item.on{color:var(--primary);font-weight:500}
+.sort-stats{margin-left:auto;color:var(--text3);font-size:12.5px}
+
+/* ── 作业卡片流 ── */
+.hw-cards{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+.hw-card{
+  background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:var(--sh1);
+  transition:box-shadow .2s,border-color .2s;
+}
+.hw-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.07);border-color:#e3e8ef}
+
+/* 卡片头 */
+.card-head{padding:14px 18px 11px}
+.ch-row1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ch-name{font-size:15px;font-weight:600;color:var(--text)}
+.ch-side{margin-left:auto;display:flex;align-items:center;gap:8px}
+.ch-meta{
+  margin-top:7px;font-size:12.5px;color:var(--text3);
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+}
+.ch-meta .sep{color:#e4e4e4}
+.ch-meta b{font-weight:600;font-variant-numeric:tabular-nums}
+
+.tag{
+  display:inline-flex;align-items:center;padding:0 7px;height:20px;
+  border-radius:4px;font-size:11.5px;border:1px solid;white-space:nowrap;flex-shrink:0;
+}
+.tag-blue{background:var(--primary-bg);border-color:var(--primary-bd);color:#1677ff}
+.tag-orange{background:var(--warning-bg);border-color:var(--warning-bd);color:#d46b08}
+.tag-purple{background:var(--purple-bg);border-color:#d3adf7;color:#531dab}
+.tag-cyan{background:#e6fffb;border-color:#87e8de;color:#08979c}
+.tag-gray{background:#fafafa;border-color:#e8e8e8;color:var(--text3)}
+
+.pending-badge{
+  display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 9px;border-radius:11px;
+  background:var(--warning-bg);color:#d46b08;font-size:12px;
+}
+.pending-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--warning)}
+
+/* 比率分档文字色：>=85 绿 / >=70 蓝 / >=50 橙 / <50 红 */
+.lv-success{color:#389e0d}.lv-normal{color:#1677ff}.lv-warn{color:#d46b08}.lv-danger{color:#cf1322}.lv-none{color:var(--text4)}
+
+/* ── 班级行 ── */
+.cls-rows{padding:2px 14px 4px}
+.cls-row{
+  display:grid;grid-template-columns:150px minmax(0,1.8fr) 158px 218px minmax(190px,auto);
+  gap:0 14px;align-items:center;
+  background:#f7f9fb;border-radius:8px;padding:9px 14px;margin-top:8px;transition:background .15s;
+}
+.cls-row:hover{background:#eef6ff}
+.cls-pill{
+  display:inline-flex;align-items:center;max-width:100%;height:24px;padding:0 10px;border-radius:6px;
+  background:var(--primary-bg);color:#1677ff;font-size:12.5px;font-weight:500;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+/* 提交率区：已交/未交数字 + 渐变进度条 + 百分比 */
+.subm{display:flex;align-items:center;gap:9px;min-width:0}
+.subm .bar{flex:1;max-width:130px;height:8px;border-radius:4px;background:#e9edf2;overflow:hidden;flex-shrink:0}
+.subm .bar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,#69c0ff,#1890ff);transition:width .35s ease}
+.subm .pct{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.subm .frac{font-size:13px;color:var(--text2);font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0}
+/* 未交数字：可悬浮查看名单，虚线下划线暗示可交互 */
+.frac .unsub-n{color:var(--text2);font-weight:500;border-bottom:1px dashed #d46b08;cursor:pointer;transition:color .15s}
+.frac .unsub-n:hover{color:#d46b08}
+/* 得分率：四档底色 pill，仅数字 */
+.acc-cell{display:flex;align-items:center;gap:7px}
+.acc-cell .lb{font-size:12.5px;color:var(--text3);flex-shrink:0}
+.acc-pill{
+  display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:6px;
+  font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+.acc-pill.lv-success{background:var(--success-bg);color:#389e0d}
+.acc-pill.lv-normal{background:var(--primary-bg);color:#1677ff}
+.acc-pill.lv-warn{background:var(--warning-bg);color:#d46b08}
+.acc-pill.lv-danger{background:var(--error-bg);color:#cf1322}
+.acc-pill.lv-none-pill{background:#f5f5f5;color:var(--text4);font-weight:400}
+/* 时间 */
+.t-cell{font-size:12.5px;color:var(--text2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.t-cell .lb{color:var(--text3);margin-right:4px}
+.t-cell .ended{display:inline-flex;align-items:center;gap:5px;color:var(--text3)}
+.t-cell .ended::before{content:"";width:6px;height:6px;border-radius:50%;background:#bfbfbf}
+/* 操作 */
+.sub-acts{display:flex;align-items:center;gap:2px;flex-wrap:wrap;justify-content:flex-end}
+.act{
+  border:none;background:none;padding:4px 7px;font-size:13px;color:var(--primary);cursor:pointer;
+  border-radius:4px;white-space:nowrap;transition:.15s;
+}
+.act:hover{background:var(--primary-bg)}
+.act.todo{color:#d46b08;font-weight:500}
+.act.todo:hover{background:var(--warning-bg)}
+.act-sep{width:1px;height:12px;background:#e8e8e8;flex-shrink:0}
+
+/* 更多下拉 */
+.more-box{position:relative}
+.more-menu{
+  position:absolute;right:0;top:calc(100% + 4px);min-width:128px;background:#fff;border-radius:var(--r-sm);
+  box-shadow:var(--sh2);border:1px solid var(--border);padding:4px;display:none;z-index:60;
+}
+.more-menu.open{display:block;animation:popIn .15s ease}
+@keyframes popIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.more-menu .mi{
+  padding:7px 12px;font-size:13px;color:var(--text2);border-radius:4px;cursor:pointer;white-space:nowrap;
+  display:flex;align-items:center;gap:7px;
+}
+.more-menu .mi:hover{background:#f5f5f5;color:var(--primary)}
+.more-menu .mi.danger:hover{background:var(--error-bg);color:var(--error)}
+
+/* ── 未交学生名单悬浮浮层 ── */
+.unsub-tip{
+  position:fixed;z-index:1500;max-width:320px;background:#fff;border:1px solid var(--border2);
+  border-radius:var(--r-sm);box-shadow:var(--sh2);padding:10px 12px 12px;pointer-events:none;
+  opacity:0;visibility:hidden;transform:translateY(4px);transition:opacity .15s,transform .15s,visibility .15s;
+}
+.unsub-tip.show{opacity:1;visibility:visible;transform:none}
+.unsub-tip .arr{
+  position:absolute;left:50%;top:-6px;width:10px;height:10px;background:#fff;
+  border-left:1px solid var(--border2);border-top:1px solid var(--border2);transform:translateX(-50%) rotate(45deg);
+}
+.unsub-tip.tip-up .arr{top:auto;bottom:-6px;border-left:none;border-top:none;border-right:1px solid var(--border2);border-bottom:1px solid var(--border2)}
+.unsub-tip .tt{display:flex;align-items:baseline;gap:6px;margin-bottom:8px;font-size:12.5px;color:var(--text)}
+.unsub-tip .tt b{color:#d46b08;font-weight:600}
+.unsub-tip .tt .sub{color:var(--text3);font-size:12px}
+.unsub-tip .names{display:flex;flex-wrap:wrap;gap:6px;max-height:190px;overflow:auto}
+.unsub-tip .nm{
+  display:inline-flex;align-items:center;padding:2px 8px;background:#fff7e6;border:1px solid #ffd591;
+  border-radius:4px;font-size:12px;color:#d46b08;white-space:nowrap;
+}
+
+/* 卡片底部展开按钮 */
+.card-expand{display:flex;justify-content:center;padding:3px 0 10px}
+.expand-btn{
+  display:inline-flex;align-items:center;gap:5px;border:none;background:none;cursor:pointer;
+  font-size:12.5px;color:var(--text3);padding:5px 16px;border-radius:13px;transition:.15s;
+}
+.expand-btn:hover{color:var(--primary);background:var(--primary-bg)}
+.expand-btn svg{width:12px;height:12px;transition:transform .22s ease}
+.hw-card.open .expand-btn svg{transform:rotate(180deg)}
+
+/* ── 底部分页 ── */
+.page-ft{
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:20px 0 8px;font-size:13px;color:var(--text2);flex-wrap:wrap;
+}
+.page-ft .total{margin-right:8px;color:var(--text3);font-size:12.5px}
+.pg{
+  min-width:30px;height:30px;padding:0 9px;border:1px solid #d9d9d9;border-radius:6px;background:#fff;
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:12.5px;color:var(--text2);
+}
+.pg:hover{border-color:var(--primary);color:var(--primary)}
+.pg.on{border-color:var(--primary);color:var(--primary);font-weight:500}
+.pg.dis{opacity:.4;pointer-events:none}
+
+/* ── 空状态 ── */
+.empty{padding:56px 20px;text-align:center;color:var(--text3);font-size:13px;display:none;flex-direction:column;align-items:center;gap:10px}
+.empty.show{display:flex}
+.empty svg{width:44px;height:44px;opacity:.3}
+
+/* ── Toast ── */
+#toast-host{position:fixed;top:66px;left:50%;transform:translateX(-50%);z-index:2000;display:flex;flex-direction:column;gap:8px;align-items:center}
+.toast{
+  background:#fff;border:1px solid var(--border2);border-radius:var(--r-sm);box-shadow:var(--sh2);
+  padding:9px 16px;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px;
+  max-width:min(560px,92vw);animation:toastIn .2s ease;
+}
+@keyframes toastIn{from{transform:translateY(-8px);opacity:0}to{transform:none;opacity:1}}
+.toast.ok .ic{color:var(--success)}
+.toast.warn .ic{color:var(--warning)}
+
+@media (max-width:1080px){
+  .cls-row{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 14px}
+  .cls-row > div:nth-child(2){flex:1 1 240px;min-width:0}
+  .subm{width:100%}
+  .subm .bar{max-width:none}
+  .sub-acts{margin-left:auto}
+}
+@media (prefers-reduced-motion:reduce){
+  .subm .bar i,.expand-btn svg{transition:none}
+}
+
+/* ── 整合版：嵌入工作台 iframe（注入 window.__RPQ）时隐藏本页顶栏，
+   全局导航与角色切换由宿主页提供；卡片入口经 postMessage 通知宿主切换视图 ── */
+body.lp-embed .topnav{display:none}
+body.lp-embed .page{padding-top:18px}
+
+/* ══════════ 报告设置（仅学科组长及以上；全校统一口径） ══════════ */
+/* 入口按身份显隐：默认隐藏，body.role-leader 时显示（role 类由 syncRole 同步） */
+.perm-leader{display:none!important}
+body.role-leader .perm-leader{display:inline-flex!important}
+
+.rs-mask{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1100;display:none;align-items:center;justify-content:center;padding:24px}
+.rs-mask.open{display:flex}
+.rs-dialog{
+  width:640px;max-width:100%;max-height:86vh;background:#fff;border-radius:var(--r);
+  box-shadow:0 12px 40px rgba(15,23,42,.2);display:flex;flex-direction:column;overflow:hidden;
+  animation:rsIn .16s ease;
+}
+@keyframes rsIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.rs-head{
+  flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  padding:15px 20px;background:var(--primary-bg);border-bottom:1px solid var(--primary-bd);
+}
+.rs-head h3{font-size:16px;font-weight:600;color:var(--text)}
+.rs-sub{margin-top:3px;font-size:12px;line-height:1.6;color:#0958d9}
+.rs-x{width:30px;height:30px;flex-shrink:0;border:none;background:none;border-radius:var(--r-sm);color:var(--text3);font-size:15px;line-height:1;cursor:pointer;transition:.15s}
+.rs-x:hover{background:#fff;color:var(--primary)}
+.rs-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:2px 20px}
+.rs-sec{padding:14px 0;border-bottom:1px dashed var(--border2)}
+.rs-sec:last-child{border-bottom:none}
+.rs-sec-hd{display:flex;align-items:baseline;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.rs-sec-hd h4{font-size:13.5px;font-weight:600;color:var(--text)}
+.rs-sec-hd span{font-size:12px;color:var(--text3)}
+.rs-row{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center}
+.rs-item{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)}
+.rs-item > label{white-space:nowrap;color:var(--text2);cursor:pointer}
+.rs-num{display:inline-flex;align-items:center;height:30px;padding:0 8px;background:#fff;border:1px solid #d9d9d9;border-radius:var(--r-sm)}
+.rs-num:focus-within{border-color:var(--primary);box-shadow:0 0 0 2px rgba(24,144,255,.1)}
+.rs-num input{
+  width:50px;border:none;outline:none;background:transparent;text-align:center;
+  font-size:13px;color:var(--text);font-variant-numeric:tabular-nums;-moz-appearance:textfield;
+}
+.rs-num input::-webkit-outer-spin-button,.rs-num input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.rs-num i{font-style:normal;font-size:12px;color:var(--text3);padding-left:2px}
+.rs-auto{font-size:12px;color:var(--text3)}
+.rs-auto b{color:var(--primary);font-weight:600;font-variant-numeric:tabular-nums}
+.rs-check{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);cursor:pointer;white-space:nowrap}
+.rs-check input{width:14px;height:14px;margin:0;accent-color:var(--primary);cursor:pointer}
+.rs-check b{font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
+.rs-foot{flex:none;display:flex;justify-content:flex-end;gap:10px;padding:12px 20px;border-top:1px solid var(--border2);background:#fafafa}
+.rs-foot .btn{height:32px;min-width:76px}
+</style>
+<link rel="stylesheet" href="prd-viewer.css">
+<script data-prototype-owned data-proto-hotspot-bootstrap data-proto-review="hotspots">
+/* 点击空白时短暂提示本次需求范围内的真实交互；未声明范围时不扫描整页。 */
+(() => {
+    'use strict';
+    if (window.ProtoHotspots) return;
+    const DURATION = 2000, MAX_HINTS = 80;
+    const COLORS = { fill: '#ff9f29' };
+    const EVENTS = new Set(['click', 'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchend']);
+    const EDITABLE = 'input,textarea,select,[contenteditable]:not([contenteditable="false"])';
+    const BLOCKED = '[hidden],[inert],[aria-hidden="true"],[aria-disabled="true"],[data-proto-hotspot="false"]';
+    const CONTROL_TAGS = new Set(['BUTTON', 'A', 'AREA', 'INPUT', 'SELECT', 'TEXTAREA', 'SUMMARY']);
+    const CONTROL_ROLES = new Set(['button', 'link', 'checkbox', 'radio', 'switch', 'tab', 'menuitem', 'option', 'combobox', 'slider', 'textbox']);
+    const owned = el => !!el?.closest?.('[data-prototype-owned],.__review_pin,.__review_pop,.__review_guide');
+    let options = {}, layer, style, observer, timer = 0, frame = 0, started = 0, down = null;
+    const boxes = new Map();
+
+    // 先于业务脚本载入：只记录实际绑定，不运行任何按钮来试探功能。
+    const listeners = new WeakMap();
+    const nativeAdd = EventTarget.prototype.addEventListener, nativeRemove = EventTarget.prototype.removeEventListener;
+    const captureOf = config => typeof config === 'boolean' ? config : !!config?.capture;
+    EventTarget.prototype.addEventListener = function (type, listener, config) {
+        if (!EVENTS.has(type) || !listener || typeof listener !== 'function' && typeof listener.handleEvent !== 'function')
+            return nativeAdd.call(this, type, listener, config);
+        let entries = listeners.get(this);
+        if (!entries) { entries = new Set(); listeners.set(this, entries); }
+        const capture = captureOf(config);
+        const existing = [...entries].find(entry => entry.type === type && entry.listener === listener && entry.capture === capture && !entry.signal?.aborted);
+        if (existing) return nativeAdd.call(this, type, existing.wrapper, config);
+        const entry = { type, listener, capture, once: !!config?.once, signal: config?.signal };
+        entry.wrapper = function (event) {
+            if (entry.once) { entries.delete(entry); schedule(); }
+            return typeof listener === 'function' ? listener.call(this, event) : listener.handleEvent.call(listener, event);
+        };
+        const result = nativeAdd.call(this, type, entry.wrapper, config);
+        if (!entry.signal?.aborted) {
+            entries.add(entry);
+            if (entry.signal) nativeAdd.call(entry.signal, 'abort', () => { entries.delete(entry); schedule(); }, { once: true });
+            schedule();
+        }
+        return result;
+    };
+    EventTarget.prototype.removeEventListener = function (type, listener, config) {
+        const entries = listeners.get(this), capture = captureOf(config);
+        const entry = entries && [...entries].find(item => item.type === type && item.listener === listener && item.capture === capture);
+        if (!entry) return nativeRemove.call(this, type, listener, config);
+        const result = nativeRemove.call(this, type, entry.wrapper, config);
+        entries.delete(entry); schedule(); return result;
+    };
+
+    function binding(el) {
+        if ([...EVENTS].some(type => typeof el['on' + type] === 'function')) return true;
+        const reactRoot = Object.keys(el).some(key => key.startsWith('__reactContainer$'));
+        if (!reactRoot && [...(listeners.get(el) || [])].some(entry => !entry.signal?.aborted)) return true;
+        // React 的点击监听由根节点代理，真实业务回调在元素 props 上。
+        const props = Object.keys(el).find(key => key.startsWith('__reactProps$'));
+        return !!props && Object.entries(el[props] || {}).some(([key, value]) =>
+            /^on(Click|PointerDown|PointerUp|MouseDown|MouseUp|TouchEnd)(Capture)?$/.test(key) && typeof value === 'function');
+    }
+    function navigation(el) {
+        if (!el.matches('a[href],area[href]')) return false;
+        const href = el.getAttribute('href').trim();
+        if (!href || href === '#' || /^javascript:/i.test(href)) return false;
+        if (href.startsWith('#')) {
+            let id; try { id = decodeURIComponent(href.slice(1)); } catch (_) { return false; }
+            return !!document.getElementById(id) || !!document.getElementsByName(id).length;
+        }
+        return true;
+    }
+    function nativeAction(el) {
+        if (el.matches('select,input[type="checkbox"],input[type="radio"],input[type="file"],input[type="color"],input[type="range"]')) return true;
+        if (el.tagName === 'SUMMARY') return el.parentElement?.tagName === 'DETAILS' && el.parentElement.querySelector('summary') === el;
+        if (el.matches('button,input') && el.form) return el.type === 'submit' || el.type === 'reset';
+        return false;
+    }
+
+    function enabled() {
+        try { return typeof options.isEnabled === 'function' ? !!options.isEnabled() : options.enabled !== false; }
+        catch (_) { return false; }
+    }
+    function action(el) {
+        if (!(el instanceof Element) || el === document.body || el === document.documentElement || owned(el) || el.closest(BLOCKED) || el.matches(':disabled')) return false;
+        return el.dataset.protoHotspot === 'true' || binding(el) || navigation(el) || nativeAction(el);
+    }
+    function controlLike(el) {
+        return CONTROL_TAGS.has(el.tagName) && !(el.tagName === 'INPUT' && el.type === 'hidden')
+            || CONTROL_ROLES.has(el.getAttribute('role')) || el.dataset.protoHotspot === 'true';
+    }
+    function controlIssue(el) {
+        // 仅截图专用运行时中用户手动画出的矩形可使用自定尺寸。
+        if (window.ProtoScreenshot && el.parentElement?.id === 'screenshot-regions' && el.classList.contains('screenshot-region')) return null;
+        // 事件代理容器不能替代实际操作节点，未授权的子控件也不能让父容器整块高亮。
+        if (!CONTROL_TAGS.has(el.tagName) && [...el.querySelectorAll('*')].some(child =>
+            !owned(child) && (controlLike(child) || action(child)))) return 'container';
+        const rect = el.getBoundingClientRect();
+        // 长而矮的整行按钮可保留；高且大面积的卡片 / 面板需拆到具体控件。
+        if (rect.height > 96 && rect.width * rect.height > Math.min(64000, innerWidth * innerHeight * .12)) return 'oversized';
+        return null;
+    }
+    function currentScope() {
+        try { return typeof options.scope === 'function' ? options.scope() : options.scope; }
+        catch (_) { return null; }
+    }
+    function inScope(el, scope = currentScope()) {
+        if (scope?.mode === 'all') return true;
+        if (scope?.mode !== 'targets' || !Array.isArray(scope.protoIds)) return false;
+        // 范围只授权该控件自身；容器标注不授权内部的历史交互。
+        return scope.protoIds.includes(el.getAttribute('data-proto-id'));
+    }
+    function hitAction(target) {
+        if (currentScope()?.manualTargets?.length && scan().some(item => item.source === 'manual' && item.status === 'ready' && item.el.contains(target))) return true;
+        for (let el = target instanceof Element ? target : target?.parentElement; el && el !== document.documentElement; el = el.parentElement)
+            if ((controlLike(el) || action(el)) && !controlIssue(el) && rectFor(el)) return true;
+        return false;
+    }
+    function rectFor(el) {
+        if (!el?.isConnected || owned(el) || el.closest(BLOCKED) || el.matches(':disabled')) return null;
+        const original = el.getBoundingClientRect();
+        let left = Math.max(0, original.left), top = Math.max(0, original.top);
+        let right = Math.min(innerWidth, original.right), bottom = Math.min(innerHeight, original.bottom);
+        for (let node = el; node && node !== document.documentElement; node = node.parentElement) {
+            const css = getComputedStyle(node);
+            if (css.display === 'none' || css.visibility === 'hidden' || Number(css.opacity) === 0) return null;
+            if (node === el) continue;
+            const clip = node.getBoundingClientRect();
+            if (/hidden|clip|auto|scroll/.test(css.overflowX)) { left = Math.max(left, clip.left); right = Math.min(right, clip.right); }
+            if (/hidden|clip|auto|scroll/.test(css.overflowY)) { top = Math.max(top, clip.top); bottom = Math.min(bottom, clip.bottom); }
+        }
+        if (right - left < 4 || bottom - top < 4) return null;
+        if ((right - left) * (bottom - top) > innerWidth * innerHeight * .65 && !(window.ProtoScreenshot && el.parentElement?.id === 'screenshot-regions')) return null;
+        const points = [[.5, .5], [.2, .2], [.8, .8]];
+        if (!points.some(([x, y]) => {
+            const hit = document.elementFromPoint(left + (right - left) * x, top + (bottom - top) * y);
+            return hit === el || !!hit && el.contains(hit);
+        })) return null;
+        return { left, top, right, bottom };
+    }
+    function examine(el, manual = false) {
+        if (owned(el) || el.closest('[data-proto-hotspot="false"]')) return { status: 'excluded' };
+        if (el.matches(':disabled') || el.closest('[inert],[aria-disabled="true"]')) return { status: 'disabled' };
+        for (let node = el; node && node !== document.documentElement; node = node.parentElement) {
+            const css = getComputedStyle(node);
+            if (node.matches('[hidden],[aria-hidden="true"]') || css.display === 'none' || css.visibility === 'hidden' || Number(css.opacity) === 0)
+                return { status: 'hidden' };
+        }
+        if (/^(SCRIPT|STYLE|LINK|META|OPTION|OPTGROUP|PATH|SVG)$/.test(el.tagName)) return { status: 'unsupported' };
+        const issue = controlIssue(el);
+        if (issue) return { status: issue };
+        if (!manual && !action(el)) return { status: 'no-action' };
+        const bounds = el.getBoundingClientRect();
+        if (!bounds.width || !bounds.height) return { status: 'hidden' };
+        if (bounds.bottom <= 0 || bounds.top >= innerHeight || bounds.right <= 0 || bounds.left >= innerWidth) return { status: 'offscreen' };
+        const rect = rectFor(el);
+        return rect ? { status: 'ready', rect } : { status: 'occluded' };
+    }
+    function scan(scope = currentScope()) {
+        const elements = [...document.querySelectorAll('body *')], byId = new Map();
+        for (const el of elements) {
+            const id = el.getAttribute('data-proto-id');
+            if (id) { if (!byId.has(id)) byId.set(id, []); byId.get(id).push(el); }
+        }
+        const anchorFor = el => {
+            if (window.ProtoAnchors) {
+                const A = window.ProtoAnchors;
+                return { protoId: el.getAttribute('data-proto-id') || '', selector: A.selector(el), tag: el.tagName.toLowerCase(), text: A.text(el), parentText: A.text(el.parentElement) };
+            }
+            return { protoId: el.getAttribute('data-proto-id') || '', selector: el.id ? '#' + CSS.escape(el.id) : '', tag: el.tagName.toLowerCase() };
+        };
+        const resolve = anchor => {
+            if (anchor?.protoId) { const hits = byId.get(anchor.protoId) || []; return hits.length === 1 ? hits[0] : null; }
+            if (window.ProtoAnchors) return window.ProtoAnchors.resolveHidden(anchor);
+            try { const hits = [...document.querySelectorAll(anchor?.selector || ':not(*)')]; return hits.length === 1 ? hits[0] : null; } catch (_) { return null; }
+        };
+        let entries = [];
+        if (scope?.mode === 'targets' && Array.isArray(scope.protoIds)) {
+            entries = scope.protoIds.map(protoId => {
+                const hits = byId.get(protoId) || [];
+                const base = { protoId, key: 'proto:' + protoId, source: 'declared', anchor: { protoId } };
+                if (hits.length !== 1) return { ...base, status: hits.length ? 'duplicate' : 'missing' };
+                return { ...base, el: hits[0], label: labelFor(hits[0]), anchor: anchorFor(hits[0]), ...examine(hits[0]) };
+            });
+        } else if (scope?.mode === 'all') {
+            entries = elements.filter(el => action(el)).map(el => ({
+                protoId: el.getAttribute('data-proto-id') || el.id || el.tagName.toLowerCase(), source: 'automatic',
+                anchor: anchorFor(el), label: labelFor(el), key: 'all:' + (el.getAttribute('data-proto-id') || el.id || anchorFor(el).selector), el, ...examine(el)
+            }));
+        }
+        for (const target of scope?.manualTargets || []) {
+            const el = resolve(target.anchor);
+            const existing = el && entries.find(item => item.el === el);
+            if (existing) entries = entries.filter(item => item !== existing);
+            entries.push({ ...target, key: 'manual:' + target.id, source: 'manual', protoId: target.anchor.protoId || target.id, el,
+                ...(el ? examine(el, true) : { status: target.anchor.protoId && (byId.get(target.anchor.protoId)?.length || 0) > 1 ? 'duplicate' : 'missing' }) });
+        }
+        const excluded = (scope?.excludedTargets || []).map(target => resolve(target.anchor)).filter(Boolean);
+        for (const item of entries) if (item.el && excluded.includes(item.el)) item.status = 'excluded';
+        const ready = entries.filter(item => item.status === 'ready');
+        let count = 0;
+        for (const item of ready) {
+            if (ready.some(other => other.el !== item.el && item.el.contains(other.el))) item.status = 'contains-target';
+            else if (++count > MAX_HINTS) item.status = 'limit';
+        }
+        return entries;
+    }
+    function labelFor(el) { return (el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || el.value || el.tagName).replace(/\s+/g, ' ').trim().slice(0, 120); }
+    function candidate(el) { return el instanceof Element ? { ...examine(el, true), label: labelFor(el) } : { status: 'missing' }; }
+    // 只读诊断，不执行点击、不展开页面，也不修改 PRD / 提示配置。
+    function inspect() {
+        const scope = currentScope();
+        return { mode: scope?.mode || 'off', enabled: enabled(), items: scan(scope).map(({ el, ...item }) => item) };
+    }
+    function position(box, rect) {
+        box.style.left = Math.max(0, rect.left - 3) + 'px';
+        box.style.top = Math.max(0, rect.top - 3) + 'px';
+        box.style.width = Math.min(innerWidth, rect.right + 3) - Math.max(0, rect.left - 3) + 'px';
+        box.style.height = Math.min(innerHeight, rect.bottom + 3) - Math.max(0, rect.top - 3) + 'px';
+    }
+    function hide() {
+        clearTimeout(timer); timer = 0;
+        cancelAnimationFrame(frame); frame = 0;
+        boxes.clear(); layer?.replaceChildren();
+    }
+    function refresh() {
+        frame = 0;
+        if (!enabled()) { hide(); return; }
+        const ready = new Map(scan().filter(item => item.status === 'ready').map(item => [item.el, item.rect]));
+        for (const [el, box] of boxes) {
+            const rect = ready.get(el);
+            if (!rect) { box.remove(); boxes.delete(el); }
+            else position(box, rect);
+        }
+    }
+    function schedule() {
+        if (boxes.size && !frame) frame = requestAnimationFrame(refresh);
+    }
+    function show() {
+        if (!layer || !enabled()) { hide(); return 0; }
+        const scope = currentScope();
+        if (scope?.mode !== 'all' && (scope?.mode !== 'targets' || !scope.protoIds?.length && !scope.manualTargets?.length)) { hide(); return 0; }
+        if (boxes.size && performance.now() - started < DURATION) { refresh(); return boxes.size; }
+        hide();
+        for (const { el, rect } of scan(scope).filter(item => item.status === 'ready')) {
+            const box = document.createElement('div');
+            box.className = 'ph-box'; box.setAttribute('data-prototype-owned', '');
+            box.dataset.hotspotFor = el.getAttribute('data-proto-id') || el.id || el.tagName.toLowerCase();
+            position(box, rect); layer.appendChild(box); boxes.set(el, box);
+        }
+        if (boxes.size) { started = performance.now(); timer = setTimeout(hide, DURATION); }
+        return boxes.size;
+    }
+    function pointerDown(event) { down = { x: event.clientX, y: event.clientY, moved: false }; }
+    function pointerMove(event) {
+        if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 8) down.moved = true;
+    }
+    function click(event) {
+        const drag = down?.moved; down = null;
+        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        if (!enabled() || owned(target) || hitAction(target)) { hide(); return; }
+        if (event.defaultPrevented || event.button !== 0 || event.detail === 0 || drag || target?.closest(EDITABLE) || String(getSelection()).trim()) return;
+        show();
+    }
+    function mutations(records) {
+        if (!boxes.size) return;
+        for (const record of records) {
+            if (owned(record.target)) continue;
+            if (record.type === 'attributes' && /data-proto-(page|state)/.test(record.attributeName)) { hide(); return; }
+            if (record.type === 'childList' && [...record.addedNodes, ...record.removedNodes].every(node => node instanceof Element && owned(node))) continue;
+            schedule(); break;
+        }
+    }
+    function init(config = {}) {
+        options = config;
+        if (layer) { hide(); return window.ProtoHotspots; }
+        style = document.createElement('style'); style.setAttribute('data-prototype-owned', '');
+        style.textContent = `
+.ph-layer{--ph-fill:${COLORS.fill};--ph-opacity-low:.18;--ph-opacity-high:.42;--ph-opacity-still:.3;position:fixed;inset:0;z-index:2147481000;border:0!important;outline:0!important;box-shadow:none!important;background:transparent!important;pointer-events:none!important;overflow:hidden;}
+.ph-layer .ph-box{position:absolute;box-sizing:border-box;margin:0;padding:0;border:0!important;outline:0!important;border-radius:6px;background:var(--ph-fill);box-shadow:none!important;pointer-events:none!important;opacity:var(--ph-opacity-still);animation:ph-discover ${DURATION}ms cubic-bezier(.4,0,.2,1) 1 forwards;}
+@keyframes ph-discover{0%{opacity:var(--ph-opacity-low)}20%{opacity:var(--ph-opacity-high)}45%{opacity:var(--ph-opacity-low)}70%{opacity:var(--ph-opacity-high)}100%{opacity:0}}
+@media(prefers-reduced-motion:reduce){.ph-layer .ph-box{animation:none;opacity:var(--ph-opacity-still)}}
+`;
+        layer = document.createElement('div'); layer.className = 'ph-layer';
+        layer.setAttribute('data-prototype-owned', ''); layer.setAttribute('aria-hidden', 'true');
+        (document.head || document.documentElement).appendChild(style); document.documentElement.appendChild(layer);
+        document.addEventListener('pointerdown', pointerDown, true);
+        document.addEventListener('pointermove', pointerMove, true);
+        document.addEventListener('pointercancel', hide, true);
+        document.addEventListener('click', click);
+        document.addEventListener('scroll', schedule, true);
+        window.addEventListener('resize', schedule);
+        window.addEventListener('pagehide', hide);
+        observer = new MutationObserver(mutations);
+        observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'class', 'hidden', 'inert', 'disabled', 'aria-hidden', 'aria-disabled', 'role', 'onclick', 'href', 'type', 'data-proto-id', 'data-proto-hotspot', 'data-proto-state', 'data-proto-page'] });
+        return window.ProtoHotspots;
+    }
+    function destroy() {
+        hide(); observer?.disconnect(); observer = null;
+        document.removeEventListener('pointerdown', pointerDown, true);
+        document.removeEventListener('pointermove', pointerMove, true);
+        document.removeEventListener('pointercancel', hide, true);
+        document.removeEventListener('click', click);
+        document.removeEventListener('scroll', schedule, true);
+        window.removeEventListener('resize', schedule); window.removeEventListener('pagehide', hide);
+        layer?.remove(); style?.remove(); layer = null; style = null; down = null;
+    }
+    window.ProtoHotspots = { init, show, hide, destroy, inspect, candidate };
+})();
+
+</script>
+</head>
+<body>
+
+<!-- ══════════ 顶栏 ══════════ -->
+<header class="topnav">
+  <div class="logo">
+    <span class="logo-mark">演示学校</span>
+    <span class="logo-name">进步中学</span>
+  </div>
+  <nav class="menu" id="global-menu">
+    <div class="menu-item">首页</div>
+    <div class="menu-item">备课授课</div>
+    <div class="menu-item">学情分析</div>
+    <div class="menu-item on">作业</div>
+    <div class="menu-item">错题本</div>
+    <div class="menu-item">考试</div>
+    <div class="menu-item">校级管理</div>
+    <div class="menu-item">试卷库</div>
+    <div class="menu-item">教研集备</div>
+    <div class="menu-item">班级管理</div>
+  </nav>
+  <div class="nav-right">
+    <div class="nav-ico" id="nav-ico" title="应用中心">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+    </div>
+    <div class="nav-sep"></div>
+    <!-- 账户：角色视角切换已从顶部移到本下拉菜单（与讲评页顶栏保持一致） -->
+    <div class="user-wrap" id="user-wrap">
+      <button type="button" class="user" id="user-btn"
+              aria-haspopup="menu" aria-expanded="false" aria-controls="user-menu" aria-label="账户菜单">
+        <span class="user-name">jbgz001</span>
+        <span class="role-badge" id="role-badge">任课教师</span>
+        <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="user-menu" id="user-menu" role="menu" aria-label="账户菜单">
+        <div class="um-head">
+          <div class="um-name">jbgz001</div>
+          <div class="um-sub">演示学校 · 进步中学 · 教师账号</div>
+        </div>
+        <div class="um-label">身份视角</div>
+        <button type="button" class="um-item on" role="menuitemradio" aria-checked="true" data-role="teacher">
+          <span class="um-t">任课教师</span>
+          <svg class="um-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5L20 6"/></svg>
+        </button>
+        <button type="button" class="um-item" role="menuitemradio" aria-checked="false" data-role="leader">
+          <span class="um-t">学科组长</span>
+          <svg class="um-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5L20 6"/></svg>
+        </button>
+        <div class="um-sep"></div>
+        <button type="button" class="um-item" role="menuitem" data-act="profile"><span class="um-t">个人设置</span></button>
+        <button type="button" class="um-item" role="menuitem" data-act="logout"><span class="um-t">退出登录</span></button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+
+  <!-- ══════════ 角色提示条（PRD 2.2 权限矩阵） ══════════ -->
+  <div class="role-note" id="role-note"></div>
+
+  <!-- ══════════ 筛选区 ══════════ -->
+  <section class="filter-card">
+    <span class="prd-badge" data-prd="LP-01" title="查看 PRD LP-01：筛选区">LP-01</span>
+    <div class="f-row">
+      <span class="f-label">年级选项</span>
+      <label class="sel">
+        <select id="f-year">
+          <option>2024-2025学年</option>
+          <option selected>2025-2026学年</option>
+        </select>
+      </label>
+      <div class="grade-seg" id="f-grade">
+        <span class="on">高一</span><span>高二</span>
+      </div>
+      <div class="f-right">
+        <div class="date-range" onclick="toast('演示原型：时间范围选择未接入','warn')">
+          <span>2026-03-10</span><span class="sep">~</span><span>2026-09-10</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18"/></svg>
+        </div>
+      </div>
+    </div>
+    <div class="f-row">
+      <span class="f-label">任教班级</span>
+      <div class="chip-grp" id="f-class"></div>
+    </div>
+    <div class="f-row">
+      <span class="f-label">高级选项</span>
+      <label class="sel">
+        <select id="f-subject">
+          <option value="">全部学科</option>
+          <option>英语</option><option>语文</option><option>物理</option><option>日语</option><option>历史</option>
+        </select>
+      </label>
+      <label class="sel">
+        <select id="f-module">
+          <option value="">全部模块</option>
+          <option>单元检测</option><option>专项训练</option><option>同步练习</option><option>作文</option>
+        </select>
+      </label>
+      <div class="f-right">
+        <div class="search-box">
+          <input id="f-kw" type="text" placeholder="请输入作业名称或序号" aria-label="搜索作业名称或序号">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 控制条 ══════════ -->
+  <section class="ctrl-card">
+    <span class="prd-badge" data-prd="LP-02" title="查看 PRD LP-02：控制条">LP-02</span>
+    <span class="prd-badge prd-badge-r" data-prd="LP-06" title="查看 PRD LP-06：报告设置（组长及以上）">LP-06</span>
+    <div class="list-hd">
+      <div class="tabs" id="f-type"></div>
+      <div class="right">
+        <button class="btn btn-default perm-leader" type="button" id="btn-report-settings" onclick="openReportSettings()" title="全校统一报告口径（仅学科组长及以上可见）">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          报告设置
+        </button>
+        <button class="btn btn-default" id="btn-toggle-all" aria-label="全部展开或收起">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 9l4 4 4-4"/></svg>
+          <span id="toggle-all-txt">全部展开</span>
+        </button>
+        <button class="btn btn-primary" onclick="toast('演示原型：制作作业答题卡流程未接入','warn')">制作作业答题卡</button>
+      </div>
+    </div>
+    <div class="sort-row">
+      <span class="sort-lb">排序</span>
+      <button class="sort-item on" id="sort-time" aria-label="按最近提交时间排序">
+        最近提交时间
+        <svg id="sort-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v13M7 12l5 5 5-5"/></svg>
+      </button>
+      <span class="sort-stats" id="sort-stats"></span>
+    </div>
+  </section>
+
+  <!-- ══════════ 作业卡片流 ══════════ -->
+  <div class="prd-hw-wrap">
+    <span class="prd-badge" data-prd="LP-03" title="查看 PRD LP-03：作业卡片">LP-03</span>
+    <span class="prd-badge prd-badge-r" data-prd="LP-04" title="查看 PRD LP-04：班级行操作与报告准入">LP-04</span>
+    <div class="hw-cards" id="hw-list"></div>
+  </div>
+
+  <div class="prd-ft-wrap">
+  <span class="prd-badge" data-prd="LP-05" title="查看 PRD LP-05：空态与分页">LP-05</span>
+  <div class="empty" id="empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h6M9 16h4M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+    <div>当前筛选条件下暂无作业</div>
+    <div style="font-size:12px">可尝试切换作业类型、班级或清空搜索关键词</div>
+  </div>
+
+  <!-- ══════════ 分页 ══════════ -->
+  <div class="page-ft" id="page-ft"></div>
+  </div>
+
+</div>
+
+<!-- ══════════ 报告设置弹窗（仅学科组长及以上；全校统一口径） ══════════ -->
+<div class="rs-mask" id="rsMask" aria-hidden="true">
+  <div class="rs-dialog" role="dialog" aria-modal="true" aria-labelledby="rsTitle">
+    <div class="rs-head">
+      <div>
+        <h3 id="rsTitle">报告设置</h3>
+        <p class="rs-sub">全校统一口径 · 仅学科组长及以上可修改，任课教师不可见；保存后各班各科报告按同一份阈值判定</p>
+      </div>
+      <button type="button" class="rs-x" onclick="closeReportSettings()" aria-label="关闭">✕</button>
+    </div>
+    <div class="rs-body">
+      <!-- 1. 知识点掌握率档位 -->
+      <section class="rs-sec">
+        <div class="rs-sec-hd"><h4>知识点掌握率档位</h4><span>决定知识点诊断分级与图谱着色</span></div>
+        <div class="rs-row">
+          <div class="rs-item">
+            <label for="rs-kp-master">掌握 ≥</label>
+            <span class="rs-num"><input type="number" id="rs-kp-master" min="0" max="100" step="1" value="80"><i>%</i></span>
+          </div>
+          <div class="rs-item">
+            <label for="rs-kp-weak">未掌握 &lt;</label>
+            <span class="rs-num"><input type="number" id="rs-kp-weak" min="0" max="100" step="1" value="60"><i>%</i></span>
+          </div>
+          <span class="rs-auto">薄弱区间 <b id="rs-kp-range">60% – 80%</b></span>
+        </div>
+      </section>
+
+      <!-- 2. 等级设置 -->
+      <section class="rs-sec">
+        <div class="rs-sec-hd"><h4>等级设置</h4><span>得分率累计口径，各档人数与占比均按此判定</span></div>
+        <div class="rs-row">
+          <div class="rs-item">
+            <label for="rs-ex">优秀 ≥</label>
+            <span class="rs-num"><input type="number" id="rs-ex" min="0" max="100" step="1" value="90"><i>%</i></span>
+          </div>
+          <div class="rs-item">
+            <label for="rs-good">良好 ≥</label>
+            <span class="rs-num"><input type="number" id="rs-good" min="0" max="100" step="1" value="80"><i>%</i></span>
+          </div>
+          <div class="rs-item">
+            <label for="rs-pass">及格 ≥</label>
+            <span class="rs-num"><input type="number" id="rs-pass" min="0" max="100" step="1" value="60"><i>%</i></span>
+          </div>
+          <div class="rs-item">
+            <label for="rs-low">低分 &lt;</label>
+            <span class="rs-num"><input type="number" id="rs-low" min="0" max="100" step="1" value="30"><i>%</i></span>
+            <label class="rs-check"><input type="checkbox" id="rs-low-inclusive">包含 <b id="rs-low-inc-val">30</b>%</label>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. 分层设置 -->
+      <section class="rs-sec">
+        <div class="rs-sec-hd"><h4>分层设置</h4><span>按班内得分率位次切分 A / B / C 层，与等级是两套口径</span></div>
+        <div class="rs-row">
+          <div class="rs-item">
+            <label for="rs-la">A 层前</label>
+            <span class="rs-num"><input type="number" id="rs-la" min="0" max="100" step="1" value="30"><i>%</i></span>
+          </div>
+          <div class="rs-item">
+            <label for="rs-lb">B 层中间</label>
+            <span class="rs-num"><input type="number" id="rs-lb" min="0" max="100" step="1" value="50"><i>%</i></span>
+          </div>
+          <div class="rs-item">
+            <label for="rs-lc">C 层后</label>
+            <span class="rs-num"><input type="number" id="rs-lc" min="0" max="100" step="1" value="20"><i>%</i></span>
+          </div>
+          <span class="rs-auto">合计 <b id="rs-layer-sum">100%</b></span>
+        </div>
+      </section>
+
+      <!-- 4. 提交率警示值 -->
+      <section class="rs-sec">
+        <div class="rs-sec-hd"><h4>提交率警示值</h4><span>班级提交率低于该值时，列表行与报告 KPI 转警示色</span></div>
+        <div class="rs-row">
+          <div class="rs-item">
+            <label for="rs-subwarn">低于</label>
+            <span class="rs-num"><input type="number" id="rs-subwarn" min="0" max="100" step="1" value="90"><i>%</i></span>
+          </div>
+          <span class="rs-auto">默认 90%，与班级报告「提交率 &lt; 90% 转警示」一致</span>
+        </div>
+      </section>
+    </div>
+    <div class="rs-foot">
+      <button type="button" class="btn btn-default" onclick="closeReportSettings()">取消</button>
+      <button type="button" class="btn btn-primary" onclick="saveReportSettings()">确定</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-host"></div>
+
+<script>
+/* 嵌入宿主页 iframe 时隐藏本页顶栏（两种装载方式：srcdoc 注入 __RPQ / src 模式带 ?embed=1），
+   全局导航与角色切换由宿主页提供；配合上方 body.lp-embed 样式 */
+const LP_EMBED = (typeof window.__RPQ === 'string')
+  || new URLSearchParams(location.search).get('embed') === '1';
+if (LP_EMBED) document.body.classList.add('lp-embed');
+
+/* ══════════════════════ 数据层（演示 mock） ══════════════════════ */
+/* status: reviewed=已批阅(回评) / pending=待批阅 / ended=已结束待批阅 */
+const HOMEWORK = [
+  {
+    id: 'HW-0910-U1', name: 'unit1 单元检测一', type: '校本作业', subject: '英语', module: '单元检测',
+    classes: [
+      { cls: '71', submitted: 35, total: 35, accuracy: 86.4, time: '2026-09-10 14:32', status: 'reviewed', ebook: true },
+      { cls: '72', submitted: 35, total: 35, accuracy: null, time: '2026-09-10 14:31', status: 'pending', ebook: true },
+      { cls: '73', submitted: 35, total: 35, accuracy: 88.1, time: '2026-09-10 14:30', status: 'reviewed', ebook: true },
+      { cls: '74', submitted: 34, total: 35, accuracy: 84.8, time: '2026-09-10 14:29', status: 'reviewed', ebook: true },
+      { cls: '75', submitted: 33, total: 35, accuracy: 81.2, time: '2026-09-10 14:28', status: 'reviewed', ebook: true },
+      { cls: '76', submitted: 15, total: 35, accuracy: 79.4, time: '2026-09-10 14:27', status: 'reviewed', ebook: true },
+    ]
+  },
+  {
+    id: 'TK-001', name: '【通用题卡 001】0813tongyong-批阅', type: '通用题卡', subject: '英语', module: '同步练习',
+    classes: [
+      { cls: '一班-勿动谢谢', submitted: 1, total: 14, accuracy: 72.0, time: '2026-08-13 14:02', status: 'reviewed' },
+    ]
+  },
+  {
+    id: 'TK-000', name: '【通用题卡 000】0812通用题卡不赋分---智批状态', type: '通用题卡', subject: '英语', module: '同步练习',
+    classes: [
+      { cls: '一班-勿动谢谢', submitted: 1, total: 14, accuracy: 85.0, time: '2026-08-12 17:50', status: 'reviewed' },
+    ]
+  },
+  {
+    id: 'HW-DFS', name: '大法师的', type: '在线作业', subject: '日语', module: '专项训练',
+    classes: [
+      { cls: '日语班', submitted: 0, total: 3, accuracy: null, time: '2026-07-17 23:59', status: 'ended' },
+      { cls: '6班-改', submitted: 0, total: 59, accuracy: null, time: '2026-07-17 23:59', status: 'ended' },
+      { cls: '一班-勿动谢谢', submitted: 1, total: 14, accuracy: null, time: '2026-07-17 23:59', status: 'ended' },
+      { cls: '2班', submitted: 0, total: 67, accuracy: null, time: '2026-07-17 23:59', status: 'ended' },
+    ]
+  },
+  {
+    id: 'HW-0706-PHY', name: '2026年07月06日物理作业', type: '自制题卡', subject: '物理', module: '同步练习',
+    classes: [
+      { cls: '一班-勿动谢谢', submitted: 1, total: 13, accuracy: 91.7, time: '2026-07-06 13:38', status: 'reviewed', ebook: true },
+      { cls: '6班-改', submitted: 1, total: 60, accuracy: 58.2, time: '2026-07-06 12:04', status: 'pending', ebook: true },
+      { cls: '一班-勿动谢谢', submitted: 1, total: 13, accuracy: 88.3, time: '2026-07-06 10:35', status: 'reviewed', ebook: true },
+      { cls: '6班-改', submitted: 1, total: 60, accuracy: null, time: '2026-07-06 10:33', status: 'pending', ebook: true },
+    ]
+  },
+  {
+    id: 'HW-0820-EN', name: '2026年08月20日英语作文（读后续写 + 应用文）', type: '校本作业', subject: '英语', module: '作文',
+    classes: [
+      { cls: '英语作文', submitted: 28, total: 32, accuracy: 79.5, time: '2026-08-20 16:20', status: 'reviewed', ebook: true },
+      { cls: '71', submitted: 33, total: 35, accuracy: null, time: '2026-08-20 15:48', status: 'pending', ebook: true },
+    ]
+  },
+  {
+    id: 'HW-0818-CN', name: '2026年08月18日语文作文 · 议论文', type: '校本作业', subject: '语文', module: '作文',
+    classes: [
+      { cls: '71', submitted: 34, total: 35, accuracy: 78.2, time: '2026-08-18 10:20', status: 'reviewed', ebook: true },
+    ]
+  },
+  {
+    /* 学科混排样例：同一份作业含语文微写作 + 英语应用文两道智批作文题，
+       讲评页「作文报告」入口按题切换，模块集随当前题的学科整体变化 */
+    id: 'HW-0822-MIX', name: '2026年08月22日周末综合作业', type: '校本作业', subject: '语文 + 英语', module: '作文',
+    classes: [
+      { cls: '71', submitted: 35, total: 35, accuracy: null, time: '2026-08-22 09:10', status: 'reviewed', ebook: true },
+    ]
+  },
+  {
+    id: 'HW-0815-CN', name: '语文周测 · 文言文阅读', type: '自制题卡', subject: '语文', module: '单元检测',
+    classes: [
+      { cls: '语文作文', submitted: 30, total: 32, accuracy: 68.4, time: '2026-08-15 10:12', status: 'pending', ebook: true },
+      { cls: '李腾的班级', submitted: 25, total: 25, accuracy: 74.9, time: '2026-08-15 09:40', status: 'reviewed', ebook: true },
+    ]
+  },
+];
+
+const CLASS_LIST = ['全部班级','李腾的班级','日语班','这个合并','语文作文','物理班','英语作文','哪个服你告诉','金佑人生','一班-勿动谢谢','2班','5班','6班-改','66班','71','72','73','74','75','76'];
+const TYPE_LIST = ['全部','校本作业','自制题卡','在线作业','通用题卡'];
+const TYPE_TAG = { '校本作业':'tag-blue', '自制题卡':'tag-purple', '在线作业':'tag-orange', '通用题卡':'tag-cyan' };
+
+/* ══════════════════════ 角色视角（PRD 2.2 权限矩阵） ══════════════════════
+   teacher 任课教师 → 整合班级报告 R1（m8 年级定位与对标；隐藏他班明细与教师对比）
+   leader  学科组长 → 班级对比报告 R3 / 组长年级报告 R4（全校本学科 · 含灰度净偏离） */
+const ROLES = [
+  { k:'teacher', n:'任课教师', desc:'我的班：整合班级报告（R1，含年级定位与匿名对标）' },
+  { k:'leader', n:'学科组长', desc:'全年级每个班：班级对比（R3）与年级报告（R4）' },
+];
+function readRole(){
+  const p = new URLSearchParams((typeof window.__RPQ === 'string' && window.__RPQ) ? window.__RPQ : location.search).get('role');
+  if (p && ROLES.some(r => r.k === p)) return p;
+  try { const s = sessionStorage.getItem('hw-role'); if (s && ROLES.some(r => r.k === s)) return s; } catch (e) {}
+  return 'teacher';
+}
+const ROLE = readRole();
+function roleName(){ return (ROLES.find(r => r.k === state.role) || ROLES[0]).n; }
+/* 角色透传：teacher 保持 URL 干净，其余附加 role 参数 */
+function withRole(url){
+  if (state.role === 'teacher') return url;
+  return url + (url.indexOf('?') > -1 ? '&' : '?') + 'role=' + state.role;
+}
+function switchRole(k){
+  if (state.role === k) return;
+  state.role = k;
+  try { sessionStorage.setItem('hw-role', k); } catch (e) {}
+  if (LP_EMBED) {
+    /* 嵌入模式：地址栏属于宿主，不能改写；通知宿主同步角色徽章并重载相关视图
+       （不带 hw/cls 字段：宿主对字符串字段是覆盖语义，空串会清空作业上下文） */
+    try { window.parent.postMessage({ type: 'rp-nav', to: 'list', role: k }, '*'); } catch (e) {}
+    syncRole();
+    render();
+    toast('已切换至「' + roleName() + '」视角：' + (ROLES.find(r => r.k === k) || {}).desc);
+    return;
+  }
+  try {
+    const u = new URL(document.baseURI);
+    if (k === 'teacher') u.searchParams.delete('role'); else u.searchParams.set('role', k);
+    history.replaceState(null, '', u.href);
+  } catch (e) {}
+  syncRole();
+  render();
+  toast('已切换至「' + roleName() + '」视角：' + (ROLES.find(r => r.k === k) || {}).desc);
+}
+function syncRole(){
+  document.querySelectorAll('#user-menu [data-role]').forEach(s => {
+    const on = s.dataset.role === state.role;
+    s.classList.toggle('on', on);
+    s.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+  const badge = document.getElementById('role-badge');
+  if (badge) badge.textContent = roleName();
+  /* 报告设置入口仅学科组长及以上可见；降为教师时同步收起已打开的弹窗 */
+  document.body.classList.toggle('role-leader', state.role === 'leader');
+  if (state.role !== 'leader') closeReportSettings();
+  const note = document.getElementById('role-note');
+  if (!note) return;
+  const hw0 = HOMEWORK[0];
+  if (state.role === 'leader'){
+    note.className = 'role-note leader show';
+    note.innerHTML = '<span><b>学科组长视角</b> · 可见本学科全校数据：「班级报告」打开班级对比报告（R3），「年级报告」打开组长年级报告（R4）；教师净偏离为灰度指标，仅组长可见。</span>'
+      + '<span class="sp"><span class="link" onclick="lpNav(\'index.html?wb=grade&hw=' + encodeURIComponent(hw0.id) + '&role=leader\')">打开年级报告（R4）</span></span>';
+  } else {
+    note.className = 'role-note';
+    note.innerHTML = '';
+  }
+}
+
+/* ══════════════════════ 未交学生名单（演示 mock） ══════════════════════ */
+/* 班级条目可显式给出 unsub 名单数组；未给出的按「总人数-已交人数」用确定性伪随机姓名补齐，
+   保证每次刷新名单稳定、班内不重名（姓名池 30 姓 × 30 名，远大于最大班额 67） */
+const SURNAMES = ['李','王','张','刘','陈','杨','赵','黄','周','吴','徐','孙','胡','朱','高','林','何','郭','马','罗','梁','宋','郑','谢','韩','唐','冯','于','董','萧'];
+const GIVENS = ['子轩','雨欣','浩然','诗涵','宇航','欣怡','俊杰','雨桐','宇泽','佳琪','子墨','梦瑶','晨曦','欣妍','天佑','静怡','致远','思彤','文博','梓萱','昊然','语嫣','鹏飞','雅静','志强','若曦','泽宇','可欣','明轩','紫萱'];
+function seedRand(seed){
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return () => { h = (h * 1103515245 + 12345) >>> 0; return h / 4294967296; };
+}
+function genNames(n, seed){
+  const rnd = seedRand(seed), used = new Set(), names = [];
+  while (names.length < n){
+    const nm = SURNAMES[Math.floor(rnd() * SURNAMES.length)] + GIVENS[Math.floor(rnd() * GIVENS.length)];
+    if (!used.has(nm)) { used.add(nm); names.push(nm); }
+  }
+  return names;
+}
+HOMEWORK.forEach(hw => hw.classes.forEach(c => {
+  if (c.total > c.submitted) c.unsub = c.unsub || genNames(c.total - c.submitted, hw.id + '|' + c.cls);
+}));
+
+/* ══════════════════════ 状态 ══════════════════════ */
+const state = { type:'全部', cls:'全部班级', subject:'', module:'', kw:'', sortDir:'desc', role:ROLE, openSet:new Set(['HW-0910-U1']) };
+
+/* ══════════════════════ 工具函数 ══════════════════════ */
+const $ = s => document.querySelector(s);
+function toast(msg, type){
+  const host = $('#toast-host');
+  const el = document.createElement('div');
+  el.className = 'toast ' + (type || 'ok');
+  el.innerHTML = '<span class="ic">' + (type === 'warn' ? '●' : '✓') + '</span><span>' + msg + '</span>';
+  host.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 2200);
+}
+/* 比率分档：>=85 绿 / >=70 蓝 / >=50 橙 / <50 红 */
+function rateLevel(p){ return p >= 85 ? 'lv-success' : p >= 70 ? 'lv-normal' : p >= 50 ? 'lv-warn' : 'lv-danger'; }
+/* 提交率：已交/未交数字 + 渐变进度条 + 百分比（四档着色） */
+function submHtml(pct, sub, unsubNames){
+  const lv = rateLevel(pct);
+  const unsub = unsubNames.length;
+  /* 未交数字：有名单时渲染为可悬浮查看名单的交互元素 */
+  const unsubEl = unsub > 0
+    ? '<span class="unsub-n" data-names="' + esc(unsubNames.join(',')) + '">' + unsub + '</span>'
+    : '<span title="未交人数">' + unsub + '</span>';
+  return '<div class="subm" role="img" aria-label="提交率 ' + pct.toFixed(1) + '%">'
+    + '<span class="frac"><span title="已交人数">' + sub + '</span>/' + unsubEl + '</span>'
+    + '<span class="bar"><i style="width:' + Math.min(pct,100) + '%"></i></span>'
+    + '<span class="pct ' + lv + '">' + pct.toFixed(1) + '%</span>'
+    + '</div>';
+}
+/* 得分率：四档底色 pill，仅数字 */
+function accPillHtml(p){
+  if (p === null || p === undefined) return '<span class="acc-pill lv-none-pill" title="批阅完成后生成得分率">批阅后生成</span>';
+  return '<span class="acc-pill ' + rateLevel(p) + '" title="得分率 ' + p.toFixed(1) + '%">' + p.toFixed(1) + '%</span>';
+}
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ══════════════════════ 组级汇总计算 ══════════════════════ */
+function summarize(hw){
+  let sub = 0, tot = 0, accW = 0, accN = 0, pending = 0, latest = '';
+  hw.classes.forEach(c => {
+    sub += c.submitted; tot += c.total;
+    if (c.accuracy !== null && c.submitted > 0) { accW += c.accuracy * c.submitted; accN += c.submitted; }
+    if (c.status === 'pending' || c.status === 'ended') pending++;
+    if (c.time > latest) latest = c.time;
+  });
+  return {
+    clsCount: hw.classes.length,
+    subRate: tot ? sub / tot * 100 : 0,
+    sub, tot,
+    avgAcc: accN ? accW / accN : null,
+    pending, latest
+  };
+}
+
+/* ══════════════════════ 渲染 ══════════════════════ */
+function filtered(){
+  return HOMEWORK.map(hw => {
+    let cls = hw.classes;
+    if (state.cls !== '全部班级') cls = cls.filter(c => c.cls === state.cls);
+    return { hw, cls };
+  }).filter(({ hw, cls }) => {
+    if (!cls.length) return false;
+    if (state.type !== '全部' && hw.type !== state.type) return false;
+    if (state.subject && hw.subject !== state.subject) return false;
+    if (state.module && hw.module !== state.module) return false;
+    if (state.kw && !hw.name.toLowerCase().includes(state.kw.toLowerCase()) && !hw.id.toLowerCase().includes(state.kw.toLowerCase())) return false;
+    return true;
+  });
+}
+
+function clsRowHtml(hw, c){
+  const rate = c.total ? c.submitted / c.total * 100 : 0;
+  const timeHtml = c.status === 'ended'
+    ? '<span class="ended">已结束 ' + esc(c.time) + '</span>'
+    : '<span class="lb">提交于</span>' + esc(c.time);
+  /* 操作入口：待批阅/已结束 → 批阅（橙色待办）；已批阅 → 回评 */
+  const mainAct = (c.status === 'reviewed')
+    ? '<button class="act" onclick="actOn(\'' + hw.id + '\',\'' + esc(c.cls) + '\',\'回评\')">回评</button>'
+    : '<button class="act todo" onclick="actOn(\'' + hw.id + '\',\'' + esc(c.cls) + '\',\'批阅\')">批阅</button>';
+  const third = c.ebook
+    ? '<button class="act" onclick="actOn(\'' + hw.id + '\',\'' + esc(c.cls) + '\',\'电子作业本\')">电子作业本</button>'
+    : '<div class="more-box"><button class="act" onclick="toggleMore(event,this)">更多 ▾</button>'
+      + '<div class="more-menu">'
+      + '<div class="mi" onclick="actOn(\'' + hw.id + '\',\'' + esc(c.cls) + '\',\'导出成绩单\')">导出成绩单</div>'
+      + '<div class="mi" onclick="actOn(\'' + hw.id + '\',\'' + esc(c.cls) + '\',\'催交提醒\')">催交提醒</div>'
+      + '<div class="mi danger" onclick="actOn(\'' + hw.id + '\',\'' + esc(c.cls) + '\',\'删除任务\')">删除任务</div>'
+      + '</div></div>';
+  return '<div class="cls-row">'
+    + '<div><span class="cls-pill">' + esc(c.cls) + '</span></div>'
+    + '<div>' + submHtml(rate, c.submitted, c.unsub || []) + '</div>'
+    + '<div class="acc-cell"><span class="lb">得分率</span>' + accPillHtml(c.accuracy) + '</div>'
+    + '<div class="t-cell">' + timeHtml + '</div>'
+    + '<div class="sub-acts">' + mainAct
+    + '<span class="act-sep"></span><button class="act" onclick="actOn(\'' + hw.id + '\',\'' + esc(c.cls) + '\',\'查看详情\')">查看详情</button>'
+    + '<span class="act-sep"></span>' + third
+    + '<span class="act-sep"></span><button class="act" onclick="actOn(\'' + hw.id + '\',\'' + esc(c.cls) + '\',\'班级报告\')">班级报告</button>'
+    + '</div></div>';
+}
+
+const VISIBLE_ROWS = 2; /* 卡片收起态默认展示的班级行数 */
+function cardHtml(hw, cls){
+  const sum = summarize({ classes: cls });
+  const open = state.openSet.has(hw.id);
+  const tagCls = TYPE_TAG[hw.type] || 'tag-gray';
+  const needToggle = cls.length > VISIBLE_ROWS;
+  const rows = (open || !needToggle) ? cls : cls.slice(0, VISIBLE_ROWS);
+  const pendingHtml = sum.pending
+    ? '<span class="pending-badge"><span class="dot"></span>' + sum.pending + ' 班待批阅</span>' : '';
+  /* 年级入口仅组长渲染：年级对照信息已整合进班级报告 m8（CR-08），教师不设列表级入口。
+     用独立变量装配，不再在三元表达式里拼串（旧写法会把数字当成 HTML 注入） */
+  const leaderEntry = state.role === 'leader'
+    ? '<button class="act" onclick="actOn(\'' + hw.id + '\',null,\'年级报告\')" title="组长视角：本学科全年级 R4 报告（含共性薄弱、教研落点）">年级报告 · 组长版</button>'
+    : '';
+  const accMeta = sum.avgAcc === null
+    ? '<b class="lv-none">—</b>'
+    : '<b class="' + rateLevel(sum.avgAcc) + '">' + sum.avgAcc.toFixed(1) + '%</b>';
+  return '<div class="hw-card' + (open ? ' open' : '') + '" data-id="' + hw.id + '">'
+    + '<div class="card-head">'
+    +   '<div class="ch-row1"><span class="ch-name">' + esc(hw.name) + '</span>'
+    +     '<span class="tag ' + tagCls + '">' + hw.type + '</span>'
+    +     '<span class="tag tag-gray">' + hw.subject + '</span>'
+    +     '<span class="ch-side">' + pendingHtml + leaderEntry + '</span>'
+    +   '</div>'
+    +   '<div class="ch-meta">'
+    +     '<span>共 ' + sum.clsCount + ' 个班</span><span class="sep">|</span>'
+    +     '<span>整体提交率 <b class="' + rateLevel(sum.subRate) + '">' + sum.subRate.toFixed(1) + '%</b></span><span class="sep">|</span>'
+    +     '<span>平均得分率 ' + accMeta + '</span>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="cls-rows">' + rows.map(c => clsRowHtml(hw, c)).join('') + '</div>'
+    + (needToggle
+      ? '<div class="card-expand"><button class="expand-btn" data-expand="' + hw.id + '" aria-expanded="' + open + '">'
+        + (open ? '收起' : '展开全部 ' + cls.length + ' 个班')
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>'
+        + '</button></div>'
+      : '')
+    + '</div>';
+}
+
+function render(){
+  hideUnsubTip();
+  const rows = filtered();
+  rows.sort((a, b) => {
+    const la = summarize({ classes: a.cls }).latest, lb = summarize({ classes: b.cls }).latest;
+    const cmp = la < lb ? -1 : la > lb ? 1 : 0;
+    return state.sortDir === 'desc' ? -cmp : cmp;
+  });
+  $('#hw-list').innerHTML = rows.map(({ hw, cls }) => cardHtml(hw, cls)).join('');
+  $('#empty').classList.toggle('show', !rows.length);
+  const clsTotal = rows.reduce((n, r) => n + r.cls.length, 0);
+  const pendTotal = rows.reduce((n, r) => n + summarize({ classes: r.cls }).pending, 0);
+  $('#sort-stats').innerHTML = '共 <b style="color:var(--text)">' + rows.length + '</b> 份作业 · <b style="color:var(--text)">' + clsTotal + '</b> 个班级任务'
+    + (pendTotal ? ' · <span style="color:#d46b08">' + pendTotal + ' 个班级待批阅</span>' : '');
+  $('#page-ft').innerHTML = rows.length
+    ? '<span class="total">共 ' + rows.length + ' 份作业</span>'
+      + '<span class="pg dis">上一页</span><span class="pg on">1</span><span class="pg dis">下一页</span>'
+    : '';
+  syncToggleAllBtn(rows);
+}
+
+/* ══════════════════════ 展开 / 收起 ══════════════════════ */
+function toggleGroup(id){
+  state.openSet.has(id) ? state.openSet.delete(id) : state.openSet.add(id);
+  render();
+}
+function syncToggleAllBtn(rows){
+  const expandable = rows.filter(r => r.cls.length > VISIBLE_ROWS);
+  const allOpen = expandable.length > 0 && expandable.every(r => state.openSet.has(r.hw.id));
+  $('#toggle-all-txt').textContent = allOpen ? '全部收起' : '全部展开';
+}
+$('#btn-toggle-all').addEventListener('click', () => {
+  const expandable = filtered().filter(r => r.cls.length > VISIBLE_ROWS);
+  const allOpen = expandable.length > 0 && expandable.every(r => state.openSet.has(r.hw.id));
+  expandable.forEach(r => allOpen ? state.openSet.delete(r.hw.id) : state.openSet.add(r.hw.id));
+  render();
+});
+
+/* 事件代理：卡片底部展开按钮（button 原生支持键盘） */
+$('#hw-list').addEventListener('click', e => {
+  const btn = e.target.closest('[data-expand]');
+  if (btn) toggleGroup(btn.dataset.expand);
+});
+
+/* ══════════════════════ 未交学生名单悬浮浮层 ══════════════════════ */
+const unsubTip = document.createElement('div');
+unsubTip.className = 'unsub-tip';
+unsubTip.innerHTML = '<span class="arr"></span><div class="tt"></div><div class="names"></div>';
+document.body.appendChild(unsubTip);
+let tipTimer;
+function showUnsubTip(anchor){
+  const names = (anchor.dataset.names || '').split(',');
+  if (!names.length) return;
+  clearTimeout(tipTimer);
+  tipTimer = setTimeout(() => {
+    unsubTip.querySelector('.tt').innerHTML = '未交学生 <b>' + names.length + '</b> 人';
+    unsubTip.querySelector('.names').innerHTML = names.map(n => '<span class="nm">' + esc(n) + '</span>').join('');
+    unsubTip.classList.add('show');
+    /* 先显示后测量尺寸，再做视口边缘防溢出定位 */
+    const r = anchor.getBoundingClientRect();
+    const tw = unsubTip.offsetWidth, th = unsubTip.offsetHeight;
+    let x = r.left + r.width / 2 - tw / 2;
+    x = Math.max(8, Math.min(x, window.innerWidth - tw - 8));
+    let up = false;
+    if (r.top - th - 12 >= 8) up = true;
+    unsubTip.style.left = x + 'px';
+    unsubTip.style.top = (up ? r.top - th - 12 : r.bottom + 12) + 'px';
+    unsubTip.classList.toggle('tip-up', up);
+  }, 120);
+}
+function hideUnsubTip(){ clearTimeout(tipTimer); unsubTip.classList.remove('show'); }
+/* hover 事件代理：进入未交数字显示，移出隐藏 */
+$('#hw-list').addEventListener('mouseover', e => {
+  const n = e.target.closest('.unsub-n');
+  if (n) showUnsubTip(n);
+});
+$('#hw-list').addEventListener('mouseout', e => {
+  const n = e.target.closest('.unsub-n');
+  if (n && !n.contains(e.relatedTarget)) hideUnsubTip();
+});
+/* 触屏设备：点击未交数字切换显示 */
+$('#hw-list').addEventListener('click', e => {
+  const n = e.target.closest('.unsub-n');
+  if (n) { e.stopPropagation(); showUnsubTip(n); }
+});
+document.addEventListener('click', e => { if (!e.target.closest('.unsub-n')) hideUnsubTip(); });
+window.addEventListener('scroll', hideUnsubTip, true);
+window.addEventListener('resize', hideUnsubTip);
+
+/* 排序：最近提交时间 升/降序切换 */
+$('#sort-time').addEventListener('click', () => {
+  state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
+  $('#sort-ic').innerHTML = state.sortDir === 'desc'
+    ? '<path d="M12 5v13M7 12l5 5 5-5"/>' : '<path d="M12 19V6M7 12l5-5 5 5"/>';
+  render();
+});
+
+/* ══════════════════════ 操作入口（按角色路由到 R1~R4） ══════════════════════ */
+/* 4.0：班级行「查看详情」→ 讲评试卷（带 hw 参数：讲评页据此识别作业，含作文题则显示「作文报告」入口）
+   嵌入宿主页 iframe（srcdoc 注入 __RPQ 或 src ?embed=1）时改走 postMessage 通知宿主切视图；
+   不能回退到整页跳转——那会把完整宿主页嵌进 iframe，顶栏与 PRD 入口层层重复 */
+function lpNav(url){
+  if (LP_EMBED) {
+    let u;
+    /* srcdoc 内 location.href 为 about:srcdoc，不能作基础 URL；用 document.baseURI（继承宿主地址） */
+    try { u = new URL(url, document.baseURI); } catch (e) { return; }
+    const m = {
+      type: 'rp-nav',
+      to: u.searchParams.get('wb') || 'workbench',
+      hw: u.searchParams.get('hw') || '',
+      cls: u.searchParams.get('cls') || '',
+      role: u.searchParams.get('role') === 'leader' ? 'leader' : 'teacher',
+      anchor: u.searchParams.get('anchor') || (u.hash ? u.hash.slice(1) : '')
+    };
+    try { window.parent.postMessage(m, '*'); } catch (e) {}
+    return;
+  }
+  location.href = url;
+}
+function goLecture(hwId){
+  lpNav('index.html?hw=' + encodeURIComponent(hwId));
+}
+
+function actOn(hwId, cls, act){
+  closeMoreMenus();
+  const hw = HOMEWORK.find(h => h.id === hwId);
+  const name = hw ? hw.name : hwId;
+  const suffix = cls ? ' · ' + cls : '';
+  if (act === '批阅') toast('进入批阅：' + name + suffix, 'warn');
+  else if (act === '回评') toast('打开回评：' + name + suffix);
+  /* 4.0：班级级「查看详情」→ 打开该作业的讲评试卷页 */
+  else if (act === '查看详情') goLecture(hwId);
+  else if (act === '班级报告') {
+    /* R1 教师·班级单次报告 / R3 组长·班级对比报告；仅已批阅（含得分率）的班级可生成 */
+    const entry = hw && hw.classes.find(c => c.cls === cls);
+    if (entry && entry.status === 'reviewed' && entry.accuracy !== null) {
+      /* 4.0：讲评页同页 tab 打开班级报告（index.html?wb=class，R1/R3 由 role 控制） */
+      lpNav(withRole('index.html?wb=class&hw=' + encodeURIComponent(hwId) + '&cls=' + encodeURIComponent(cls)));
+    } else {
+      toast('班级报告：批阅完成后生成' + suffix, 'warn');
+    }
+  }
+  else if (act === '年级报告') {
+    /* 列表已不为教师渲染年级入口（见 hwCardHtml）；组长保留完整 R4 年级报告。
+       教师分支保留为兜底：若由宿主或其他路径触发，仍统一进入整合班级报告 m8 */
+    const reviewed = hw && hw.classes.some(c => c.status === 'reviewed' && c.accuracy !== null);
+    if (!reviewed){ toast('年级报告：暂无已批阅班级，无法生成' + suffix, 'warn'); return; }
+    if (state.role === 'leader') {
+      lpNav(withRole('index.html?wb=grade&hw=' + encodeURIComponent(hwId)));
+    } else {
+      const target = hw.classes.find(c => c.cls === state.cls && c.status === 'reviewed' && c.accuracy !== null)
+        || hw.classes.find(c => c.status === 'reviewed' && c.accuracy !== null);
+      lpNav('index.html?wb=class&hw=' + encodeURIComponent(hwId) + '&cls=' + encodeURIComponent(target.cls) + '&anchor=m8');
+    }
+  }
+  else if (act === '删除任务') toast('演示原型：删除需二次确认，未接入', 'warn');
+  else toast(act + '：' + name + suffix);
+}
+function toggleMore(ev, btn){
+  ev.stopPropagation();
+  const menu = btn.nextElementSibling;
+  const willOpen = !menu.classList.contains('open');
+  closeMoreMenus();
+  if (willOpen) menu.classList.add('open');
+}
+function closeMoreMenus(){ document.querySelectorAll('.more-menu.open').forEach(m => m.classList.remove('open')); }
+document.addEventListener('click', closeMoreMenus);
+
+/* ══════════════════════ 筛选控件初始化 ══════════════════════ */
+/* 作业类型 tabs */
+function renderTypeTabs(){
+  const counts = {};
+  HOMEWORK.forEach(hw => { counts[hw.type] = (counts[hw.type] || 0) + 1; });
+  $('#f-type').innerHTML = TYPE_LIST.map(t => {
+    const n = t === '全部' ? HOMEWORK.length : (counts[t] || 0);
+    return '<div class="tab' + (state.type === t ? ' on' : '') + '" data-type="' + t + '">' + t + '<span class="n">(' + n + ')</span></div>';
+  }).join('');
+}
+$('#f-type').addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  state.type = tab.dataset.type;
+  renderTypeTabs(); render();
+});
+
+/* 任教班级 chips */
+$('#f-class').innerHTML = CLASS_LIST.map(c =>
+  '<span class="chip' + (state.cls === c ? ' on' : '') + '" data-cls="' + esc(c) + '">' + esc(c) + '</span>'
+).join('');
+$('#f-class').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  state.cls = chip.dataset.cls;
+  document.querySelectorAll('#f-class .chip').forEach(c => c.classList.toggle('on', c === chip));
+  render();
+});
+
+/* 年级 seg */
+$('#f-grade').addEventListener('click', e => {
+  const s = e.target.closest('span');
+  if (!s) return;
+  document.querySelectorAll('#f-grade span').forEach(x => x.classList.toggle('on', x === s));
+  toast('演示原型：年级切换后重新拉取作业列表');
+});
+
+/* 下拉 + 搜索 */
+$('#f-subject').addEventListener('change', e => { state.subject = e.target.value; render(); });
+$('#f-module').addEventListener('change', e => { state.module = e.target.value; render(); });
+let kwTimer;
+$('#f-kw').addEventListener('input', e => {
+  clearTimeout(kwTimer);
+  kwTimer = setTimeout(() => { state.kw = e.target.value.trim(); render(); }, 180);
+});
+
+/* ══════════════════════ 账户下拉：身份视角切换（原顶部 role-seg 已迁入） ══════════════════════ */
+const userWrap = $('#user-wrap'), userBtn = $('#user-btn'), userMenu = $('#user-menu');
+function setUserMenu(open){
+  if (!userBtn || !userMenu) return;
+  userMenu.classList.toggle('open', open);
+  userBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open){
+    const cur = userMenu.querySelector('.um-item.on');
+    if (cur) cur.focus();
+  }
+}
+if (userBtn && userMenu){
+  userBtn.addEventListener('click', e => { e.stopPropagation(); setUserMenu(!userMenu.classList.contains('open')); });
+  userBtn.addEventListener('keydown', e => { if (e.key === 'ArrowDown'){ e.preventDefault(); setUserMenu(true); } });
+  document.addEventListener('click', e => { if (userWrap && !userWrap.contains(e.target)) setUserMenu(false); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && userMenu.classList.contains('open')){ setUserMenu(false); userBtn.focus(); }
+  });
+  userMenu.addEventListener('click', e => {
+    const it = e.target.closest('.um-item');
+    if (!it) return;
+    if (it.dataset.role){
+      if (it.dataset.role === state.role) toast('当前已是「' + roleName() + '」视角');
+      else switchRole(it.dataset.role);
+      setUserMenu(false);
+      return;
+    }
+    const act = it.dataset.act;
+    if (act === 'profile') toast('演示原型：个人设置未接入','warn');
+    else if (act === 'logout') toast('演示原型：退出登录未接入','warn');
+    setUserMenu(false);
+  });
+}
+
+/* ══════════════════════ 报告设置（仅学科组长及以上；全校统一口径） ══════════════════════
+   四组口径供班级/年级报告共用：知识点掌握率档位、等级四档、班内分层、提交率警示值。
+   本页为演示数据，保存后仅写入会话配置并提示，列表卡片不按新阈值重算。 */
+const RS_KEY = 'hw-report-settings-v1';
+const RS_DEFAULTS = {
+  kpMaster: 80, kpWeak: 60,
+  ex: 90, good: 80, pass: 60, low: 30, lowInclusive: false,
+  layerA: 30, layerB: 50, layerC: 20,
+  subWarn: 90
+};
+let reportSettings = Object.assign({}, RS_DEFAULTS);
+try {
+  const raw = sessionStorage.getItem(RS_KEY);
+  if (raw) reportSettings = Object.assign(reportSettings, JSON.parse(raw) || {});
+} catch (e) {}
+
+const RS_FIELDS = [
+  ['rs-kp-master','kpMaster'], ['rs-kp-weak','kpWeak'],
+  ['rs-ex','ex'], ['rs-good','good'], ['rs-pass','pass'], ['rs-low','low'],
+  ['rs-la','layerA'], ['rs-lb','layerB'], ['rs-lc','layerC'],
+  ['rs-subwarn','subWarn']
+];
+
+/* 宿主遮罩联动（嵌入态）：iframe 内 position:fixed 的遮罩只相对子文档视口，
+   宿主顶栏（全局导航）在 iframe 之外，永远压不暗；打开 / 关闭本页弹窗时上报宿主，
+   由宿主在文档顶层补一段与子页同色的遮罩补齐整屏 */
+function lpMaskSync(){
+  if (!LP_EMBED) return;
+  const mask = document.getElementById('rsMask');
+  const on = !!(mask && mask.classList.contains('open'));
+  let color = '';
+  if (on){ try { color = getComputedStyle(mask).backgroundColor || ''; } catch (e) {} }
+  try { window.parent.postMessage({ type:'rp-mask', state: on ? 'open' : 'close', color: color }, '*'); } catch (e) {}
+}
+/* 宿主切回本视图时询问浮层状态：弹窗在子页内不会随视图切换销毁，需恢复宿主遮罩 */
+window.addEventListener('message', function(e){
+  const d = e.data || {};
+  if (d && d.type === 'rp-mask-ask') lpMaskSync();
+});
+
+function openReportSettings(){
+  if (state.role !== 'leader'){ toast('仅学科组长及以上可设置全校报告口径', 'warn'); return; }
+  RS_FIELDS.forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = reportSettings[key];
+  });
+  const inc = document.getElementById('rs-low-inclusive');
+  if (inc) inc.checked = !!reportSettings.lowInclusive;
+  syncRsDerived();
+  const mask = document.getElementById('rsMask');
+  if (!mask) return;
+  mask.classList.add('open');
+  mask.setAttribute('aria-hidden', 'false');
+  lpMaskSync();
+  const first = document.getElementById('rs-kp-master');
+  if (first) setTimeout(() => first.focus(), 30);
+}
+
+function closeReportSettings(){
+  const mask = document.getElementById('rsMask');
+  if (!mask) return;
+  mask.classList.remove('open');
+  mask.setAttribute('aria-hidden', 'true');
+  lpMaskSync();
+}
+
+/* 派生态：薄弱区间自动成对、分层合计、低分运算符与包含值 */
+function syncRsDerived(){
+  const read = id => { const el = document.getElementById(id); return el && el.value !== '' ? Number(el.value) : NaN; };
+  const master = read('rs-kp-master'), weak = read('rs-kp-weak');
+  const range = document.getElementById('rs-kp-range');
+  if (range) range.textContent = (Number.isFinite(master) && Number.isFinite(weak)) ? (weak + '% – ' + master + '%') : '—';
+
+  const sum = document.getElementById('rs-layer-sum');
+  if (sum){
+    const a = read('rs-la'), b = read('rs-lb'), c = read('rs-lc');
+    const total = (Number.isFinite(a) ? a : 0) + (Number.isFinite(b) ? b : 0) + (Number.isFinite(c) ? c : 0);
+    sum.textContent = total + '%';
+    sum.style.color = total === 100 ? '' : 'var(--error)';
+  }
+
+  const inc = document.getElementById('rs-low-inclusive');
+  const lowLb = document.querySelector('label[for="rs-low"]');
+  if (lowLb) lowLb.textContent = '低分 ' + (inc && inc.checked ? '≤' : '<');
+  const lowVal = document.getElementById('rs-low');
+  const incVal = document.getElementById('rs-low-inc-val');
+  if (incVal && lowVal) incVal.textContent = lowVal.value === '' ? '—' : lowVal.value;
+}
+
+function saveReportSettings(){
+  if (state.role !== 'leader'){ toast('仅学科组长及以上可设置全校报告口径', 'warn'); return; }
+  const read = id => { const el = document.getElementById(id); return el ? Number(el.value) : NaN; };
+  const next = {
+    kpMaster: read('rs-kp-master'), kpWeak: read('rs-kp-weak'),
+    ex: read('rs-ex'), good: read('rs-good'), pass: read('rs-pass'), low: read('rs-low'),
+    lowInclusive: !!(document.getElementById('rs-low-inclusive') || {}).checked,
+    layerA: read('rs-la'), layerB: read('rs-lb'), layerC: read('rs-lc'),
+    subWarn: read('rs-subwarn')
+  };
+  const nums = Object.keys(next).filter(k => k !== 'lowInclusive').map(k => next[k]);
+  if (nums.some(v => !Number.isFinite(v) || v < 0 || v > 100)){ toast('各项阈值请填写 0–100 之间的数值', 'warn'); return; }
+  if (next.kpMaster <= next.kpWeak){ toast('知识点档位需满足：掌握阈值 > 未掌握阈值', 'warn'); return; }
+  if (!(next.ex > next.good && next.good > next.pass && next.pass > next.low)){
+    toast('等级阈值需从高到低：优秀 > 良好 > 及格 > 低分', 'warn'); return;
+  }
+  const layerSum = next.layerA + next.layerB + next.layerC;
+  if (layerSum !== 100){ toast('分层占比合计需为 100%（当前 ' + layerSum + '%）', 'warn'); return; }
+
+  reportSettings = next;
+  try { sessionStorage.setItem(RS_KEY, JSON.stringify(next)); } catch (e) {}
+  closeReportSettings();
+  toast('全校口径已更新：等级 ' + next.ex + '/' + next.good + '/' + next.pass + '/' + next.low
+    + ' · 掌握 ' + next.kpMaster + ' · 分层 ' + next.layerA + '/' + next.layerB + '/' + next.layerC
+    + ' · 提交率警示 ' + next.subWarn + '%（演示数据未按新口径重算）');
+}
+
+/* 输入实时联动 + 遮罩点击关闭 + Esc */
+(function initReportSettings(){
+  const mask = document.getElementById('rsMask');
+  if (!mask) return;
+  mask.addEventListener('click', e => { if (e.target === mask) closeReportSettings(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && mask.classList.contains('open')) closeReportSettings();
+  });
+  ['rs-kp-master','rs-kp-weak','rs-la','rs-lb','rs-lc','rs-low'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', syncRsDerived);
+  });
+  const inc = document.getElementById('rs-low-inclusive');
+  if (inc) inc.addEventListener('change', syncRsDerived);
+})();
+
+/* ══════════════════════ 启动 ══════════════════════ */
+renderTypeTabs();
+syncRole();
+render();
+</script>
+<script>
+/* 4.0：顶栏交互与讲评页对齐——菜单、应用中心、账户为演示占位 */
+(function () {
+    var menu = document.getElementById('global-menu');
+    if (menu) {
+        menu.addEventListener('click', function (e) {
+            var it = e.target.closest('.menu-item');
+            if (!it || it.classList.contains('on')) { return; }
+            toast('演示原型：' + it.textContent.trim() + ' 模块未接入，4.0 仅覆盖作业列表与讲评试卷');
+        });
+    }
+    var ico = document.querySelector('.topnav .nav-ico');
+    if (ico) { ico.addEventListener('click', function () { toast('演示原型：应用中心未接入', 'warn'); }); }
+})();
+</script>
+
+<!-- ══════════ PRD 查看器（悬浮徽章 → 右侧抽屉） ══════════ -->
+<button type="button" class="prd-fab" id="prdFab" title="查看产品需求文档（PRD）"><span class="prd-fab-ico">📖</span><span>PRD</span></button>
+<aside class="prd-drawer" id="prdDrawer" aria-label="PRD 查看器">
+    <div class="prd-resize" id="prdResize" title="拖动调节抽屉宽度"></div>
+    <div class="prd-drawer-head">
+        <div class="prd-drawer-title"><span class="prd-title-ico">📖</span> 产品需求文档（PRD）<span class="prd-drawer-sub">讲评试卷 4.0 · v1.0</span></div>
+        <span class="prd-head-btn" id="prdExport" title="导出 PRD 为 Markdown 文档（含全部本地修改）">⬇</span>
+        <span class="prd-head-btn" id="prdImport" title="导入 PRD Markdown 文档（按「## 编号」覆盖本地修改）">⬆</span>
+        <span class="prd-drawer-close" id="prdClose" title="关闭">✕</span>
+    </div>
+    <!-- 搜索：检索章节标题与正文（含本地修改），结果浮层悬于内容之上，点击定位并高亮命中 -->
+    <div class="prd-search-wrap">
+        <div class="prd-search">
+            <span class="prd-search-ico">🔍</span>
+            <input type="search" id="prdSearch" class="prd-search-input" aria-label="搜索 PRD 标题或正文关键词"
+                placeholder="搜索标题或正文关键词（空格分词；↑↓ 切换，回车定位，Esc 收起）" autocomplete="off" spellcheck="false">
+            <span class="prd-search-clear" id="prdSearchClear" title="清空搜索">✕</span>
+        </div>
+        <div class="prd-search-res" id="prdSearchRes" hidden></div>
+    </div>
+    <div class="prd-drawer-body">
+        <nav class="prd-toc" id="prdToc"></nav>
+        <div class="prd-content" id="prdContent"></div>
+    </div>
+</aside>
+<script src="prd-sections.js"></script>
+<script src="prd-viewer.js"></script>
+<!-- proto-review-bundle -->
+<script data-proto-review="appearance">
+/* PRD 内容色板与序号外观；编辑、导出和发布共用。 */
+(() => {
+    'use strict';
+    const TEXT_COLORS = [
+        ['#191919', '黑色'], ['#1684fc', '蓝色'], ['#8a38f5', '紫色'], ['#666666', '灰色'],
+        ['#fbfbfb', '白色'], ['#ec4954', '红色'], ['#ff9f29', '橙色']
+    ];
+    const DEFAULT_PIN = '#2563eb', INK = '#191919', STROKE = '#4e5560', ON_BLUE = '#ffffff';
+    const PIN_COLORS = [
+        [DEFAULT_PIN, '默认蓝色'],
+        ['#acbcd1', '灰蓝'], ['#ff9e93', '珊瑚'], ['#ff9e47', '橙色'], ['#fdd143', '黄色'], ['#9dc4ff', '浅蓝'],
+        ['#38cde7', '青色'], ['#54d691', '绿色'], ['#daa3ff', '紫色'], ['#ff94e4', '粉色']
+    ];
+    const LEGACY_PIN_COLORS = ['#e6e6e6'];
+    function pinColor(note) {
+        const color = String(note?.color || '').toLowerCase();
+        return PIN_COLORS.some(([hex]) => hex === color) || LEGACY_PIN_COLORS.includes(color) ? color : DEFAULT_PIN;
+    }
+    function applyPin(element, note) {
+        const color = pinColor(note), custom = color !== DEFAULT_PIN;
+        element.style.setProperty('--pin-fill', color);
+        element.style.setProperty('--pin-ink', custom ? INK : ON_BLUE);
+        element.style.setProperty('--pin-stroke', custom ? STROKE : ON_BLUE);
+    }
+    window.ProtoAppearance = { TEXT_COLORS, PIN_COLORS, DEFAULT_PIN, pinColor, applyPin };
+})();
+
+</script>
+<script data-proto-review="anchors">
+/* 稳定锚点与可见元素选择；不向业务 DOM 注入高亮 class。
+   基线复用自「原型生成全流程」extension/content/anchors.js；标注工作台增补折叠引导、条件显现路径与响应式落点。
+   全流程已于 2026-09-26 归档至 独立项目\_归档\原型生成全流程\。 */
+(() => {
+    'use strict';
+    if (globalThis.ProtoAnchors) return;
+    const owned = (el) => !!el?.closest?.('[data-prototype-owned]');
+    const text = (el) => (el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 400);
+    const loose = (s) => (s || '').replace(/\s+/g, '');
+    const grams = (s) => { const set = new Set(); for (let i = 0; i + 1 < s.length; i++) set.add(s.slice(i, i + 2)); return set; };
+    /* 文本身份校验：短文本（按钮、标签、单元格）必须逐字相同；长文本（面板、表格、整个筛选区）只要求字符二元组包含率 ≥ .75。
+       容器的 innerText 会随条件行显隐、计数、日期等动态内容变化，逐字比对会把整块面板判成「目标变化」，序号全部消失。
+       隐藏子树的 innerText 退化为 textContent 丢掉 span 间空格，故两侧先去掉全部空白再比。 */
+    function sameText(el, expected) {
+        if (!expected) return true;
+        const a = loose(text(el)), b = loose(expected);
+        if (a === b) return true;
+        if (Math.min(a.length, b.length) < 24) return false;
+        const ga = grams(a), gb = grams(b);
+        let hit = 0;
+        for (const g of ga) if (gb.has(g)) hit++;
+        return hit / Math.min(ga.size, gb.size) >= 0.75;
+    }
+    // 选择器就是页面唯一 id：id 本身即身份，文本变化（占位符→已选值、计数刷新）不视为目标变化。
+    const idBound = (anchor) => /^#[^\s>+~]+$/.test(anchor?.selector || '');
+    function hiddenRoot(el) {
+        if (!el) return null;
+        // 只依据标准 DOM / 渲染状态，不猜项目、路由名或框架的 active/on 类名。
+        for (let node = el; node; node = node.parentElement) {
+            const css = getComputedStyle(node);
+            if (node.hidden || node.inert || node.hasAttribute?.('hidden') || node.hasAttribute?.('inert') ||
+                node.getAttribute?.('aria-hidden')?.toLowerCase() === 'true' || node.tagName === 'DIALOG' && !node.open ||
+                css.display === 'none' || css.contentVisibility === 'hidden' || css.opacity !== undefined && css.opacity !== '' && Number(css.opacity) === 0) return node;
+        }
+        // visibility 可以被子节点显式覆盖，其他祖先隐藏条件则不可反向覆盖。
+        const state = getComputedStyle(el).visibility;
+        if (state === 'hidden' || state === 'collapse') {
+            let root = el;
+            while (root.parentElement && getComputedStyle(root.parentElement).visibility === state) root = root.parentElement;
+            return root;
+        }
+        return null;
+    }
+    const visible = el => !!el && !owned(el) && !hiddenRoot(el) && el.getClientRects().length > 0;
+    function paintedAt(el, x, y) {
+        if (typeof document.elementsFromPoint !== 'function') return true;
+        try {
+            const top = document.elementsFromPoint(x, y).find(node => visible(node));
+            return !top || top === el || !!el.contains?.(top) || !!top.contains?.(el);
+        } catch (_) { return true; }
+    }
+    function selector(el) {
+        if (el.id && document.querySelectorAll('#' + CSS.escape(el.id)).length === 1)
+            return '#' + CSS.escape(el.id);
+        const path = [];
+        for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
+            let part = n.tagName.toLowerCase();
+            if (n.id && document.querySelectorAll('#' + CSS.escape(n.id)).length === 1) {
+                path.unshift('#' + CSS.escape(n.id));
+                break;
+            }
+            const same = n.parentElement
+                ? [...n.parentElement.children].filter((x) => x.tagName === n.tagName)
+                : [];
+            if (same.length > 1) part += `:nth-of-type(${same.indexOf(n) + 1})`;
+            path.unshift(part);
+        }
+        return path.join(' > ');
+    }
+    function controlLabel(el) {
+        if (!el) return '';
+        const byFor = el.id ? document.querySelector(`label[for="${CSS.escape(el.id)}"]`) : null;
+        const label = el.labels?.[0] || byFor || el.closest('label') || el.closest('.f-item,.form-item,.form-group,.field')?.querySelector('label');
+        return text(label).replace(/[：:]$/, '').slice(0, 80);
+    }
+    function conditionRow(el, kind, value, option, targetRect, explicit = false, label = '') {
+        if (!el || owned(el) || !visible(el) || el.disabled || el.getAttribute?.('aria-disabled') === 'true') return null;
+        const r = el.getBoundingClientRect();
+        const dx = r.left + r.width / 2 - (targetRect.left + targetRect.width / 2);
+        const dy = r.top + r.height / 2 - (targetRect.top + targetRect.height / 2);
+        return { selector: selector(el), kind, value, option: String(option || '').slice(0, 80),
+            label: String(label || controlLabel(el)).slice(0, 80), explicit, distance: explicit ? -1 : Math.hypot(dx, dy) };
+    }
+    function captureConditions(target, targetRect) {
+        /* 通用“显现路径”：记录创建标注时使目标可见的状态控件，目标日后 display:none 或被动态移出 DOM，
+           仍能把引导挂回条件控件并恢复当时状态。自动覆盖 native select/checkbox/radio 与常见 ARIA 控件；
+           任意自定义 JS 控件用祖先 data-proto-reveal-by/value/label 显式声明，避免靠文案猜业务动作。 */
+        const rows = [], seen = new Set();
+        const add = row => {
+            if (!row) return;
+            const key = `${row.selector}\n${row.kind}\n${row.value}`;
+            if (!seen.has(key)) { seen.add(key); rows.push(row); }
+        };
+        for (let n = target; n && n !== document.documentElement; n = n.parentElement) {
+            const by = n.getAttribute?.('data-proto-reveal-by');
+            if (!by) continue;
+            let control = null;
+            try { control = document.querySelector(by); } catch (_) { /* 声明选择器失效 */ }
+            if (!control) continue;
+            const raw = n.getAttribute('data-proto-reveal-value') ?? '';
+            const kind = control.tagName === 'SELECT' ? 'select' : /^(checkbox|radio)$/.test(control.type) ? control.type : 'click';
+            const value = kind === 'select' ? raw : kind === 'click' ? raw || 'true' : raw === 'true';
+            add(conditionRow(control, kind, value, raw || text(control), targetRect, true, n.getAttribute('data-proto-reveal-label') || ''));
+        }
+        for (const el of document.querySelectorAll('select,input[type="checkbox"],input[type="radio"]')) {
+            if (!visible(el)) continue;
+            let kind, value, initial, option = '';
+            if (el.tagName === 'SELECT') {
+                kind = 'select'; value = el.value;
+                const def = [...el.options].find(o => o.defaultSelected) || el.options[0];
+                initial = def?.value ?? '';
+                option = el.selectedOptions?.[0]?.textContent?.trim() || value;
+                if (value === initial) continue;
+            } else {
+                kind = el.type; value = !!el.checked; initial = !!el.defaultChecked;
+                if (value === initial || (kind === 'radio' && !value)) continue;
+                // checkbox 同时记录「由默认勾选切为未勾选」；radio 只记录当前选中的新项，避免同组旧项制造反向条件。
+                option = el.value || controlLabel(el);
+            }
+            add(conditionRow(el, kind, value, option, targetRect));
+        }
+        const aria = '[role="tab"][aria-selected="true"],[aria-pressed="true"],[aria-expanded="true"][aria-controls],[role="radio"][aria-checked="true"],[role="checkbox"][aria-checked="true"]';
+        for (const el of document.querySelectorAll(aria)) {
+            const kind = el.matches('[role="tab"]') ? 'aria-selected' : el.hasAttribute('aria-pressed') ? 'aria-pressed' :
+                el.hasAttribute('aria-expanded') ? 'aria-expanded' : 'aria-checked';
+            add(conditionRow(el, kind, 'true', text(el) || controlLabel(el), targetRect));
+        }
+        return rows.sort((a, b) => a.distance - b.distance).slice(0, 12).map(({ distance, ...row }) => row);
+    }
+    function serialize(el) {
+        const r = el.getBoundingClientRect();
+        const clean = el.cloneNode(true);
+        clean.querySelectorAll('[data-prototype-owned],script').forEach((n) => n.remove());
+        const conditions = captureConditions(el, r);
+        const anchor = {
+            protoId: el.getAttribute('data-proto-id') || '',
+            selector: selector(el),
+            tag: el.tagName.toLowerCase(),
+            text: text(el),
+            parentText: text(el.parentElement),
+            htmlSnippet: clean.outerHTML.slice(0, 1800),
+            rect: {
+                x: Math.round(r.x + scrollX),
+                y: Math.round(r.y + scrollY),
+                width: Math.round(r.width),
+                height: Math.round(r.height),
+            },
+        };
+        if (conditions.length) anchor.conditions = conditions;
+        return anchor;
+    }
+    function resolve(anchor) {
+        if (!anchor) return { element: null, reason: '尚未绑定元素' };
+        if (anchor.protoId) {
+            const list = [
+                ...document.querySelectorAll(`[data-proto-id="${CSS.escape(anchor.protoId)}"]`),
+            ].filter(visible);
+            if (list.length === 1 && (!anchor.tag || list[0].tagName.toLowerCase() === anchor.tag))
+                return { element: list[0] };
+            return {
+                element: null,
+                reason: list.length > 1 ? '稳定 ID 重复，请重新绑定' : '目标已移除或当前状态不可见',
+            };
+        }
+        try {
+            const list = [...document.querySelectorAll(anchor.selector || ':not(*)')].filter(visible);
+            if (
+                list.length === 1 &&
+                (!anchor.tag || list[0].tagName.toLowerCase() === anchor.tag) &&
+                (idBound(anchor) || sameText(list[0], anchor.text))
+            )
+                return { element: list[0] };
+        } catch (_) {
+            /* 旧选择器可能失效，继续尝试唯一文本。 */
+        }
+        if (anchor.text && /^[a-z][a-z0-9-]*$/i.test(anchor.tag || '')) {
+            const candidates = [...document.querySelectorAll(anchor.tag)].filter(
+                (el) =>
+                    visible(el) &&
+                    sameText(el, anchor.text) &&
+                    sameText(el.parentElement, anchor.parentText),
+            );
+            if (candidates.length === 1) return { element: candidates[0] };
+            if (candidates.length > 1) return { element: null, reason: '存在多个同名目标，请重新绑定' };
+        }
+        return { element: null, reason: '目标变化，等待重新定位' };
+    }
+    function at(x, y) {
+        // 截图标注始终绑定图片自身；覆盖其上的热区可随时移动、删除。
+        const image = document.querySelector('html[data-proto-screenshot="true"] #screenshot-image');
+        if (image) {
+            const bounds = image.getBoundingClientRect();
+            if (x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom) return image;
+        }
+        return (
+            document
+                .elementsFromPoint(x, y)
+                .find((el) => !owned(el) && !['HTML', 'BODY'].includes(el.tagName)) || null
+        );
+    }
+    /* 元素的可见矩形：被视口与各级 overflow 祖先裁剪后的区域。
+       reach 记录被裁掉的每一侧「用户滚动能否把它露出来」：裁剪者是滚动容器 / 视口且尚未滚到尽头 → 能；
+       overflow:hidden|clip、滚到尽头、或视口比元素窄导致的负向溢出（flex 居中的手机壳左缘在 x<0）→ 不能。 */
+    function rect(el, fullDocument = false) {
+        const r = el.getBoundingClientRect(), doc = document.documentElement;
+        const vp = fullDocument
+            ? { left: -scrollX, top: -scrollY, right: doc.scrollWidth - scrollX, bottom: doc.scrollHeight - scrollY }
+            : { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+        const clip = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+        const by = {};   // 每侧由谁裁掉（裁到同一坐标的全部记下）：null = 视口 / 文档边界，否则为滚动容器节点；未被裁为 undefined
+        const cut = (k, v, node, tighter) => {
+            if (tighter(v, clip[k])) { clip[k] = v; by[k] = [node]; }
+            else if (by[k] && Math.abs(v - clip[k]) < 0.5) by[k].push(node);   // 视口与滚动容器边缘重合：任一能滚即算滚得出来
+        };
+        const gt = (a, b) => a > b, lt = (a, b) => a < b;
+        cut('left', vp.left, null, gt); cut('top', vp.top, null, gt);
+        cut('right', vp.right, null, lt); cut('bottom', vp.bottom, null, lt);
+        for (let n = el.parentElement; n; n = n.parentElement) {
+            if (fullDocument && n === document.scrollingElement) continue;
+            const s = getComputedStyle(n), p = n.getBoundingClientRect();
+            if (/(auto|scroll|hidden|clip)/.test(s.overflowX)) {
+                cut('left', p.left + n.clientLeft, n, gt);
+                cut('right', p.left + n.clientLeft + n.clientWidth, n, lt);
+            }
+            if (/(auto|scroll|hidden|clip)/.test(s.overflowY)) {
+                cut('top', p.top + n.clientTop, n, gt);
+                cut('bottom', p.top + n.clientTop + n.clientHeight, n, lt);
+            }
+        }
+        const scrollable = (n, axis) => n === null ? !fullDocument : /(auto|scroll)/.test(getComputedStyle(n)['overflow' + axis]);
+        const canScroll = (n, axis, before) => {
+            if (!scrollable(n, axis)) return false;
+            const pos = n ? (axis === 'X' ? n.scrollLeft : n.scrollTop) : (axis === 'X' ? scrollX : scrollY);
+            if (before) return pos > 0.5;
+            const size = n ? (axis === 'X' ? n.clientWidth : n.clientHeight) : (axis === 'X' ? innerWidth : innerHeight);
+            const total = n ? (axis === 'X' ? n.scrollWidth : n.scrollHeight) : (axis === 'X' ? doc.scrollWidth : doc.scrollHeight);
+            return pos + size < total - 0.5;
+        };
+        const reachable = (k, axis, before) => !by[k] || by[k].some((n) => canScroll(n, axis, before));
+        const reach = { left: reachable('left', 'X', true), right: reachable('right', 'X', false),
+            top: reachable('top', 'Y', true), bottom: reachable('bottom', 'Y', false) };
+        return { x: clip.left, y: clip.top, width: Math.max(0, clip.right - clip.left), height: Math.max(0, clip.bottom - clip.top),
+            visible: clip.right > clip.left && clip.bottom > clip.top, reach };
+    }
+    function placement(el, x, y) {
+        if (!el) return { kind: 'document', x: x + scrollX, y: y + scrollY };
+        const r = el.getBoundingClientRect(), px = x - r.left + el.scrollLeft, py = y - r.top + el.scrollTop;
+        // 同存绝对偏移与比例：绝对值保持旧行为，rx/ry 让响应式控件变窄/变高后仍能落在同一相对位置。
+        return { kind: 'element', x: px, y: py,
+            rx: r.width > 0 ? Math.max(0, Math.min(1, px / r.width)) : 0,
+            ry: r.height > 0 ? Math.max(0, Math.min(1, py / r.height)) : 0 };
+    }
+    function point(note, fullDocument = false) {
+        const p = note.placement;
+        if (p?.kind === 'document') {
+            const x = p.x - scrollX, y = p.y - scrollY;
+            if (p.x > document.documentElement.scrollWidth || p.y > document.documentElement.scrollHeight)
+                return { reason: '页面尺寸已变化，请重新定位', point: null, rect: null };
+            const visible = fullDocument || (x >= 0 && y >= 0 && x < innerWidth && y < innerHeight);
+            return { point: { x, y, visible }, rect: { x, y, width: 0, height: 0, visible } };
+        }
+        let found = resolve(note.anchor);
+        // 排序使用逻辑坐标：隐藏但仍保留布局时按原落点测量，不能退回容器左上角。
+        // display:none 等无布局目标继续由 ProtoOrder 使用展开入口代位。
+        if (fullDocument && !found.element) {
+            const element = resolveHidden(note.anchor);
+            if (element?.getClientRects().length) found = { element };
+        }
+        if (!found.element) return { reason: found.reason, point: null, rect: null };
+        const element = found.element, r = element.getBoundingClientRect(), clip = rect(element, fullDocument);
+        if (!p) return { element, rect: clip, point: { x: clip.x, y: clip.y, visible: clip.visible && (fullDocument || paintedAt(element, clip.x, clip.y)) }, legacy: true };
+        const ew = Math.max(r.width, element.scrollWidth), eh = Math.max(r.height, element.scrollHeight);
+        let px = p.x, py = p.y;
+        if (Number.isFinite(p.rx) && Number.isFinite(p.ry)) {
+            // placement 的比例以边框矩形归一化，复原必须使用同一尺寸。
+            // tooltip / 绝对定位子节点可撑大 scrollWidth/Height，却没有改变控件本身。
+            px = p.rx * r.width; py = p.ry * r.height;
+        } else {
+            // 旧锚点无 rx/ry：仅当当前响应式尺寸缩小导致绝对偏移越界、且偏移在创建时 rect 内时，按原尺寸比例回退。
+            const base = note.anchor?.rect;
+            if (px > ew && base?.width > 0 && px <= base.width) px = px / base.width * ew;
+            if (py > eh && base?.height > 0 && py <= base.height) py = py / base.height * eh;
+        }
+        if (px > ew || py > eh)
+            return { element, reason: '落点超出目标范围，请重新定位', rect: clip, point: null };
+        let x = r.left + px - element.scrollLeft, y = r.top + py - element.scrollTop;
+        // 元素本身可见、落点却落在被裁掉的那一侧，且那一侧再怎么滚也露不出来（视口比元素窄、overflow:hidden、已滚到尽头）：
+        // 把落点夹回可见区边缘，否则整宽元素左缘的序号在窄视口里永远不出现。还能滚出来的照旧隐藏，等用户滚过来。
+        if (clip.visible && clip.reach) {
+            const right = clip.x + clip.width, bottom = clip.y + clip.height;
+            if (x < clip.x && !clip.reach.left) x = clip.x;
+            if (x > right && !clip.reach.right) x = right;
+            if (y < clip.y && !clip.reach.top) y = clip.y;
+            if (y > bottom && !clip.reach.bottom) y = bottom;
+        }
+        const visible = clip.visible && x >= clip.x && x <= clip.x + clip.width && y >= clip.y && y <= clip.y + clip.height && (fullDocument || paintedAt(element, x, y));
+        return { element, rect: clip, point: { x, y, visible } };
+    }
+    function pinPosition(x, y, width, height, occupied, viewportWidth = innerWidth, viewportHeight = innerHeight) {
+        const gap = 4, clamp = (value, min, max) => Math.max(min, Math.min(value, Math.max(min, max)));
+        const position = (left, bottom) => ({ x: clamp(left, gap, viewportWidth - width - gap), y: clamp(bottom, height + gap, viewportHeight - gap) });
+        const base = position(x, y);
+        const available = p => occupied.every(r => p.x + width + gap <= r.left || p.x >= r.right + gap || p.y + gap <= r.top || p.y - height >= r.bottom + gap);
+        let placed = base;
+        const limit = Math.min(occupied.length + 1, Math.ceil(viewportWidth / (width + gap)) + Math.ceil(viewportHeight / (height + gap)));
+        search: for (let distance = 0; distance <= limit; distance++) {
+            const candidates = distance ? [position(base.x + distance * (width + gap), base.y), position(base.x - distance * (width + gap), base.y),
+                position(base.x, base.y + distance * (height + gap)), position(base.x, base.y - distance * (height + gap))] : [base];
+            for (const candidate of candidates) if (available(candidate)) { placed = candidate; break search; }
+        }
+        occupied.push({ left: placed.x, right: placed.x + width, top: placed.y - height, bottom: placed.y });
+        return placed;
+    }
+    function inBox(box) {
+        const nodes = [
+            ...document.querySelectorAll(
+                'button,input,img,a,p,h1,h2,h3,h4,li,label,select,textarea,[data-proto-id]',
+            ),
+        ].filter((el) => {
+            if (!visible(el)) return false;
+            const r = el.getBoundingClientRect();
+            return (
+                r.width &&
+                r.height &&
+                r.left < box.right &&
+                r.right > box.left &&
+                r.top < box.bottom &&
+                r.bottom > box.top &&
+                [[.5,.5],[.1,.1],[.9,.1],[.1,.9],[.9,.9]].some(([u,v]) => {
+                    const hit = at(r.left + r.width * u, r.top + r.height * v);
+                    return hit === el || (hit && el.contains(hit));
+                })
+            );
+        });
+        return nodes.filter((el) => !nodes.some((other) => other !== el && other.contains(el))).slice(0, 100);
+    }
+    function currentIds() {
+        return {
+            pageId: document.documentElement.dataset.protoPage || 'main',
+            stateId: document.documentElement.dataset.protoState || 'default',
+        };
+    }
+    async function enterState(stateId) {
+        if (typeof window.PrototypeBridge?.enter === 'function') await window.PrototypeBridge.enter(stateId);
+        return currentIds();
+    }
+    // ---------- 折叠区展开 / 引导（标注工作台“点序号联动展开”与“点击引导”复用；全流程已归档，此为标注侧增补） ----------
+    function hidden(el) {
+        return !el || !!hiddenRoot(el) || el.getClientRects().length === 0;
+    }
+    function resolveHidden(anchor) {
+        // 与 resolve 同规则但不过滤可见性：定位被折叠/隐藏的目标元素
+        if (!anchor) return null;
+        const all = (sel) => { try { return [...document.querySelectorAll(sel)].filter((el) => !owned(el)); } catch (_) { return []; } };
+        if (anchor.protoId) {
+            const list = all(`[data-proto-id="${CSS.escape(anchor.protoId)}"]`);
+            return list.length === 1 && (!anchor.tag || list[0].tagName.toLowerCase() === anchor.tag) ? list[0] : null;
+        }
+        const list = all(anchor.selector || ':not(*)');
+        if (list.length === 1 && (!anchor.tag || list[0].tagName.toLowerCase() === anchor.tag) && (idBound(anchor) || sameText(list[0], anchor.text))) return list[0];
+        if (anchor.text && /^[a-z][a-z0-9-]*$/i.test(anchor.tag || '')) {
+            const c = all(anchor.tag).filter((el) => sameText(el, anchor.text) && sameText(el.parentElement, anchor.parentText));
+            if (c.length === 1) return c[0];
+        }
+        return null;
+    }
+    function conditionValue(el, condition) {
+        if (condition.kind === 'select') return el.value;
+        if (condition.kind === 'checkbox' || condition.kind === 'radio') return !!el.checked;
+        if (condition.kind.startsWith('aria-')) return el.getAttribute(condition.kind);
+        return null;
+    }
+    function conditionGuideLabel(condition) {
+        const value = condition.option || condition.value || condition.label || '条件';
+        if (condition.kind === 'select') return `选择 ${value}`;
+        if (condition.kind === 'aria-selected') return `切换到 ${value}`;
+        if (condition.kind === 'aria-expanded') return `展开 ${condition.label || value}`;
+        return `开启 ${condition.label || value}`;
+    }
+    function conditionTrigger(anchor) {
+        const rows = Array.isArray(anchor?.conditions) ? anchor.conditions : [];
+        let fallback = null;
+        for (const condition of rows) {
+            let el = null;
+            try { el = document.querySelector(condition.selector || ':not(*)'); } catch (_) { /* 旧条件选择器失效 */ }
+            if (!el || owned(el) || !visible(el)) continue;
+            const hit = { element: el, condition, label: conditionGuideLabel(condition) };
+            if (conditionValue(el, condition) !== condition.value) return hit;
+            // 条件已满足却仍不可见：原生 change 与显式声明允许重放同值事件兜底（satisfied 标记，排在折叠触发器之后）；
+            // ARIA 同值点击可能反向关闭，不作为 fallback。
+            if (!fallback && (condition.explicit || ['select', 'checkbox', 'radio'].includes(condition.kind))) fallback = { ...hit, satisfied: true };
+        }
+        return fallback;
+    }
+    function manualCondition(anchor, attempted = new Set()) {
+        const steps = anchor?.revealSteps || [];
+        const controls = steps.map(step => {
+            let matches = [];
+            try { matches = [...document.querySelectorAll(step.protoId ? `[data-proto-id="${CSS.escape(step.protoId)}"]` : step.selector || ':not(*)')]; } catch (_) { /* invalid locator */ }
+            return matches.length === 1 && !owned(matches[0]) && visible(matches[0]) && !matches[0].disabled && matches[0].getAttribute('aria-disabled') !== 'true' ? matches[0] : null;
+        });
+        for (let i = 0; i < steps.length; i++) {
+            const condition = steps[i], element = controls[i];
+            if (!element || attempted.has(element)) continue;
+            if (condition.kind === 'click' && controls.slice(i + 1).some(next => {
+                if (!next) return false;
+                const controlled = (element.getAttribute('aria-controls') || '').split(/\s+/).filter(Boolean);
+                for (let branch = next; branch && branch !== document.body; branch = branch.parentElement) {
+                    if (controlled.includes(branch.id) || branch.getAttribute('data-proto-reveal-by') === condition.selector) return true;
+                }
+                return false;
+            })) continue;
+            if (condition.kind !== 'click' && conditionValue(element, condition) === condition.value) continue;
+            return { element, condition, label: condition.label || conditionGuideLabel(condition) };
+        }
+        return null;
+    }
+    function applyCondition(hit) {
+        if (!hit?.element) return false;
+        const { element, condition } = hit;
+        if (condition.kind === 'select') element.value = condition.value;
+        else if (condition.kind === 'checkbox' || condition.kind === 'radio') element.checked = !!condition.value;
+        else { element.click(); return true; }
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+    }
+    const failedRevealTriggers = new WeakMap();
+    const DISCLOSURE_WORDS = /(?:展开|更多|显示|查看|收起|高级|筛选|折叠|expand|more|show|toggle)/i;
+    function revealFailed(el, trigger) {
+        return !!el && !!trigger && !!failedRevealTriggers.get(el)?.has(trigger);
+    }
+    function markRevealFailed(el, trigger) {
+        if (!el || !trigger) return;
+        let failed = failedRevealTriggers.get(el);
+        if (!failed) failedRevealTriggers.set(el, (failed = new WeakSet()));
+        failed.add(trigger);
+    }
+    function neighboringBranch(hiddenNode, trigger) {
+        const parent = hiddenNode?.parentElement;
+        if (!parent || !trigger) return false;
+        let branch = trigger;
+        while (branch && branch.parentElement !== parent) branch = branch.parentElement;
+        return !!branch && (branch === hiddenNode.previousElementSibling || branch === hiddenNode.nextElementSibling);
+    }
+    function weakRevealCandidate(target, hiddenNode, trigger) {
+        if (!trigger || owned(trigger) || hiddenNode.contains(trigger) || !visible(trigger) || revealFailed(target, trigger)) return false;
+        // 旧锚点没有 aria-controls 时，只接受隐藏分支相邻区域中的明确展开语义；不能把同容器内任意“导出/新建”按钮猜成触发器。
+        if (!neighboringBranch(hiddenNode, trigger)) return false;
+        if (trigger.tagName === 'SUMMARY' || trigger.getAttribute?.('aria-expanded') === 'false') return true;
+        const role = trigger.getAttribute?.('role');
+        if (trigger.tagName !== 'BUTTON' && role !== 'button') return false;
+        const label = `${text(trigger)} ${trigger.getAttribute?.('aria-label') || ''} ${trigger.getAttribute?.('title') || ''}`;
+        return DISCLOSURE_WORDS.test(label);
+    }
+    function revealTrigger(el, strongOnly = false) {
+        // 找到能让 el 显现的折叠触发器：原生 details / aria-controls 是强关联；相邻且有展开语义的按钮仅作旧锚点退路
+        for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+            if (n.tagName === 'DETAILS' && !n.open && !revealFailed(el, n)) return n;
+            if (n.id) {
+                const ctrls = [...document.querySelectorAll('[aria-controls]')].filter((c) =>
+                    !owned(c) && !revealFailed(el, c) && (c.getAttribute('aria-controls') || '').split(/\s+/).includes(n.id));
+                const hit = ctrls.find((c) => c.getAttribute('aria-expanded') === 'false') || ctrls.find((c) => visible(c));
+                if (hit && visible(hit)) return hit;
+            }
+        }
+        if (strongOnly) return null;
+        for (let n = el; n && n !== document.body; n = n.parentElement) {
+            if (!hidden(n)) continue;
+            const scope = n.parentElement || document;
+            const cand = [...scope.querySelectorAll('[aria-expanded="false"], summary, button, [role="button"]')]
+                .find((t) => weakRevealCandidate(el, n, t));
+            if (cand) return cand;
+        }
+        return null;
+    }
+    function declaredCondition(el) {
+        // 从外向内找当前可用的入口；导入标注没有 conditions 时也读取页面上的显现声明。
+        const chain = [];
+        for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) chain.unshift(n);
+        for (const node of chain) {
+            const by = node.getAttribute?.('data-proto-reveal-by');
+            if (!by || !hidden(node)) continue;
+            let controls = [];
+            try { controls = [...document.querySelectorAll(by)]; } catch (_) { continue; }
+            if (controls.length !== 1) continue;
+            const control = controls[0];
+            if (owned(control) || !visible(control) || control.disabled || control.getAttribute('aria-disabled') === 'true' || revealFailed(el, control)) continue;
+            const raw = node.getAttribute('data-proto-reveal-value') ?? 'true';
+            const kind = control.tagName === 'SELECT' ? 'select' : /^(checkbox|radio)$/.test(control.type) ? control.type : 'click';
+            const condition = { selector: by, kind, value: kind === 'select' ? raw : kind === 'click' ? raw : raw === 'true', explicit: true,
+                label: node.getAttribute('data-proto-reveal-label') || controlLabel(control), option: raw };
+            return { element: control, condition, label: node.getAttribute('data-proto-reveal-label') || conditionGuideLabel(condition) };
+        }
+        return null;
+    }
+    let revealNotes = [];
+    function setRevealNotes(notes) { revealNotes = Array.isArray(notes) ? notes : []; }
+    const revealPathKey = steps => JSON.stringify(steps.map(s => [s.protoId || s.selector, s.kind, s.value]));
+    function hiddenContainer(el) {
+        const root = hiddenRoot(el);
+        if (root) return root === document.body || root === document.documentElement ? null : root;
+        for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+            if (n.tagName === 'DETAILS' && !n.open) return n;
+        }
+        return null;
+    }
+    function sharedReveal(anchor, el = resolveHidden(anchor)) {
+        if (!el || !hidden(el) || anchor?.revealSteps?.length || declaredCondition(el) || revealTrigger(el, true) || conditionTrigger(anchor)) return null;
+        const container = hiddenContainer(el); if (!container) return null;
+        const paths = new Map();
+        for (const note of revealNotes) {
+            const steps = note.anchor?.revealSteps;
+            if (!steps?.length || steps.some(s => s.kind === 'click' && /删除|清空|提交|支付|发布|导出|确定|保存|下单/.test(s.label || ''))) continue;
+            const peer = resolveHidden(note.anchor);
+            if (!peer || peer === el || hiddenContainer(peer) !== container) continue;
+            const key = revealPathKey(steps);
+            if (!paths.has(key)) paths.set(key, { steps, sourceNoteIds: [], container });
+            paths.get(key).sourceNoteIds.push(note.id);
+        }
+        if (paths.size !== 1) return null;
+        const shared = paths.values().next().value;
+        return manualCondition({ revealSteps: shared.steps }) ? shared : null;
+    }
+    // 编辑器只读检查：不点击、不改条件，也能在弹窗已打开时展示识别到的完整路径。
+    function inspectReveal(anchor) {
+        const el = resolveHidden(anchor), shown = !!el && !hidden(el);
+        const result = (state, reason, steps = [], extra = {}) => ({ state, reason, steps, visible: shown, rendered: !!el, ...extra });
+        const find = locator => {
+            try { return [...document.querySelectorAll(locator || ':not(*)')].filter(n => !owned(n)); } catch (_) { return []; }
+        };
+        const inspectStep = step => {
+            const matches = find(step.protoId ? `[data-proto-id="${CSS.escape(step.protoId)}"]` : step.selector);
+            const control = matches.length === 1 ? matches[0] : null;
+            return { ...step, label: step.label || text(control) || controlLabel(control) || '展开',
+                status: matches.length > 1 ? 'duplicate' : !control ? 'missing' : control.disabled || control.getAttribute('aria-disabled') === 'true' ? 'disabled' : visible(control) ? 'ready' : 'hidden' };
+        };
+        if (anchor?.revealSteps?.length) {
+            const rows = anchor.revealSteps.map(inspectStep), broken = rows.some(s => ['missing', 'duplicate', 'disabled'].includes(s.status)) || !shown && rows.every(s => s.status === 'hidden');
+            return result(broken ? 'needed' : 'manual', broken ? '手动路径当前不可用，请检查入口或补充上层步骤' : !el ? '目标当前未渲染，可测试手动路径后检查定位' : '按手动配置的顺序展开', rows, { source: '手动配置' });
+        }
+        if (!el) return result('missing', '标注目标未找到，请先检查页面状态或重新绑定序号');
+        const chain = [];
+        for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) chain.unshift(n);
+        const steps = [], seen = new Set(); let problem = '';
+        const add = step => { const key = JSON.stringify([step.selector, step.kind, step.value]); if (!seen.has(key)) { seen.add(key); steps.push(inspectStep(step)); } };
+        const ariaControls = [...document.querySelectorAll('[aria-controls]')].filter(c => !owned(c));
+        for (const node of chain) {
+            const by = node.getAttribute('data-proto-reveal-by');
+            if (by) {
+                const matches = find(by), control = matches.length === 1 ? matches[0] : null;
+                const raw = node.getAttribute('data-proto-reveal-value') ?? 'true';
+                const kind = control?.tagName === 'SELECT' ? 'select' : /^(checkbox|radio)$/.test(control?.type) ? control.type : 'click';
+                add({ selector: by, kind, value: kind === 'select' || kind === 'click' ? raw : raw === 'true',
+                    label: node.getAttribute('data-proto-reveal-label') || text(control) || controlLabel(control) || '展开' });
+            } else if (node.tagName === 'DETAILS') {
+                const summary = node.querySelector('summary');
+                if (summary) add({ selector: selector(summary), kind: 'click', value: 'true', label: text(summary) || '展开折叠区' });
+                else problem = '折叠区缺少展开入口，请手动补充';
+            } else if (node.id) {
+                const controls = ariaControls.filter(c => (c.getAttribute('aria-controls') || '').split(/\s+/).includes(node.id));
+                if (controls.length === 1) add({ selector: selector(controls[0]), kind: 'click', value: 'true', label: text(controls[0]) || controlLabel(controls[0]) || '展开' });
+                else if (controls.length > 1) problem = '发现多个不同入口，请选择实际使用的展开路径';
+            }
+        }
+        const report = (rows, reason, extra = {}) => {
+            const broken = rows.find(s => ['missing', 'duplicate', 'disabled'].includes(s.status));
+            const message = broken ? `入口“${broken.label}”${{ missing: '未找到', duplicate: '定位不唯一', disabled: '当前禁用' }[broken.status]}，请检查或手动调整` : problem || (!shown && rows.every(s => s.status === 'hidden') ? '所有入口当前均隐藏，请先展开其所在区域或补充上层入口' : '');
+            return result(message ? 'needed' : 'automatic', message || reason, rows, extra);
+        };
+        if (steps.length) return report(steps, '根据页面展开关系识别，无需重复添加', { source: '页面关联' });
+        if (problem) return result('needed', problem);
+        if (!shown) {
+            // 与运行时优先级一致：显式关系和当前记录条件优先于共用推断。
+            const hint = revealHint(anchor, el);
+            if (hint) {
+                const condition = conditionTrigger(anchor);
+                const rows = hint.sourceNoteIds?.length ? hint.target.revealSteps.map(inspectStep) : [inspectStep(condition?.element === hint.trigger ? { ...condition.condition, label: hint.label } : { selector: selector(hint.trigger), kind: 'click', label: hint.label, value: 'true' })];
+                return report(rows, hint.sourceNoteIds?.length ? '自动共用同一区域的展开路径，无需重复添加' : '已找到当前可用入口，可测试展开确认后续步骤', { source: '当前入口', sourceNoteIds: hint.sourceNoteIds });
+            }
+        }
+        const semantic = chain.slice().reverse().find(n => n.tagName === 'DIALOG' || n.tagName === 'DETAILS' || ['dialog', 'tabpanel'].includes(n.getAttribute('role')) || n.getAttribute('aria-modal') === 'true');
+        const boundary = hiddenContainer(el) || semantic;
+        if (boundary) {
+            const paths = new Map();
+            for (const note of revealNotes) {
+                const path = note.anchor?.revealSteps, peer = resolveHidden(note.anchor);
+                if (!peer || peer === el || !boundary.contains(peer) || (hiddenContainer(el) && hiddenContainer(peer) !== boundary) || !path?.length || path.some(s => s.kind === 'click' && /删除|清空|提交|支付|发布|导出|确定|保存|下单/.test(s.label || ''))) continue;
+                const key = revealPathKey(path);
+                if (!paths.has(key)) paths.set(key, { steps: path, sourceNoteIds: [] });
+                paths.get(key).sourceNoteIds.push(note.id);
+            }
+            if (paths.size > 1) return result('needed', '同一区域有不同展开路径，请选择复用或手动添加');
+            if (paths.size === 1) {
+                const shared = paths.values().next().value;
+                return report(shared.steps.map(inspectStep), '自动共用同一区域的展开路径，无需重复添加', { source: '共用路径', sourceNoteIds: shared.sourceNoteIds });
+            }
+        }
+        return shown && !semantic ? result('visible', '目标当前直接可见，无需添加展开入口') : result('needed', shown ? '目标位于可收起区域，尚未识别打开入口' : '目标已隐藏，尚未识别展开入口');
+    }
+    function revealHint(anchor, el = resolveHidden(anchor)) {
+        if (el && !hidden(el)) return null; // 目标已显现；若落点异常应走失锚/响应式回退，不能继续显示条件引导
+        if (anchor?.revealSteps?.length) {
+            const manual = manualCondition(anchor);
+            return manual ? { trigger: manual.element, target: anchor, label: manual.label, kind: 'condition' } : null;
+        }
+        const declared = el ? declaredCondition(el) : null;
+        if (declared) return { trigger: declared.element, target: anchor || el, label: declared.label, kind: 'condition' };
+        // 优先语义明确的 details / aria-controls；其次用创建标注时记录的、当前值确实不同的状态条件；
+        // 再用邻近按钮弱推断；条件值已满足却仍隐藏的同值重放排最后（否则弹层折叠时会误显「选择 智能体」）。
+        const direct = el ? revealTrigger(el, true) : null;
+        if (direct) return { trigger: direct, target: el, label: '展开', kind: 'disclosure' };
+        const condition = conditionTrigger(anchor);
+        const conditionHint = condition ? { trigger: condition.element, target: anchor, label: condition.label, kind: 'condition' } : null;
+        if (conditionHint && !condition.satisfied) return conditionHint;
+        const fallback = el ? revealTrigger(el) : null;
+        if (fallback) return { trigger: fallback, target: el, label: '展开', kind: 'disclosure' };
+        if (conditionHint) return conditionHint;
+        const shared = sharedReveal(anchor, el), manual = shared && manualCondition({ revealSteps: shared.steps });
+        return manual ? { trigger: manual.element, target: { ...anchor, revealSteps: shared.steps }, label: manual.label, kind: 'condition', sourceNoteIds: shared.sourceNoteIds } : null;
+    }
+    function reveal(target, attempted = new Set(), notify = true) {
+        const anchor = target && target.nodeType === 1 ? null : target;
+        let el = target && target.nodeType === 1 ? target : resolveHidden(target);
+        if (anchor?.revealSteps?.length) {
+            if (el && !hidden(el)) return el;
+            for (let i = 0; i < anchor.revealSteps.length; i++) {
+                const hit = manualCondition(anchor, attempted);
+                if (!hit) break;
+                attempted.add(hit.element);
+                applyCondition(hit);
+                el = resolveHidden(anchor);
+                if (el && !hidden(el)) return el;
+            }
+            return null;
+        }
+        const shared = anchor && sharedReveal(anchor, el);
+        if (shared && !revealTrigger(el)) return reveal({ ...anchor, revealSteps: shared.steps }, attempted, notify);
+        // 条件控件先恢复到创建标注时的值；change/click 处理器可同步显现，也可由 MutationObserver 在异步渲染后接力。
+        const condition = (el ? declaredCondition(el) : null) || (anchor ? conditionTrigger(anchor) : null);
+        if (condition && !condition.satisfied && !attempted.has(condition.element)) {
+            attempted.add(condition.element);
+            if (applyCondition(condition)) el = resolveHidden(anchor) || el;
+        }
+        // 同一触发器只点一次：Vue/React 类原型点击后 DOM 在 nextTick 才更新，同步判定仍为隐藏，
+        // 循环里重复点同一个按钮会把刚展开的区域再折回去（偶数次 = 没展开）。多层折叠靠后续重排接力。
+        const clicked = attempted;
+        let lastAttempt = null;
+        for (let g = 0; el && g < 10 && hidden(el); g++) {
+            const declared = declaredCondition(el);
+            const trig = declared?.element || revealTrigger(el);
+            if (!trig || clicked.has(trig)) break;
+            clicked.add(trig);
+            lastAttempt = { element: el, trigger: trig };
+            if (declared) applyCondition(declared);
+            else if (trig.tagName === 'DETAILS') trig.open = true; else trig.click();
+            if (anchor) el = resolveHidden(anchor) || el;
+        }
+        // 折叠触发器都试过仍不可见：最后才重放已满足的同值条件（select 的 change 处理器可能负责重建区域）。
+        if ((!el || hidden(el)) && condition?.satisfied && !attempted.has(condition.element)) {
+            attempted.add(condition.element);
+            if (applyCondition(condition)) el = resolveHidden(anchor) || el;
+        }
+        if ((!el || hidden(el)) && lastAttempt && notify) {
+            // 给 Vue/React 等异步渲染留出时间；仍未显现就记住这组无效关联，并通知两种标注层移除假引导。
+            setTimeout(() => {
+                const current = anchor ? resolveHidden(anchor) : lastAttempt.element;
+                if (current && hidden(current)) {
+                    markRevealFailed(current, lastAttempt.trigger);
+                    document.dispatchEvent(new CustomEvent('proto-anchors:reveal-failed', { detail: { target: current, trigger: lastAttempt.trigger } }));
+                }
+            }, 450);
+        }
+        return !el || hidden(el) ? null : el;
+    }
+    const pendingReveals = new Map();
+    const pendingContainerReveals = new WeakMap();
+    function revealAndWait(target) {
+        const key = target?.nodeType === 1 ? target : `${target?.protoId || ''}\n${target?.selector || ''}`;
+        if (pendingReveals.has(key)) return pendingReveals.get(key);
+        const element = target?.nodeType === 1 ? target : resolveHidden(target);
+        const steps = target?.revealSteps?.length ? target.revealSteps : sharedReveal(target, element)?.steps;
+        const container = steps?.length && hiddenContainer(element), pathKey = steps?.length && revealPathKey(steps);
+        const sharedOperation = container && pendingContainerReveals.get(container)?.get(pathKey);
+        if (sharedOperation) return sharedOperation.then(() => {
+            const current = target?.nodeType === 1 ? target : resolveHidden(target);
+            return current && !hidden(current) ? current : null;
+        });
+        const operation = (async () => {
+            const attempted = new Set(), deadline = Date.now() + 1800;
+            do {
+                const el = reveal(target, attempted, false);
+                if (el) return el;
+                if (!attempted.size) return null;
+                await new Promise(resolve => setTimeout(resolve, 32));
+            } while (Date.now() < deadline);
+            const current = target?.nodeType === 1 ? target : resolveHidden(target);
+            if (current && !hidden(current)) return current;
+            if (current) for (const trigger of attempted) markRevealFailed(current, trigger);
+            document.dispatchEvent(new CustomEvent('proto-anchors:reveal-failed', { detail: { target: current } }));
+            return null;
+        })();
+        pendingReveals.set(key, operation);
+        if (container) {
+            if (!pendingContainerReveals.has(container)) pendingContainerReveals.set(container, new Map());
+            pendingContainerReveals.get(container).set(pathKey, operation);
+        }
+        operation.finally(() => {
+            if (pendingReveals.get(key) === operation) pendingReveals.delete(key);
+            const paths = container && pendingContainerReveals.get(container);
+            if (paths?.get(pathKey) === operation) paths.delete(pathKey);
+            if (paths && !paths.size) pendingContainerReveals.delete(container);
+        }).catch(() => {});
+        return operation;
+    }
+    globalThis.ProtoAnchors = {
+        owned,
+        text,
+        visible,
+        hidden,
+        selector,
+        serialize,
+        resolve,
+        resolveHidden,
+        revealTrigger,
+        setRevealNotes,
+        sharedReveal,
+        inspectReveal,
+        revealHint,
+        reveal,
+        revealAndWait,
+        rect,
+        placement,
+        point,
+        pinPosition,
+        at,
+        inBox,
+        currentIds,
+        enterState,
+    };
+})();
+
+</script>
+<script data-proto-review="order">
+/* 展示编号投影：不改元数据 number，所有定位与编辑始终使用稳定 id。
+   排序键是页面逻辑坐标（视口坐标加回各级滚动偏移），从上到下、从左到右。
+   目标当前不可见、但能在主页面流里靠「展开 / 选中 / 点击」显现的标注（折叠区、条件行、页签），
+   用它的显现触发器位置代位参与主序，编号在展开前后保持一致，而不是被甩到末尾；
+   落在弹窗 / 抽屉 / 提示等分支容器里的目标整体排在主页序号之后再自然排序；彻底失锚的排最后。 */
+(() => {
+    'use strict';
+    const stable = (a, b) => String(a.id).localeCompare(String(b.id), 'en');
+    function logicalPoint(found, win) {
+        if (!found?.point) return null;
+        const { element, legacy } = found;
+        const point = legacy && element ? element.getBoundingClientRect() : found.point;
+        let x = point.x + win.scrollX, y = point.y + win.scrollY;
+        for (let node = legacy ? element?.parentElement : element; node && node !== win.document.scrollingElement; node = node.parentElement) {
+            x += node.scrollLeft || 0;
+            y += node.scrollTop || 0;
+        }
+        return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+    }
+    /* 分支容器判定：目标所在的祖先链里有对话框 / 抽屉 / 提示 / 下拉等「离开主页面流」的容器。
+       语义属性（<dialog>、role、aria-modal、popover）直接判定；类名只作弱线索，且要求容器本身是 fixed / absolute 定位，
+       否则页面主流里的 notification-list、message-item 之类命名会被误判。
+       原型可用 data-proto-branch="true|false" 在任意祖先上显式声明，覆盖自动推断。 */
+    const BRANCH_ROLE = /^(dialog|alertdialog|tooltip|menu)$/;
+    const BRANCH_CLASS = /(^|[^a-z])(modal|dialog|drawer|popover|popup|toast|tooltip|dropdown|sheet|snackbar|notification|message)(?![a-z])/i;
+    function inBranch(el, win) {
+        const doc = win.document;
+        for (let n = el; n && n !== doc.body && n !== doc.documentElement; n = n.parentElement) {
+            if (n.hasAttribute('data-proto-branch')) return n.getAttribute('data-proto-branch') !== 'false';
+            if (n.tagName === 'DIALOG' || n.hasAttribute('popover') || n.getAttribute('aria-modal') === 'true' || BRANCH_ROLE.test(n.getAttribute('role') || '')) return true;
+            if (BRANCH_CLASS.test(n.getAttribute('class') || '') && /^(fixed|absolute)$/.test(win.getComputedStyle(n).position)) return true;
+        }
+        return false;
+    }
+    /* 目标不可见时的代位坐标：优先目标自身仍有的几何（visibility:hidden 一类），否则取显现触发器的下缘——
+       紧跟触发器所在行之后，在其下方显现的内容也就落在正确的行序里。无触发器（真失锚）返回 null。 */
+    function proxyPoint(note, el, win) {
+        const PA = win.ProtoAnchors;
+        if (el && !PA.hidden?.(el)) return null;                         // 元素可见却定不到落点：落点失效，按失锚置底
+        if (el && el.getClientRects().length) return logicalPoint({ element: el, point: el.getBoundingClientRect(), legacy: true }, win);
+        let hint = null;
+        try {
+            hint = PA.revealHint?.(note.anchor, el) ||
+                (el && PA.revealTrigger?.(el) ? { trigger: PA.revealTrigger(el) } : null);
+        } catch (_) { /* 条件选择器失效等同无触发器 */ }
+        const trigger = hint?.trigger;
+        if (!trigger || !trigger.getClientRects?.().length) return null;
+        const p = logicalPoint({ element: trigger, point: {}, legacy: true }, win);
+        return p && { x: p.x, y: p.y + trigger.getBoundingClientRect().height };
+    }
+    function rows(list) {
+        const sorted = list.slice().sort((a, b) => a.point.y - b.point.y || a.point.x - b.point.x || stable(a.note, b.note));
+        const result = [];
+        for (let i = 0; i < sorted.length;) {
+            const top = sorted[i].point.y, row = [];
+            while (i < sorted.length && sorted[i].point.y - top <= 12) row.push(sorted[i++]);
+            row.sort((a, b) => a.point.x - b.point.x || a.point.y - b.point.y || stable(a.note, b.note));
+            result.push(...row);
+        }
+        return result;
+    }
+    /* records: { note, point, group }。group 0 = 主页面流，1 = 分支容器；同组内按行序，组间主页面流在前；无 point 的失锚置底。 */
+    function arrange(records) {
+        const placed = records.filter(r => r.point);
+        const result = [
+            ...rows(placed.filter(r => !r.group)),
+            ...rows(placed.filter(r => r.group)),
+            ...records.filter(r => !r.point).sort((a, b) => stable(a.note, b.note)),
+        ];
+        return result.map((r, i) => ({ ...r.note, displayNumber: i + 1 }));
+    }
+    function classify(note, win) {
+        const PA = win.ProtoAnchors;
+        let found = null;
+        try { found = PA.point(note, true); } catch (_) { /* 未就绪或失效锚点 */ }
+        let point = logicalPoint(found, win), el = found?.element || null;
+        if (!el && note.anchor) { try { el = PA.resolveHidden?.(note.anchor) || null; } catch (_) { /* 旧选择器失效 */ } }
+        if (!point && note.anchor) { try { point = proxyPoint(note, el, win); } catch (_) { /* 代位失败按失锚处理 */ } }
+        const group = el && inBranch(el, win) ? 1 : 0;
+        return { note, point, group };
+    }
+    function project(notes, win, pending = null) {
+        const records = notes.map(note => classify(note, win));
+        if (pending?.point) records.push({ note: { id: '~pending' }, point: pending.point, group: pending.group || 0 });
+        return arrange(records);
+    }
+    function previewNumber(notes, win, x, y) {
+        const element = win.ProtoAnchors.at(x, y);
+        const point = logicalPoint({ element, point: { x, y } }, win);
+        const group = element && inBranch(element, win) ? 1 : 0;
+        return project(notes, win, { point, group }).find(n => n.id === '~pending')?.displayNumber || notes.length + 1;
+    }
+    globalThis.ProtoOrder = { arrange, project, previewNumber, logicalPoint, inBranch };
+})();
+
+</script>
+<script data-proto-review="changes">
+/* 更新说明的位置定位；复用锚点与展开，不生成序号或改写 PRD。 */
+(() => {
+    'use strict';
+    let overlay=null, stop=null, generation=0;
+    async function locate(target, notes=[]) {
+        const token=++generation;
+        const A=window.ProtoAnchors;
+        if (!A || !target || target.deleted) return {ok:false,message:target?.deleted?'该内容已删除，请查看变更详情':'当前页面尚未准备好'};
+        try {
+            if (target.stateId) await A.enterState(target.stateId);
+            const note=target.noteId && notes.find(n=>n.id===target.noteId);
+            const anchor=note?.anchor || target.anchor;
+            if (!anchor) return {ok:true,level:'page',message:'已打开对应页面'};
+            let element;
+            if (anchor.textRule) {
+                const canonical=value=>JSON.stringify(value && typeof value==='object' ? Array.isArray(value)?value.map(v=>JSON.parse(canonical(v))):Object.fromEntries(Object.keys(value).sort().map(k=>[k,JSON.parse(canonical(value[k]))])):value);
+                const rules=JSON.parse(document.getElementById('proto-text-edits-data')?.textContent || '[]');
+                const rule=rules.find(r=>canonical(r.binding)===anchor.textRule);
+                if(rule)element=window.ProtoTextRuntime?.locate(document,rule.binding);
+            } else {
+                element=A.resolve(anchor)?.element;
+                if (!element || A.hidden(element)) element=await A.revealAndWait(anchor);
+            }
+            if(token!==generation)return {ok:false,cancelled:true};
+            if (!element || A.hidden(element)) return {ok:false,message:'目标暂时无法定位，已打开所属页面'};
+            element.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+            if (stop) stop();
+            overlay=document.createElement('div'); overlay.setAttribute('data-prototype-owned','');
+            Object.assign(overlay.style,{position:'fixed',pointerEvents:'none',zIndex:'2147483630',border:'3px solid #2563eb',
+                borderRadius:'5px',boxShadow:'0 0 0 4px #2563eb25',boxSizing:'border-box'});
+            document.documentElement.append(overlay);
+            const paint=()=>{const r=element.getBoundingClientRect(); Object.assign(overlay.style,{left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px'});};
+            paint(); window.addEventListener('scroll',paint,true); window.addEventListener('resize',paint);
+            const observer=new ResizeObserver(paint); observer.observe(element);
+            let timer;
+            stop=()=>{clearTimeout(timer); observer.disconnect();window.removeEventListener('scroll',paint,true);window.removeEventListener('resize',paint);overlay?.remove();overlay=null;stop=null;};
+            timer=setTimeout(stop,3000);
+            return {ok:true,level:'element',message:'已定位更新位置'};
+        } catch (_) { return {ok:false,message:'目标已变化，已打开所属页面'}; }
+    }
+    window.ProtoChangeLocator={locate};
+})();
+
+</script>
+<script data-proto-review="bridge">
+/* 评审壳 ↔ 原型页桥：随导出内嵌进每个原型 HTML，跑在 iframe 内。
+   壳与原型改用 postMessage 通信，不再由壳跨文档注入脚本——ZIP 解压后 file:// 直接打开时
+   每个 file 都是独立源，壳拿不到 iframe 的 document，旧注入方式静默失效（无序号、无引导、右栏乱序）。
+   加载顺序：proto-hotspots.js（先于业务脚本）→ proto-appearance.js → proto-anchors.js → proto-order.js → 本文件 → review-pins.js。
+   独立打开原型（不在壳内）时本文件不做任何事。 */
+(() => {
+    'use strict';
+    if (window.__reviewBridgeBoot) return;
+    window.__reviewBridgeBoot = true;
+    if (window.parent === window || !window.ProtoAnchors) return;
+
+    const post = (msg) => { try { window.parent.postMessage(Object.assign({ __review: 1 }, msg), '*'); } catch (_) { /* 壳未就绪 */ } };
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let asideOpen = true;
+    let hintScopes = [];
+
+    // review-pins.js 启动时读取的宿主对象：标注在 init 消息到达后填充，正文 HTML 由壳预渲染（气泡层无 Markdown 渲染器）。
+    window.__REVIEW__ = {
+        notes: [],
+        selectedNoteId: null,
+        asideOpen: () => asideOpen,
+        onSync: (map, state, stale) => post({ type: 'sync', map, state, stale }),
+        onFocus: (noteId) => post({ type: 'focus', noteId }),
+        onSelect: (noteId) => post({ type: 'selection', noteId }),
+        renderBody: (note) => note.bodyHtml || '<p>' + esc(note.body || '') + '</p>',
+    };
+    window.ProtoHotspots?.init({ scope: () => {
+        const state = window.ProtoAnchors.currentIds?.().stateId || 'default';
+        return hintScopes.find(item => item.id === state)?.interactionHints;
+    } });
+
+    // 气泡层在本文件之后加载；init 早到时等它就位再重排（最多等 5s）。
+    function relayout(tries) {
+        if (window.__reviewRelayout) { window.__reviewRelayout(); return; }
+        if ((tries || 0) < 50) setTimeout(() => relayout((tries || 0) + 1), 100);
+    }
+
+    async function reveal(note) {
+        const A = window.ProtoAnchors;
+        let found = null;
+        try { found = A.point(note); } catch (_) { /* 锚定异常 */ }
+        if (!found?.element && !found?.point) {
+            // 目标被折叠/隐藏：先联动展开对应折叠区，再重新定位与重排气泡
+            try { await (A.revealAndWait?.(note.anchor) ?? A.reveal?.(note.anchor)); } catch (_) { /* ignore */ }
+            try { window.__reviewRelayout?.(); } catch (_) { /* ignore */ }
+            try { found = A.point(note); } catch (_) { /* ignore */ }
+        }
+        if (found?.element?.id === 'screenshot-image' && found.point && document.documentElement.dataset.protoScreenshot === 'true')
+            window.scrollTo({ top: Math.max(0, found.point.y + window.scrollY - window.innerHeight / 2), behavior: 'smooth' });
+        else if (found?.element) found.element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        else if (found?.point) window.scrollTo({ top: Math.max(0, found.point.y + window.scrollY - window.innerHeight / 2), behavior: 'smooth' });
+    }
+
+    window.addEventListener('message', (e) => {
+        if (e.source !== window.parent || !e.data || e.data.__review !== 1) return;
+        const m = e.data;
+        switch (m.type) {
+            case 'init':
+                hintScopes = Array.isArray(m.hintScopes) ? m.hintScopes : [];
+                window.ProtoHotspots?.hide();
+                document.documentElement.dataset.protoHost = 'review';
+                window.__REVIEW__.notes = Array.isArray(m.notes) ? m.notes : [];
+                window.__REVIEW__.selectedNoteId = m.selectedNoteId || null;
+                window.__reviewSelectNote?.(window.__REVIEW__.selectedNoteId);
+                asideOpen = m.asideOpen !== false;
+                if (m.enterState) { try { window.ProtoAnchors.enterState?.(m.enterState)?.catch?.(() => {}); } catch (_) { /* ignore */ } }
+                relayout();
+                break;
+            case 'aside':
+                asideOpen = !!m.open;
+                try { window.__reviewHidePop?.(); } catch (_) { /* ignore */ }
+                break;
+            case 'enterState':
+                try { window.ProtoAnchors.enterState?.(m.stateId)?.catch?.(() => {}); } catch (_) { /* ignore */ }
+                break;
+            case 'reveal':
+                if (m.note) { window.__REVIEW__.selectedNoteId = m.note.id; window.__reviewSelectNote?.(m.note.id); reveal(m.note); }
+                break;
+            case 'locateChange':
+                Promise.resolve(window.ProtoChangeLocator?.locate(m.target,window.__REVIEW__.notes)).then(result=>{
+                    post({type:'changeLocated',requestId:m.requestId,...(result || {ok:false,message:'定位功能暂不可用'})});
+                });
+                break;
+            case 'select':
+                window.__REVIEW__.selectedNoteId = m.noteId || null;
+                window.__reviewSelectNote?.(window.__REVIEW__.selectedNoteId);
+                break;
+            case 'hidePop':
+                try { window.__reviewHidePop?.(); } catch (_) { /* ignore */ }
+                break;
+            case 'showHotspots':
+                window.ProtoHotspots?.show();
+                break;
+            default:
+                break;
+        }
+    });
+
+    let ids = {};
+    try { ids = window.ProtoAnchors.currentIds?.() || {}; } catch (_) { /* ignore */ }
+    post({ type: 'ready', ids });
+})();
+
+</script>
+<script data-proto-review="pins">
+/* 评审壳只读气泡层：随导出内嵌进每个原型 HTML（review_export.inject_bundle），跑在被评审原型页面内。
+   依赖同页先加载的 proto-anchors.js / proto-order.js / review-bridge.js；通过 window.__REVIEW__（由 bridge 建立，内部走 postMessage）与壳父页通信。
+   只读：无编辑、无删除；正文浮窗支持移动与调整宽度。 */
+(() => {
+    'use strict';
+    if (window.__reviewPinsBoot) return;
+    window.__reviewPinsBoot = true;
+    const R = window.__REVIEW__;
+    if (!R || !window.ProtoAnchors || !window.ProtoOrder) return;
+
+    const style = document.createElement('style');
+    style.setAttribute('data-prototype-owned', '');
+    style.textContent = `
+.__review_pin{position:absolute;display:grid;place-items:center;min-width:36px;height:36px;padding:0 8px;border:3px solid #fff;border-radius:50% 50% 50% 2px;background:#2563eb;color:#fff;font:600 13px/1 "PingFang SC","Microsoft YaHei UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 8px 24px rgba(16,24,40,.24);transform:translateY(-100%);cursor:pointer;pointer-events:auto;}
+.__review_pin:hover{background:#1d4ed8;}
+.__review_pin:not(.__stale){background:var(--pin-fill);color:var(--pin-ink);border-color:var(--pin-stroke);}
+.__review_pin:not(.__stale):hover{background:var(--pin-fill);filter:brightness(.96);}
+.__review_pin.__stale{background:#626b78;cursor:default;}
+.__review_pin.__review_selected{outline:3px solid #2563eb;outline-offset:3px;z-index:2;}
+@media(prefers-color-scheme:dark){.__review_pin{border-color:#121519;}}
+.__review_pop{position:fixed;box-sizing:border-box;z-index:2147482001;width:min(360px,calc(100vw - 16px));max-width:calc(100vw - 16px);overflow:visible;border:1px solid #d8dee3;border-radius:10px;background:#fff;color:#1a1d23;font:14px/1.7 "PingFang SC","Microsoft YaHei UI",system-ui,sans-serif;letter-spacing:.02em;box-shadow:0 8px 24px rgba(16,24,40,.24);display:none;}
+.__review_pop_body{box-sizing:border-box;max-height:calc(100vh - 36px);overflow:auto;overscroll-behavior:contain;padding:4px 14px 12px;border-radius:inherit;}
+.__review_pop_grip{box-sizing:border-box;display:grid;place-items:center;width:100%;height:18px;margin:0;padding:0;border:0;border-radius:9px 9px 0 0;background:transparent;color:inherit;cursor:grab;touch-action:none;user-select:none;}
+.__review_pop_grip::before{content:"";width:32px;height:4px;border-radius:2px;background:currentColor;opacity:.3;}
+.__review_pop_grip:focus-visible{outline:2px solid #2563eb;outline-offset:-3px;}
+.__review_pop.pop-moving{user-select:none;}
+.__review_pop.pop-moving,.__review_pop.pop-moving *{cursor:grabbing!important;}
+.__review_pop_resize{position:absolute;top:0;bottom:0;width:12px;cursor:ew-resize;touch-action:none;z-index:3;background:transparent;}
+/* 热区以浮窗真实边框为中心，不画独立蓝细条；视觉仍是浮窗自身边缘，命中区向内外各扩 6px。 */
+.__review_pop_resize_w{left:0;transform:translateX(-50%);}.__review_pop_resize_e{right:0;transform:translateX(50%);}
+.__review_pop.pop-resizing{user-select:none;}
+.__review_pop.pop-resizing,.__review_pop.pop-resizing *{cursor:ew-resize!important;}
+@media(prefers-color-scheme:dark){.__review_pop{background:#121519;color:#f2f4f7;border-color:#363c44;}}
+.__review_pop_body>:first-child{margin-top:0;}.__review_pop_body>:last-child{margin-bottom:0;}
+.__review_pop p{margin:0 0 10px;overflow-wrap:anywhere;}
+.__review_pop img{display:block;max-width:100%;height:auto;margin:8px 0;border-radius:6px;}
+.__review_pop h1{font-size:18px;}.__review_pop h2{font-size:16px;}.__review_pop h3,.__review_pop h4{font-size:14px;}
+.__review_pop ul,.__review_pop ol{padding-left:20px;margin:6px 0 10px;}.__review_pop li.task{list-style:none;margin-left:-18px;}
+.__review_pop code{font-family:ui-monospace,Consolas,monospace;font-size:13px;background:rgba(127,127,127,.16);padding:1px 5px;border-radius:4px;}
+.__review_pop pre{background:rgba(127,127,127,.14);padding:10px;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere;}.__review_pop pre code{background:none;padding:0;}
+.__review_pop table{border-collapse:collapse;width:100%;}.__review_pop th,.__review_pop td{border:1px solid #d8dee3;padding:6px;text-align:left;}
+@media(prefers-color-scheme:dark){.__review_pop th,.__review_pop td{border-color:#363c44;}}
+.__review_pop blockquote{border-left:3px solid #d8dee3;margin:8px 0;padding:2px 12px;color:#4e5560;}.__review_pop a{color:#2563eb;}.__review_pop hr{border:0;border-top:1px solid #d8dee3;}
+/* 点击引导：与操作界面 .pa-guide 同式——亮黄色系，与蓝色水滴序号在 色相 / 形状 / 动效 三方面区分。
+   框 = 透明可点区：虚线、静态不呼吸；悬停转实线 + 加深底色 + 外环。标签 = 与框左上角拼成一体的选区式标签，只有标签呼吸。
+   偏离 DESIGN_MASTER --accent-amber #b45309（实看发褐）：框线 #d97706（白底 3.19:1），标签 #fbbf24 配深棕字 #5c3300（6.52:1）。
+   固定浅色、不随 prefers-color-scheme 切换：引导叠在原型页面上，颜色跟随页面而非系统。 */
+.__review_guide{--g-line:#d97706;--g-fill:#fbbf24;--g-ink:#5c3300;position:absolute;box-sizing:border-box;margin:0;padding:0;border:2px dashed var(--g-line);border-radius:0 8px 8px 8px;background:rgba(251,191,36,.10);cursor:pointer;pointer-events:auto;transition:background-color 150ms ease-out,box-shadow 150ms ease-out;}
+.__review_guide:hover{border-style:solid;background:rgba(251,191,36,.30);box-shadow:0 0 0 3px rgba(251,191,36,.38);}
+.__review_guide:active{background:rgba(251,191,36,.45);}
+.__review_guide:focus-visible{outline:2px solid var(--g-line);outline-offset:2px;}
+.__review_guide_tag{position:absolute;box-sizing:border-box;left:-2px;top:-2px;transform:translateY(-100%);display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 7px 0 5px;border:1px solid var(--g-line);border-radius:6px 6px 6px 0;background:var(--g-fill);color:var(--g-ink);font:600 11px/1 "PingFang SC","Microsoft YaHei UI",system-ui,sans-serif;white-space:nowrap;pointer-events:none;animation:__rvGuideTag 1.8s ease-in-out infinite;animation-delay:var(--g-delay,0s);}
+.__review_guide_tag svg{width:10px;height:10px;animation:__rvGuideBob 1.8s ease-in-out infinite;animation-delay:var(--g-delay,0s);}
+.__review_guide:hover .__review_guide_tag{animation:none;box-shadow:0 0 0 3px rgba(251,191,36,.38);}
+.__review_guide.__review_guide_below{border-radius:8px 8px 8px 0;}
+.__review_guide.__review_guide_below .__review_guide_tag{top:auto;bottom:-2px;transform:translateY(100%);border-radius:0 6px 6px 6px;}
+.__review_guide.__review_guide_end{border-radius:8px 0 8px 8px;}
+.__review_guide.__review_guide_end .__review_guide_tag{left:auto;right:-2px;border-radius:6px 6px 0 6px;}
+.__review_guide.__review_guide_below.__review_guide_end{border-radius:8px 8px 0 8px;}
+.__review_guide.__review_guide_below.__review_guide_end .__review_guide_tag{border-radius:6px 0 6px 6px;}
+@keyframes __rvGuideTag{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,0),0 1px 2px rgba(92,51,0,.18);}50%{box-shadow:0 0 0 4px rgba(251,191,36,.42),0 1px 2px rgba(92,51,0,.18);}}
+@keyframes __rvGuideBob{0%,100%{transform:translateY(-1px);}50%{transform:translateY(1px);}}
+@media(prefers-reduced-motion:reduce){.__review_guide_tag,.__review_guide_tag svg{animation:none;}}
+`;
+    (document.head || document.documentElement).appendChild(style);
+
+    const layer = document.createElement('div');
+    layer.setAttribute('data-prototype-owned', '');
+    layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147482000;';
+    document.documentElement.appendChild(layer);
+    // 引导框独立图层，按触发器复用；序号按标注 ID 复用，保住悬停、聚焦与按下到松开的点击目标。
+    const glayer = document.createElement('div');
+    glayer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147481999;';
+    glayer.setAttribute('data-prototype-owned', '');   // 引导框是 <button>，标记自有以免 revealTrigger 兜底搜索把它当成原型触发器
+    document.documentElement.appendChild(glayer);
+
+    // 收起态气泡：PRD 侧栏收起时，点序号在序号旁展示正文；正文独立滚动，左右边缘可拖宽。
+    let pop = null, popBody = null, popResizing = null, popNoteId = null;
+    let popMoving = null, popMoveCleanup = null;
+    const owned = el => !!(el?.closest?.('[data-prototype-owned]') || el?.parentElement?.closest?.('[data-prototype-owned]'));
+    let selectedNoteId = R.selectedNoteId || null;
+    function selectNote(noteId) {
+        selectedNoteId = (R.notes || []).some(n => n.id === noteId && n.stateId === stateOf()) ? noteId : null;
+        R.selectedNoteId = selectedNoteId;
+        for (const pin of layer.querySelectorAll('.__review_pin')) {
+            const selected = pin.dataset.noteId === selectedNoteId;
+            pin.classList.toggle('__review_selected', selected);
+            pin.setAttribute('aria-current', String(selected));
+        }
+    }
+    window.__reviewSelectNote = selectNote;
+    function setPinExpanded(noteId, expanded) {
+        if (!noteId) return;
+        layer.querySelector(`.__review_pin[data-note-id="${CSS.escape(noteId)}"]`)?.setAttribute('aria-expanded', String(expanded));
+    }
+    function hidePop() {
+        popMoveCleanup?.(true);
+        if (pop) pop.style.display = 'none';
+        setPinExpanded(popNoteId, false);
+        popNoteId = null;
+    }
+    function placePop(left, top) {
+        const r = pop.getBoundingClientRect();
+        pop.style.left = Math.max(8, Math.min(left, innerWidth - r.width - 8)) + 'px';
+        pop.style.top = Math.max(8, Math.min(top, innerHeight - r.height - 8)) + 'px';
+    }
+    function startPopMove(e, grip) {
+        if (!pop || pop.style.display !== 'block' || popResizing || popMoving || e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        const r = pop.getBoundingClientRect(), root = document.documentElement;
+        const previous = { cursor: root.style.cursor, userSelect: root.style.userSelect };
+        const start = { x: e.clientX, y: e.clientY, left: r.left, top: r.top };
+        popMoving = { pointerId: e.pointerId, moved: false };
+        const move = ev => {
+            if (!popMoving || ev.pointerId !== e.pointerId) return;
+            const dx = ev.clientX - start.x, dy = ev.clientY - start.y;
+            if (!popMoving.moved && Math.hypot(dx, dy) < 5) return;
+            popMoving.moved = true;
+            ev.preventDefault();
+            pop.classList.add('pop-moving');
+            root.style.cursor = 'grabbing'; root.style.userSelect = 'none';
+            placePop(start.left + dx, start.top + dy);
+        };
+        const finish = (cancel = false) => {
+            if (!popMoving) return;
+            popMoving = null; popMoveCleanup = null;
+            if (cancel) { pop.style.left = start.left + 'px'; pop.style.top = start.top + 'px'; }
+            pop.classList.remove('pop-moving');
+            root.style.cursor = previous.cursor; root.style.userSelect = previous.userSelect;
+            window.removeEventListener('pointermove', move, true);
+            window.removeEventListener('pointerup', up, true);
+            window.removeEventListener('pointercancel', cancelPointer, true);
+            window.removeEventListener('blur', cancelMove, true);
+            window.removeEventListener('keydown', key, true);
+            try { if (grip.hasPointerCapture(e.pointerId)) grip.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+        };
+        const up = ev => { if (ev.pointerId === e.pointerId) finish(); };
+        const cancelPointer = ev => { if (ev.pointerId === e.pointerId) finish(true); };
+        const cancelMove = () => finish(true);
+        const key = ev => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); finish(true); } };
+        popMoveCleanup = finish;
+        try { grip.setPointerCapture(e.pointerId); } catch (_) { /* window 监听兜底 */ }
+        window.addEventListener('pointermove', move, { capture: true, passive: false });
+        window.addEventListener('pointerup', up, true);
+        window.addEventListener('pointercancel', cancelPointer, true);
+        window.addEventListener('blur', cancelMove, true);
+        window.addEventListener('keydown', key, true);
+    }
+    function startPopResize(e, handle, side) {
+        if (!pop || popMoving || e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        const rect = pop.getBoundingClientRect(), startX = e.clientX, startW = rect.width, fixedRight = rect.right;
+        popResizing = { handle, side, pointerId: e.pointerId };
+        pop.classList.add('pop-resizing');
+        document.documentElement.style.cursor = 'ew-resize';
+        document.documentElement.style.userSelect = 'none';
+        // 指针按下后由 window 兜住整段拖动；不依赖鼠标始终停留在 12px 边缘热区，也不依赖 pointer capture 是否成功。
+        try { handle.setPointerCapture(e.pointerId); } catch (_) { /* 浏览器不支持时 window 监听仍可工作 */ }
+        const move = ev => {
+            if (!popResizing || ev.pointerId !== e.pointerId) return;
+            ev.preventDefault();
+            const raw = side === 'e' ? startW + (ev.clientX - startX) : startW - (ev.clientX - startX);
+            const minW = Math.min(280, innerWidth - 16), maxW = Math.max(minW, Math.min(720, innerWidth - 16));
+            const edgeMax = side === 'e' ? innerWidth - rect.left - 8 : fixedRight - 8;
+            const width = Math.max(minW, Math.min(Math.round(raw), maxW, edgeMax));
+            pop.style.width = width + 'px';
+            if (side === 'w') pop.style.left = Math.max(8, fixedRight - width) + 'px';
+        };
+        const up = ev => {
+            if (!popResizing || ev.pointerId !== e.pointerId) return;
+            popResizing = null; pop.classList.remove('pop-resizing');
+            document.documentElement.style.cursor = '';
+            document.documentElement.style.userSelect = '';
+            window.removeEventListener('pointermove', move, true); window.removeEventListener('pointerup', up, true); window.removeEventListener('pointercancel', up, true);
+            try { if (handle.hasPointerCapture(e.pointerId)) handle.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+        };
+        window.addEventListener('pointermove', move, { capture: true, passive: false });
+        window.addEventListener('pointerup', up, true);
+        window.addEventListener('pointercancel', up, true);
+    }
+    function ensurePop() {
+        if (pop) return;
+        pop = document.createElement('div');
+        pop.id = '__review_popover'; pop.className = '__review_pop';
+        pop.setAttribute('role', 'dialog');
+        pop.setAttribute('data-prototype-owned', '');
+        pop.addEventListener('click', e => e.stopPropagation());
+        const grip = document.createElement('button');
+        grip.type = 'button'; grip.className = '__review_pop_grip';
+        grip.setAttribute('aria-label', '移动标注浮窗');
+        grip.title = '拖动移动；方向键微调，Shift 加速';
+        grip.onpointerdown = e => startPopMove(e, grip);
+        grip.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); hidePop(); return; }
+            const direction = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+            if (!direction || e.ctrlKey || e.altKey || e.metaKey) return;
+            e.preventDefault(); e.stopPropagation();
+            const r = pop.getBoundingClientRect(), step = e.shiftKey ? 40 : 10;
+            placePop(r.left + direction[0] * step, r.top + direction[1] * step);
+        });
+        pop.appendChild(grip);
+        popBody = document.createElement('div'); popBody.className = '__review_pop_body';
+        pop.appendChild(popBody);
+        for (const side of ['w', 'e']) {
+            const handle = document.createElement('span');
+            handle.className = `__review_pop_resize __review_pop_resize_${side}`;
+            handle.setAttribute('aria-hidden', 'true'); handle.title = '拖动调节宽度';
+            handle.onpointerdown = e => startPopResize(e, handle, side);
+            pop.appendChild(handle);
+        }
+        document.documentElement.appendChild(pop);
+    }
+    function showPop(note, pin) {
+        ensurePop();
+        popMoveCleanup?.();
+        setPinExpanded(popNoteId, false);
+        popNoteId = note.id;
+        pin.setAttribute('aria-expanded', 'true');
+        popBody.innerHTML = R.renderBody ? R.renderBody(note) : (note.body || '');
+        popBody.scrollTop = 0;
+        pop.style.display = 'block';
+        pop.style.visibility = 'hidden';
+        pop.style.left = '0px'; pop.style.top = '0px';
+        const pw = pop.offsetWidth, ph = pop.offsetHeight;
+        const px = parseFloat(pin.style.left) || 0, py = parseFloat(pin.style.top) || 0;
+        const W = innerWidth, H = innerHeight;
+        let left = px + 16, top = py - ph - 8;
+        if (left + pw > W - 8) left = px - pw - 16;
+        left = Math.max(8, Math.min(left, W - pw - 8));
+        if (top < 8) top = py + 8;
+        top = Math.max(8, Math.min(top, H - ph - 8));
+        pop.style.left = left + 'px'; pop.style.top = top + 'px';
+        pop.style.visibility = 'visible';
+    }
+    function togglePop(note, pin) {
+        if (pop && pop.style.display === 'block' && popNoteId === note.id) { hidePop(); return; }
+        showPop(note, pin);
+    }
+    window.__reviewHidePop = hidePop;
+    window.__reviewPopNoteId = () => (pop && pop.style.display === 'block' ? popNoteId : null);
+    window.__reviewRelayout = () => { try { layout(); } catch (_) { /* ignore */ } };
+    document.addEventListener('click', e => {
+        if (pop && pop.style.display === 'block' && !pop.contains(e.target) && !e.target.closest?.('.__review_pin')) hidePop();
+    }, true);
+    // scroll 监听用了 capture，气泡自身 overflow:auto 的滚动也会冒到 window；旧逻辑因此鼠标一滚正文就关气泡。
+    // 只在气泡外部（原型页面 / 其他滚动容器）发生滚动时关闭；气泡内部滚动保持打开。
+    window.addEventListener('scroll', e => {
+        if (pop && pop.style.display === 'block' && pop.contains(e.target)) return;
+        hidePop();
+        scheduleLayout();
+    }, { passive: true, capture: true });
+    window.addEventListener('resize', () => { hidePop(); scheduleLayout(); }, { passive: true });
+
+    let layoutFrame = 0;
+    function scheduleLayout() {
+        if (layoutFrame) return;
+        layoutFrame = requestAnimationFrame(() => { layoutFrame = 0; layout(); });
+    }
+
+    const stateOf = () => document.documentElement.dataset.protoState || 'default';
+    let lastState = '', lastX = -1, lastY = -1, lastW = 0, lastH = 0;
+    let lastOrder = '', lastStale = '';
+    const pinsById = new Map();
+
+    function layout() {
+        const state = stateOf();
+        if (state !== lastState) hidePop(); // 只在原型状态切换时关气泡；纯几何重排不关（避免侧栏收起引发的 reflow 误关刚弹出的气泡）
+        const notes = (R.notes || []).filter(n => n.stateId === state);
+        window.ProtoAnchors.setRevealNotes?.(notes);
+        if (selectedNoteId && !notes.some(n => n.id === selectedNoteId)) selectNote(null);
+        const arranged = window.ProtoOrder.project(notes, window);
+        const stale = [], noPoint = [];
+        const visibleIds = new Set(), occupied = [];
+        for (const n of arranged) {
+            let found = null;
+            try { found = window.ProtoAnchors.point(n); } catch (_) { /* 锚定异常按失效处理 */ }
+            if (!found?.point) { noPoint.push(n); continue; }
+            if (found.point.visible === false) continue; // 滚出嵌套容器的序号随锚点隐藏，不算失锚。
+            let pin = pinsById.get(n.id);
+            if (!pin) {
+                pin = document.createElement('button');
+                pin.type = 'button';
+                pin.className = '__review_pin';
+                pin.dataset.noteId = n.id;
+                pinsById.set(n.id, pin);
+                layer.appendChild(pin);
+            }
+            window.ProtoAppearance?.applyPin(pin, n);
+            pin.classList.toggle('__review_selected', n.id === selectedNoteId);
+            pin.setAttribute('aria-current', String(n.id === selectedNoteId));
+            if (pin.textContent !== String(n.displayNumber)) pin.textContent = n.displayNumber;
+            pin.setAttribute('aria-label', `标注 ${n.displayNumber}`);
+            pin.setAttribute('aria-haspopup', 'dialog');
+            pin.setAttribute('aria-controls', '__review_popover');
+            pin.setAttribute('aria-expanded', String(popNoteId === n.id && pop?.style.display === 'block'));
+            const placed = window.ProtoAnchors.pinPosition
+                ? window.ProtoAnchors.pinPosition(found.point.x, found.point.y, pin.offsetWidth || 36, pin.offsetHeight || 36, occupied)
+                : found.point;
+            pin.style.left = placed.x + 'px';
+            pin.style.top = placed.y + 'px';
+            pin.onclick = e => {
+                e.preventDefault(); e.stopPropagation();
+                selectNote(n.id);
+                R.onSelect?.(n.id);
+                // PRD 侧栏展开：定位到右栏对应内容；收起：就地弹气泡展示内容。
+                if (R.asideOpen && R.asideOpen()) { hidePop(); R.onFocus?.(n.id); }
+                else togglePop(n, pin);
+            };
+            visibleIds.add(n.id);
+        }
+        for (const [id, pin] of pinsById) {
+            if (!visibleIds.has(id)) { pin.remove(); pinsById.delete(id); }
+        }
+        if (popNoteId && !visibleIds.has(popNoteId)) hidePop();
+        // 无落点分流（Feature 1 引导 + 失锚判定）：元素还在且被折叠/隐藏 → 正常颜色，可展开的盖透明脉冲描边框引导；
+        // 元素真找不到、或可见但落点失效（目标变化）才算失锚（右栏灰显、置底、不可点）。
+        const groups = new Map();
+        for (const n of noPoint) {
+            let el = null; try { el = window.ProtoAnchors.resolveHidden(n.anchor); } catch (_) { /* ignore */ }
+            let hint = null;
+            try { hint = window.ProtoAnchors.revealHint?.(n.anchor, el); } catch (_) { /* ignore */ }
+            if (!hint && el && window.ProtoAnchors.hidden(el)) {
+                let trigger = null; try { trigger = window.ProtoAnchors.revealTrigger(el); } catch (_) { /* ignore */ }
+                if (trigger) hint = { trigger, target: el, label: '展开', kind: 'disclosure' };
+            }
+            if (!hint?.trigger) {
+                if (!el || !window.ProtoAnchors.hidden(el)) stale.push(n.id); // 元素仍在但隐藏、只是暂无可操作引导时也不算失锚
+                continue;
+            }
+            let g = groups.get(hint.trigger);
+            const actionKey = `${hint.kind}\n${hint.label}`;
+            if (!g) groups.set(hint.trigger, (g = { target: hint.target, label: hint.label, actionKey, notes: [] }));
+            if (g.actionKey === actionKey) g.notes.push(n);
+        }
+        const GICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+        const existing = [...glayer.querySelectorAll('.__review_guide')];
+        const alive = new Set();
+        let gi = existing.length;   // 新建引导错峰呼吸（与 proto-annotate.js 一致）：负 delay 立处不同相位
+        groups.forEach((g, trig) => {
+            const r = trig.getBoundingClientRect();
+            if (r.width === 0 && r.height === 0) return;
+            // 描边框套在触发器外 4px，小图标至少 22px 保证可点；裁到视口内，完全出视口就不画（与 proto-annotate.js layoutGuides 同算法）
+            const pad = 4, w = Math.max(r.width + pad * 2, 22), h = Math.max(r.height + pad * 2, 22);
+            let left = r.left + r.width / 2 - w / 2, top = r.top + r.height / 2 - h / 2;
+            const right = Math.min(innerWidth - 2, left + w), bottom = Math.min(innerHeight - 2, top + h);
+            left = Math.max(2, left); top = Math.max(2, top);
+            if (right - left < 8 || bottom - top < 8) return;
+            let guide = existing.find(x => x.__rvTrig === trig);
+            if (!guide) {
+                guide = document.createElement('button');
+                guide.type = 'button'; guide.className = '__review_guide';
+                guide.__rvTrig = trig;
+                guide.style.setProperty('--g-delay', (-(gi++ % 4) * 0.45) + 's');
+                guide.onclick = async e => { e.preventDefault(); e.stopPropagation(); try { await window.ProtoAnchors.revealAndWait(guide.__rvTarget); } catch (_) { /* ignore */ } layout(); };
+                glayer.appendChild(guide);
+            }
+            guide.__rvTarget = g.target;
+            const safeLabel = String(g.label).replace(/[&<>"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]);
+            const html = '<span class="__review_guide_tag">' + GICON + '<span>' + safeLabel + ' · ' + g.notes.length + '</span></span>';
+            if (guide.__rvHtml !== html) { guide.innerHTML = html; guide.__rvHtml = html; }
+            guide.title = '点击“' + g.label + '”以显示 ' + g.notes.length + ' 处标注（' + g.notes.map(n => n.displayNumber).join(' ') + '）';
+            guide.setAttribute('aria-label', guide.title);
+            guide.style.left = left + 'px'; guide.style.top = top + 'px';
+            guide.style.width = (right - left) + 'px'; guide.style.height = (bottom - top) + 'px';
+            guide.classList.toggle('__review_guide_below', top < 24);            // 贴顶时标签改挂底边，不被视口切掉
+            guide.classList.toggle('__review_guide_end', left + 84 > innerWidth); // 贴右时标签改挂右角
+            alive.add(guide);
+        });
+        existing.forEach(x => { if (!alive.has(x)) x.remove(); });
+        const orderKey = JSON.stringify(arranged.map(n => [n.id, n.displayNumber]));
+        const staleKey = JSON.stringify(stale);
+        if (orderKey !== lastOrder || staleKey !== lastStale || state !== lastState) {
+            lastOrder = orderKey; lastStale = staleKey; lastState = state;
+            R.onSync?.(Object.fromEntries(arranged.map(n => [n.id, n.displayNumber])), state, stale);
+        }
+    }
+
+    document.addEventListener('proto-anchors:reveal-failed', layout);
+
+    // 关闭弹窗和显示入口可能保持 HTML 字符数不变；监听真实 DOM 变化。
+    // 过滤自有层，避免重建序号 / 拖动浮窗时反过来触发无限重排。
+    if (typeof MutationObserver !== 'undefined') {
+        new MutationObserver(records => { if (records.some(record => !owned(record.target))) scheduleLayout(); })
+            .observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true,
+                attributeFilter: ['class', 'style', 'hidden', 'open', 'aria-expanded', 'aria-hidden', 'inert', 'data-proto-state'] });
+    }
+    for (const event of ['transitionend', 'animationend', 'load'])
+        document.addEventListener(event, e => { if (!owned(e.target)) scheduleLayout(); }, true);
+    document.fonts?.ready.then(scheduleLayout);
+
+    setInterval(() => {
+        if (stateOf() !== lastState || scrollX !== lastX || scrollY !== lastY ||
+            innerWidth !== lastW || innerHeight !== lastH) {
+            lastX = scrollX; lastY = scrollY; lastW = innerWidth; lastH = innerHeight;
+            layout();
+        }
+    }, 350);
+
+    layout();
+})();
+
+</script>
+</body>
+</html>

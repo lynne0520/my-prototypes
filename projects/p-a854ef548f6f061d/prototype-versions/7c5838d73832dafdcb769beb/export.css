@@ -1,0 +1,64 @@
+/* ════════════════════════════════════════════════════════════════
+   export.css · 报告导出壳页（export-class / export-grade / export-essay）
+   - 屏幕上以 A4 横向纸面预览源报告 #rp-main 的渲染结果（由 export.js 经 postMessage 取回）
+   - 这里只做「纸面容器 + 工具栏 + 屏幕控件抹除」，报告本体样式仍完全复用 report.css，
+     不另起一套令牌；要调细节直接改本文件或 report.css 的 @media print
+   ════════════════════════════════════════════════════════════════ */
+:root { --xp-page-w: 1100px; }
+
+body.xp-body { background: #e9ecf1; margin: 0; }
+
+/* ── 工具栏（不打印）── */
+.xp-bar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: var(--rp-gap);
+    padding: 8px 16px; background: #fff; border-bottom: 1px solid var(--rp-border);
+}
+.xp-bar .xp-title { font-size: 14px; font-weight: 600; color: var(--rp-text); }
+.xp-bar .xp-meta { font-size: 12px; color: var(--rp-text3); }
+.xp-bar .xp-act { margin-left: auto; display: flex; gap: var(--rp-gap); }
+.xp-tip { font-size: 12px; color: var(--rp-text3); padding: 6px 16px 0; }
+
+/* ── 纸面 ── */
+.xp-page {
+    width: var(--xp-page-w); max-width: calc(100% - 32px); box-sizing: border-box;
+    margin: 12px auto 24px; padding: 14px 16px; background: #fff;
+    border: 1px solid #d3d8e0; box-shadow: 0 4px 18px rgba(48, 49, 51, .08);
+}
+.xp-page .xp-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding-bottom: 8px; margin-bottom: var(--rp-gap); border-bottom: 2px solid var(--rp-text); }
+.xp-page .xp-head h1 { margin: 0; font-size: 18px; font-weight: 700; }
+.xp-page .xp-head .sub { font-size: 12px; color: var(--rp-text2); }
+.xp-page .xp-head .when { margin-left: auto; font-size: 12px; color: var(--rp-text3); }
+.xp-empty { padding: 40px 16px; text-align: center; color: var(--rp-text3); font-size: 13px; }
+
+/* ── 屏幕控件在纸上无意义：统一抹除（与 report.css @media print 同一份清单 + 作文页私有控件）── */
+.xp-page .no-print, .xp-page .prd-badge, .xp-page .mod-help, .xp-page .seg, .xp-page .switch,
+.xp-page .li-act, .xp-page .rp-btn, .xp-page .es-q-toggle, .xp-page .es-q-pills, .xp-page .chart-alt,
+.xp-page .chart-note { display: none !important; }
+/* tab 内容全部平铺；折叠区全部展开；作文题目信息区展开 */
+.xp-page .tab-pane { display: block !important; margin-top: var(--rp-sub); }
+.xp-page details > summary { pointer-events: none; }
+.xp-page .es-q-info.collapsed .es-q-tags { display: flex; }
+.xp-page .es-q-info.collapsed .es-q-text { display: block; overflow: visible; padding-right: 0; -webkit-line-clamp: none; }
+/* 表格行点击下钻在纸上不存在 */
+.xp-page .tbl tr[data-q] { cursor: default; }
+/* ── 模块 5（错因分析）：两个视图同出、题卡全部展开、屏幕控件抹除 ──
+   导出稿要同时给出「按题目」与「按学生」两套结论，故题卡一律展开、名单不限高 */
+.xp-page .m5-qcard-b { display: block !important; }
+.xp-page .m5-qcard-h { cursor: default; }
+.xp-page .m5-qtog, .xp-page .m5-cause-filter, .xp-page .m5-stu-search { display: none !important; }
+.xp-page .m5-stu-list { max-height: none; overflow: visible; }
+.xp-page .m5-cellb { display: inline; width: auto; min-width: 0; padding: 0; border: 0; background: none; cursor: default; }
+.xp-page .mod { border-color: #d3d8e0; }
+.xp-page .chart-box { overflow: visible; }
+.xp-page .chart-box svg { width: 100%; height: auto; }
+
+/* ── 打印：只出纸面 ── */
+@page { size: A4 landscape; margin: 10mm; }
+@media print {
+    body.xp-body { background: #fff; }
+    .xp-bar, .xp-tip { display: none !important; }
+    .xp-page { width: auto; max-width: none; margin: 0; padding: 0; border: 0; box-shadow: none; }
+    .xp-page .mod, .xp-page .es-qcard { break-inside: avoid; }
+    .xp-page .rp-cols > * { break-inside: avoid; }
+}

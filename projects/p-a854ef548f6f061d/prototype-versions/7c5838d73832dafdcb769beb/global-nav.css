@@ -1,0 +1,377 @@
+/* ==========================================================================
+   讲评试卷 4.0 · 全局顶栏
+   来源：学情分析平台/作业报告 index.html 的 header.topnav（结构、文案、交互 1:1 复刻）
+   --------------------------------------------------------------------------
+   1) 作用域隔离：选择器全部收在 .topnav 下，子元件统一 gn- 前缀，
+      不与讲评页既有的 .nav-right / .top-nav / .on 等类名互染。
+   2) 配色映射：主色取讲评页令牌 --primary-color(#2468f2)，
+      不搬入学情页的 Ant 蓝(#2468f2)，保证与 4.0 其余模块同色系。
+   3) 层级：.topnav(300) > .top-nav(200) > .top-level-nav(190)，
+      低于卡片抽屉(950) / AI 面板(998) / 弹窗(1000) / Toast(1200)。
+   4) 吸顶：全局栏吸顶 52px；原页面标题信息条改为随页滚出；
+      主功能 tab 条吸在全局栏下沿（top:52px），避免三层同时吸顶挤占视口。
+   ========================================================================== */
+
+:root {
+    --gn-h: 52px;
+    --wb-h: 48px; /* 作业视图 tab 条高度（4.0 同页 tab：讲评工作台 / 班级报告 / 年级报告） */
+}
+
+.topnav {
+    --gn-primary: var(--primary-color, #2468f2);
+    --gn-text: var(--text-main, #303133);
+    --gn-text2: var(--text-muted, #606266);
+    --gn-text3: #909399;
+    --gn-border: var(--border-color, #dcdfe6);
+    --gn-r-sm: 6px;
+
+    position: sticky;
+    top: 0;
+    z-index: 300;
+    height: var(--gn-h);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    background: #fff;
+    border-bottom: 1px solid var(--gn-border);
+    border-radius: 0;
+    box-shadow: 0 1px 2px rgba(48, 49, 51, 0.04);
+    font-size: 14px;
+    line-height: 1.5715;
+}
+
+/* ── 品牌区 ─────────────────────────────────────────── */
+.topnav .gn-logo {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-right: 28px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.topnav .gn-mark {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--gn-primary);
+    letter-spacing: 2px;
+}
+.topnav .gn-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--gn-text);
+    letter-spacing: 0.5px;
+}
+
+/* ── 主菜单 ─────────────────────────────────────────── */
+.topnav .gn-menu {
+    display: flex;
+    align-items: stretch;
+    height: var(--gn-h);
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.topnav .gn-menu::-webkit-scrollbar {
+    display: none;
+}
+/* 菜单整体右靠（紧贴右侧图标区），剩余空间由首个菜单项的自动外边距吞掉。
+   不用 justify-content: flex-end：菜单在 ≲1050px 会溢出，那时左侧项会被推到
+   不可滚回的区域；自动外边距在空间不足时归零，退化为正常横向滚动。 */
+.topnav .gn-item:first-child {
+    margin-left: auto;
+}
+.topnav .gn-item {
+    display: flex;
+    align-items: center;
+    padding: 0 13px;
+    font-size: 14px;
+    color: var(--gn-text2);
+    white-space: nowrap;
+    cursor: pointer;
+    position: relative;
+    transition: color 0.2s;
+}
+.topnav .gn-item:hover {
+    color: var(--gn-primary);
+}
+.topnav .gn-item.on {
+    color: var(--gn-primary);
+    font-weight: 600;
+}
+/* 基准截图：选中项为短下划线（两侧内缩），非整格通宽色条 */
+.topnav .gn-item.on::after {
+    content: '';
+    position: absolute;
+    left: 13px;
+    right: 13px;
+    bottom: 6px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--gn-primary);
+}
+
+/* ── 右侧区：角色切换 / 应用中心 / 账户 ──────────────── */
+.topnav .gn-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    padding-left: 12px;
+}
+.topnav .gn-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--gn-border);
+}
+.topnav .gn-ico {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gn-text2);
+    cursor: pointer;
+    border-radius: var(--gn-r-sm);
+    transition: background 0.15s, color 0.15s;
+}
+.topnav .gn-ico:hover,
+.topnav .gn-ico:focus-visible {
+    background: #f0f2f5;
+    color: var(--gn-primary);
+}
+.topnav .gn-ico svg {
+    width: 17px;
+    height: 17px;
+}
+/* ── 账户区：身份徽章 + 下拉菜单（角色切换已从顶部 role-seg 迁入） ── */
+.topnav .gn-user-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+.topnav .gn-user {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    padding: 0 7px;
+    border: 1px solid transparent;
+    background: none;
+    border-radius: var(--gn-r-sm);
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1;
+    color: var(--gn-text);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.topnav .gn-user:hover,
+.topnav .gn-user:focus-visible,
+.topnav .gn-user[aria-expanded="true"] {
+    background: #f0f2f5;
+    border-color: var(--gn-border);
+}
+.topnav .gn-user:focus-visible {
+    outline: none;
+}
+/* 当前身份常显：角色决定报告口径（R1/R3 vs R2/R4），不能只藏在下拉里 */
+.topnav .gn-role-badge {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 15px;
+    padding: 1px 6px;
+    border-radius: 5px;
+    color: var(--gn-primary);
+    background: #ecf3ff;
+    border: 1px solid #b5d0fb;
+    white-space: nowrap;
+}
+.topnav .gn-caret {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--gn-text3);
+    transition: transform 0.2s;
+}
+.topnav .gn-user[aria-expanded="true"] .gn-caret {
+    transform: rotate(180deg);
+}
+
+/* ── 账户下拉菜单 ───────────────────────────────── */
+.topnav .gn-user-menu {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    z-index: 320;
+    display: none;
+    width: 208px;
+    padding: 6px;
+    background: #fff;
+    border: 1px solid var(--gn-border);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(48, 49, 51, 0.14), 0 2px 6px rgba(48, 49, 51, 0.06);
+}
+.topnav .gn-user-menu.open {
+    display: block;
+    animation: gn-um-in 0.16s ease;
+}
+@keyframes gn-um-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: none; }
+}
+.topnav .gn-um-head {
+    padding: 7px 10px 9px;
+}
+.topnav .gn-um-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gn-text);
+}
+.topnav .gn-um-sub {
+    margin-top: 2px;
+    font-size: 11.5px;
+    color: var(--gn-text3);
+}
+.topnav .gn-um-label {
+    padding: 4px 10px 5px;
+    font-size: 11px;
+    color: var(--gn-text3);
+    letter-spacing: 0.3px;
+}
+.topnav .gn-um-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 10px;
+    border: none;
+    background: none;
+    border-radius: 7px;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--gn-text2);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.topnav .gn-um-item:hover,
+.topnav .gn-um-item:focus-visible {
+    background: #f5f7fa;
+    color: var(--gn-primary);
+    outline: none;
+}
+.topnav .gn-um-item.on {
+    background: #ecf3ff;
+    color: var(--gn-primary);
+    font-weight: 600;
+}
+.topnav .gn-um-item .gn-um-t {
+    flex: 1;
+    min-width: 0;
+}
+.topnav .gn-um-check {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    color: var(--gn-primary);
+    opacity: 0;
+}
+.topnav .gn-um-item.on .gn-um-check {
+    opacity: 1;
+}
+.topnav .gn-um-sep {
+    height: 1px;
+    margin: 6px 4px;
+    background: var(--gn-border);
+}
+
+/* 注：.role-seg 样式保留给独立报告页（report-data.js 注入的顶栏仍用横向分段控件） */
+
+/* ── 角色视角切换 ───────────────────────────────────── */
+.topnav .role-seg {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    background: #f0f2f5;
+    border-radius: 8px;
+    padding: 3px;
+}
+.topnav .role-seg span {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 11px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    color: var(--gn-text2);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+}
+.topnav .role-seg span:hover {
+    color: var(--gn-primary);
+}
+.topnav .role-seg span.on {
+    background: #fff;
+    color: var(--gn-primary);
+    font-weight: 500;
+    box-shadow: 0 1px 3px rgba(48, 49, 51, 0.1);
+}
+
+/* ── 页面原有吸顶元素重排（全局栏占位 52px） ─────────── */
+.app-container .top-nav {
+    position: relative;
+    top: auto;
+    z-index: 200;
+}
+.app-container .top-level-nav {
+    top: calc(var(--gn-h) + var(--wb-h)); /* 全局栏 52 + 作业视图 tab 条 48 */
+}
+
+/* ── 作业列表视图（整合版）：隐藏作业标题行，列表自带筛选头 ── */
+body.wb-list .top-nav {
+    display: none;
+}
+
+/* ── 两级层级：作业列表为最外层时隐藏讲评试卷 tab 条（列表 iframe 全屏占据全局栏以下） ── */
+body.wb-lv-list #wb-tabs {
+    display: none;
+}
+
+/* ── 响应式 ─────────────────────────────────────────── */
+@media (max-width: 1120px) {
+    .topnav .gn-logo {
+        margin-right: 18px;
+    }
+    .topnav .gn-item {
+        padding: 0 10px;
+        font-size: 13.5px;
+    }
+}
+@media (max-width: 900px) {
+    .topnav .gn-name,
+    .topnav .role-seg {
+        display: none;
+    }
+}
+@media (max-width: 640px) {
+    .topnav {
+        padding: 0 10px;
+    }
+    .topnav .gn-logo {
+        margin-right: 10px;
+    }
+    .topnav .gn-mark {
+        font-size: 15px;
+        letter-spacing: 1px;
+    }
+    .topnav .gn-user {
+        gap: 5px;
+        padding: 0 4px;
+    }
+    .topnav .gn-uname {
+        display: none;
+    }
+}
