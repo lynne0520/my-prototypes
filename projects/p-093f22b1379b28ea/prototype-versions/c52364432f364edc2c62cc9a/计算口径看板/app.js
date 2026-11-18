@@ -1,6 +1,7 @@
 /* 学科学情 · 计算口径看板
  * 所有数字由本文件实时算出，禁止手写结论值。
- * 口径来源：PRD.md CALC-01 / XK-06A / XK-07B / XK-10。
+ * 口径来源：PRD.md CALC-01 / XK-06A / XK-07B（班级口径）。
+ * 学生层口径（学生学情、学生追踪-知识点分析、环比、需关注名单与状态判定 V3.0）已下线，本看板不再维护。
  */
 
 /* ==================== 0 基础数学（唯一实现） ==================== */
@@ -46,7 +47,6 @@ const TASKS = [
   { name: '冲刺卷(一)', date: '2025-12-11', type: 'exam', rate: 76.8, grade: 75.4, submitted: 45 },
 ];
 const CLASS_SIZE = 48;
-const PREV_RATE = 69.8;
 const PERIOD_END = TASKS[TASKS.length - 1].date; // 周期结束日 = 加权锚点
 
 /* 样例考核项：6 场中 1 场未考查（null），用于演示「未知不进分母」 */
@@ -71,21 +71,6 @@ const MSET = {
   nodes: [92, 88, 86, 85, 84, 83, 82, 81, 81, 80, 80, 78, 74, 70, 66, 58, 52, 45],
 };
 
-/* 样例学生的 d 序列（rate − cRate），锚定最新任务日 */
-const STUDENT = {
-  anchor: '2025-12-11',
-  series: [
-    { date: '2025-10-02', rate: 74.0, cRate: 71.0 },
-    { date: '2025-10-16', rate: 69.0, cRate: 68.0 },
-    { date: '2025-11-01', rate: 76.0, cRate: 74.0 },
-    { date: '2025-11-13', rate: 63.0, cRate: 65.0 },
-    { date: '2025-11-27', rate: 64.0, cRate: 72.0 },
-    { date: '2025-12-05', rate: 57.0, cRate: 70.0 },
-    { date: '2025-12-11', rate: 60.0, cRate: 76.0 },
-  ],
-  missStreak: 0, // 连续未交/缺考次数
-};
-
 /* 错因首末占比 */
 const CAUSES = [
   { name: '计算失误', first: 32.1, last: 41.2 },
@@ -97,14 +82,8 @@ const CAUSES = [
 /* ==================== 2 参数 ==================== */
 
 const PARAMS = [
-  { id: 'H', name: 'H 半衰期', hint: '知识点加权与状态加权的共同衰减常数（后台常量，前端不开放配置）', min: 15, max: 60, step: 5, def: 30, unit: ' 天',
-    impacts: ['考核项 mastery', '档位 / 未掌握数', '达标率', 'P 全期位置', 'S / L / Δ′', '趋势态', '九显示态', '五档等级'] },
-  { id: 'B', name: 'B 波动带', hint: '偏离平时水平 ≥B 算异常；派生位置分界 ±B/2、单场异常界 2B', min: 5, max: 20, step: 1, def: 10, unit: ' 个百分点',
-    impacts: ['位置档（±B/2）', '单场异常（2B）', '趋势态越限', '九显示态', '需关注名单'] },
-  { id: 'k', name: 'k 确认次数', hint: '最近连续 k 次同向越限才升级为预警', min: 1, max: 3, step: 1, def: 2, unit: ' 次',
-    impacts: ['趋势态', '九显示态'] },
-  { id: 'm', name: 'm 缺交阈值', hint: '连续 m 次未交/缺考触发缺交预警（本例无缺交，不触发）', min: 1, max: 3, step: 1, def: 2, unit: ' 次',
-    impacts: ['缺交预警', '九显示态', '需关注名单'] },
+  { id: 'H', name: 'H 半衰期', hint: '知识点加权的时间衰减常数（后台常量，前端不开放配置）', min: 15, max: 60, step: 5, def: 30, unit: ' 天',
+    impacts: ['考核项 mastery', '档位 / 未掌握数', '达标率'] },
   { id: 'pass', name: '达标线', hint: '「掌握」档下限；3 档与 4 档均为 80（4 档的 90 是「优秀」下限）', min: 75, max: 90, step: 5, def: 80, unit: '%',
     impacts: ['达标率分子', '达标数量', '已达标标签'] },
   { id: 'low', name: '未掌握线', hint: '最低档上界，用于树图着色、未掌握计数、断层目标', min: 55, max: 70, step: 5, def: 60, unit: '%',
@@ -168,74 +147,7 @@ function stubbornOf(losses, thr, need) {
   return { hits, n, hit: n >= need, strength };
 }
 
-/* 状态判定 V3.0 */
-function stateEngine(series, anchor, p) {
-  const H = p.H, B = p.B;
-  const rows = series.map((s) => {
-    const days = dayDiff(s.date, anchor);
-    return { ...s, d: r1(s.rate - s.cRate), days, w: wOf(days, H), w2: wOf(days, 2 * H) };
-  });
-
-  // ① 先用 w2 求初判 P，剔除偏离 ≥2B 的极值后再求最终 P
-  const pRaw = wMean(rows.map((r) => r.d), rows.map((r) => r.w2));
-  const kept = rows.filter((r) => Math.abs(r.d - pRaw) < 2 * B);
-  const P = wMean(kept.map((r) => r.d), kept.map((r) => r.w2));
-
-  // ② 近窗（H/2 = 15 天）与基线（15 天以前）严格不重叠
-  const recent = kept.filter((r) => r.days <= H / 2);
-  const base = kept.filter((r) => r.days > H / 2);
-  const S = wMean(recent.map((r) => r.d), recent.map((r) => r.w));
-  const L = wMean(base.map((r) => r.d), base.map((r) => r.w));
-  const delta = S !== null && L !== null ? S - L : null;
-
-  // ③ 位置档与趋势态
-  const posBand = P <= -B / 2 ? '落后' : P >= B / 2 ? '领先' : '同步';
-  const recentBreach = recent.filter((r) => Math.abs(r.d - L) >= B).length;
-  const lastK = kept.slice(-p.k);
-  const allBelow = lastK.length === p.k && lastK.every((r) => r.d < L);
-  const allAbove = lastK.length === p.k && lastK.every((r) => r.d > L);
-
-  let trend = '平稳';
-  if (delta !== null && delta <= -B && allBelow) trend = '下滑';
-  else if (delta !== null && delta >= B && allAbove) trend = '进步';
-  else if (recentBreach === 1) trend = '单次波动';
-
-  // ④ 单场异常：最近一次 ≤ L−2B，且相对上一次的落差也 ≥2B（排除渐进下滑）
-  const last = kept[kept.length - 1];
-  const prev = kept[kept.length - 2];
-  const anomaly =
-    L !== null && last && prev && last.d <= L - 2 * B && prev.d - last.d >= 2 * B;
-
-  // ⑤ 位置回升：最早 2 次平均落后，而 P 已回到 −B/2 以上
-  const first2 = kept.slice(0, 2);
-  const rebound =
-    first2.length === 2 &&
-    mean(first2.map((r) => r.d)) <= -B / 2 &&
-    P > -B / 2;
-
-  // ⑥ 九显示态：命中即停
-  const recentCount = recent.length;
-  const baseCount = base.length;
-  let badge;
-  if (STUDENT.missStreak >= p.m) badge = { key: '缺交预警', cls: 'red', need: '是' };
-  else if (anomaly) badge = { key: '单场异常', cls: 'gray', need: '否（待核实）' };
-  else if (recentCount < 2 || baseCount === 0) badge = { key: '数据积累中', cls: 'gray', need: '否' };
-  else if (trend === '下滑') badge = { key: '下滑预警', cls: 'red', need: '是' };
-  else if (trend === '进步') badge = { key: '进步', cls: 'green', need: '否（正向关注）' };
-  else if (rebound) badge = { key: '位置回升', cls: 'green', need: '否（正向关注）' };
-  else if (posBand === '落后' && trend === '平稳') badge = { key: '持续落后', cls: 'orange', need: '是' };
-  else if (trend === '单次波动') badge = { key: '单次波动', cls: 'blue', need: '否' };
-  else badge = { key: '平稳', cls: '', need: '否' };
-
-  // ⑦ 一级指标：半衰期加权平均 rate 驱动五档等级
-  const absWeighted = wMean(rows.map((r) => r.rate), rows.map((r) => r.w));
-  const gradeName =
-    absWeighted >= 85 ? '优秀' : absWeighted >= 70 ? '良好' : absWeighted >= 60 ? '合格' : '待合格';
-
-  return { rows, pRaw, kept, P, S, L, delta, posBand, trend, recentBreach, anomaly, rebound,
-    badge, recentCount, baseCount, absWeighted, gradeName };
-}
-
+/* 原学生层状态引擎（d / w2 / P / S / L / Δ′ / 九显示态 / 五档等级）已随需关注名单一同下线 */
 /* 热力行尾六态：顽固优先，其余看前后两半均值差 */
 function heatTrend(losses, thr, need) {
   const valid = losses.filter((v) => v !== null);
@@ -344,7 +256,6 @@ function renderT3() {
   const max = Math.max(...rates), min = Math.min(...rates);
   const wins = rates.filter((r, i) => r > grades[i]).length;
   const winRate = (wins / rates.length) * 100;
-  const mom = m - PREV_RATE;
   const firstLast = rates[rates.length - 1] - rates[0];
   const should = CLASS_SIZE * TASKS.length;
   const done = sum(TASKS.map((t) => t.submitted));
@@ -372,7 +283,6 @@ function renderT3() {
       ['稳定度', fmt(stable) + '%', 'ok'],
       ['极差', fmt(max - min) + ' 个点', ''],
       ['年级对比胜率', fmt(winRate) + '%', 'ok'],
-      ['环比（vs ' + PREV_RATE + '）', (mom >= 0 ? '+' : '') + fmt(mom) + ' 个点', ''],
       ['首末变化', (firstLast >= 0 ? '+' : '') + fmt(firstLast) + ' 个点 · ' + trendBand(firstLast), ''],
       ['提交率', fmt(submit) + '%', ''],
     ]) +
@@ -382,7 +292,7 @@ function renderT3() {
       <div class="cmp bad"><h5>错误：σ ÷ (n−1) = ${fmt(sdSample(rates), 2)}</h5>
         <p>稳定度会变成 <span class="n">${fmt(100 - sdSample(rates))}</span>%，比正确值高 ${fmt(sdSample(rates) - sd, 2)} 个点。差得不多，但它是<b>系统性偏高</b>，全班 48 人都偏。</p></div>
     </div>` +
-    trap(`<b>三个易错点：</b>① 稳定度必须用同一个 σ 直接相减，<b>不得</b>先各自四舍五入到 1 位再减（会出现 100 − 4.4 = 95.6 而实际 95.63 的情况）；② 胜率是<b>严格大于</b>，本班与年级相等的那场不计胜；③ 环比在没有上一周期时<b>返回空，不显示 0</b>——0 会被读成「没有变化」。`);
+    trap(`<b>三个易错点：</b>① 稳定度必须用同一个 σ 直接相减，<b>不得</b>先各自四舍五入到 1 位再减（会出现 100 − 4.4 = 95.6 而实际 95.63 的情况）；② 胜率是<b>严格大于</b>，本班与年级相等的那场不计胜；③ 首末变化只取首末两场，中间场次的起伏不进趋势档，档位边界 ±3 / ±1 用原始差值严格比较，不得先取整（3.96 → 4.0 会把「缓慢」错判成「显著」）。`);
 }
 
 function renderT4(p) {
@@ -444,58 +354,6 @@ function renderT5(p) {
 }
 
 function renderT6(p) {
-  const st = stateEngine(STUDENT.series, STUDENT.anchor, p);
-  const m = masteryOf(ATOM.losses, TASKS.map((t) => t.date), PERIOD_END, p.H);
-
-  // 对照：把近窗也塞进基线（V2.0 的 bug）
-  const wAll = st.rows.map((r) => r.w);
-  const Lbad = wMean(st.rows.map((r) => r.d), wAll);
-  const deltaBad = st.S - Lbad;
-  const stillBelow = st.kept.slice(-p.k).length === p.k && st.kept.slice(-p.k).every((r) => r.d < Lbad);
-  const trendBad = deltaBad <= -p.B && stillBelow ? '下滑' : deltaBad >= p.B ? '进步' : '平稳';
-  const badgeBad = trendBad === '下滑' ? '下滑预警' : st.posBand === '落后' ? '持续落后' : '平稳';
-
-  const rows = st.rows.map((r) => [
-    `<td>${r.date}</td>`, `<td class="mid num">${r.days}</td>`,
-    `<td class="num">${fmt(r.rate)}</td>`, `<td class="num">${fmt(r.cRate)}</td>`,
-    `<td class="num ${r.d < 0 ? 'hit' : ''}">${fmt(r.d)}</td>`,
-    `<td class="mid num">${fmt(r.w, 3)}</td>`, `<td class="mid num">${fmt(r.w2, 3)}</td>`,
-    `<td class="mute">${r.days <= p.H / 2 ? '近窗' : '基线'}</td>`,
-    `<td class="num">${fmt(r.w * r.d, 2)}</td>`, `<td class="num">${fmt(r.w2 * r.d, 2)}</td>`,
-  ]);
-
-  /* 合计行只累计「未被极值剔除」的场次，避免合计与 P 的样本不一致 */
-  const dropped = st.rows.length - st.kept.length;
-  body('t6').innerHTML =
-    table(['日期', 'Δ 天', 'rate', 'cRate', 'd', 'w', 'w2', '归属', 'w·d', 'w2·d'], rows,
-      [`<td colspan="4">Σ（${st.kept.length} 场，剔除 ${dropped} 场极值）</td>`, `<td></td>`,
-       `<td class="num">${fmt(sum(st.kept.map((r) => r.w)), 3)}</td>`,
-       `<td class="num">${fmt(sum(st.kept.map((r) => r.w2)), 3)}</td>`, `<td></td>`,
-       `<td class="num">${fmt(sum(st.kept.map((r) => r.w * r.d)), 2)}</td>`,
-       `<td class="num">${fmt(sum(st.kept.map((r) => r.w2 * r.d)), 2)}</td>`]) +
-    table(['步骤', '公式', '结果', '说明'],
-      [[`<td>P 全期位置</td>`, `<td class="mute">Σw2·d ÷ Σw2（剔除 |d − P| ≥ 2B = ${2 * p.B} 的极值）</td>`, `<td class="num">${fmt(st.P, 2)}</td>`, `<td class="mute">${dropped ? `剔除 ${dropped} 场极值` : '本例无极值被剔除'}</td>`],
-       [`<td>位置档</td>`, `<td class="mute">P ≤ −${p.B / 2} 落后 / ≥ +${p.B / 2} 领先</td>`, `<td class="num">${st.posBand}</td>`, `<td class="mute">独立于趋势，不合成复合标签</td>`],
-       [`<td>S 近期水平</td>`, `<td class="mute">近 ${p.H / 2} 天内 ${st.recentCount} 场，w 加权</td>`, `<td class="num">${fmt(st.S, 2)}</td>`, `<td class="mute">日期 ≥ 11-27</td>`],
-       [`<td>L 平时水平</td>`, `<td class="mute">${p.H / 2} 天前 ${st.baseCount} 场，w 加权</td>`, `<td class="num">${fmt(st.L, 2)}</td>`, `<td class="mute">与 S 严格不重叠</td>`],
-       [`<td>Δ′ 变化量</td>`, `<td class="mute">S − L</td>`, `<td class="num">${fmt(st.delta, 2)}</td>`, `<td class="mute">≤ −${p.B} 且连续 ${p.k} 次低于 L 才判下滑</td>`],
-       [`<td>趋势态</td>`, `<td class="mute">越限场次：近窗 ${st.recentBreach} 次</td>`, `<td class="num">${st.trend}</td>`, `<td class="mute">最近 ${p.k} 次均低于 L：${st.kept.slice(-p.k).every((r) => r.d < st.L) ? '是' : '否'}</td>`],
-       [`<td>一级指标</td>`, `<td class="mute">半衰期加权 rate</td>`, `<td class="num">${fmt(st.absWeighted, 2)}%</td>`, `<td class="mute">≥85 优秀 / ≥70 良好 / ≥60 合格 → ${st.gradeName}</td>`]]) +
-    verdict(st.badge.cls === 'red' ? 'bad-bg' : 'warn-bg', [
-      ['最终徽章', st.badge.key, st.badge.cls === 'red' ? 'bad' : 'warn'],
-      ['需关注', st.badge.need, st.badge.need === '是' ? 'bad' : ''],
-      ['等级', st.gradeName, ''],
-    ]) +
-    `<div class="compare">
-      <div class="cmp good"><h5>正确：S 与 L 不重叠 → L = ${fmt(st.L, 2)}，Δ′ = ${fmt(st.delta, 2)}</h5>
-        <p>判「${st.trend}」，徽章 <span class="n">${st.badge.key}</span>。</p></div>
-      <div class="cmp bad"><h5>错误：把近窗也塞进基线 → L = ${fmt(Lbad, 2)}，Δ′ = ${fmt(deltaBad, 2)}</h5>
-        <p>Δ′ 被自己抵消掉一半，判「${trendBad}」，徽章变成 <span class="n">${badgeBad}</span>。同一个人、同一批数据，结论全错。这就是 XK-10 里 V2.0 半硬切分要修的那个问题。</p></div>
-    </div>` +
-    trap(`<b>四个边界：</b>① d 必须<b>同场</b>相减——用本周期均值减上一周期均值会把难度差混进「进步/退步」；② P 用 w2（半衰期 2H），S/L 用 w，两套权重不可互换；③ 单场异常是「最近一次 ≤ L − ${2 * p.B} 且相对上一次落差 ≥ ${2 * p.B}」，只有一处越限不算，避免把渐进下滑误判成突发；④ 九显示态<b>命中即停</b>，本例触发了优先级 4（下滑预警），后面的「持续落后」虽然有条件成立也不显示。`);
-}
-
-function renderT7(p) {
   const ht = heatTrend(ATOM.losses, p.stubThr, p.nStub);
   const cls = (l) => (l === null ? 'h0' : l < 20 ? 'h-l1' : l < 40 ? 'h-l2' : l < 60 ? 'h-l3' : l < 75 ? 'h-l4' : 'h-l5');
 
@@ -504,7 +362,7 @@ function renderT7(p) {
       <div class="heat"><span class="${cls(l)}">${l === null ? '未考' : fmt(l, 0)}</span></div>
     </div>`).join('');
 
-  body('t7').innerHTML =
+  body('t6').innerHTML =
     `<div style="display:flex;gap:10px;flex-wrap:wrap">${cells}</div>` +
     table(['判定项', '取数', '结果', '口径'],
       [[`<td>累计失分率</td>`, `<td class="mute">${ht.valid.map((x) => fmt(x, 0)).join(' + ')} ÷ ${ht.valid.length}</td>`, `<td class="num">${fmt(ht.cumulative)}%</td>`, `<td><span class="chip q-mean">算术平均</span></td>`],
@@ -515,7 +373,7 @@ function renderT7(p) {
     trap(`<b>两条不可互引：</b>① 累计列是<b>失分率</b>的算术平均，mastery 是<b>得分率</b>的时间加权值，两者只有恰好 1 场考查时才互补为 100；② 五档是<b>固定锚点</b>（40% 分界是得分率 60% 未掌握线的镜像），不随掌握档位的 3 档 / 4 档切换——改了档位，热力配色必须一动不动。`);
 }
 
-function renderT8() {
+function renderT7() {
   const rows = CAUSES.map((c) => {
     const ch = r1(c.last - c.first);
     const sig = Math.abs(ch) >= 3;
@@ -530,7 +388,7 @@ function renderT8() {
   const sig = rows.filter((r) => r.sig);
   const stableCount = rows.length - sig.length;
 
-  body('t8').innerHTML = tbl +
+  body('t7').innerHTML = tbl +
     verdict('', [
       ['显著迁移', sig.length + ' 条', ''],
       ['归入「基本稳定」', stableCount + ' 条', ''],
@@ -569,22 +427,21 @@ function renderSandbox() {
   const m = masteryOf(ATOM.losses, TASKS.map((t) => t.date), PERIOD_END, p.H);
   const tier = tierOf(m.mastery, p);
   const stub = stubbornOf(ATOM.losses, p.stubThr, p.nStub);
-  const st = stateEngine(STUDENT.series, STUDENT.anchor, p);
   const pass = MSET.nodes.filter((n) => n >= p.pass).length;
   const total = MSET.knowledgeCount + MSET.abilityCount;
   const lowN = MSET.nodes.filter((n) => n < p.low).length;
 
-  const defSt = stateEngine(STUDENT.series, STUDENT.anchor, Object.fromEntries(PARAMS.map((x) => [x.id, x.def])));
-  const defM = masteryOf(ATOM.losses, TASKS.map((t) => t.date), PERIOD_END, 30);
+  const defH = PARAMS.find((x) => x.id === 'H').def;
+  const defM = masteryOf(ATOM.losses, TASKS.map((t) => t.date), PERIOD_END, defH);
   const defStub = stubbornOf(ATOM.losses, 40, 3);
   const defPass = MSET.nodes.filter((n) => n >= 80).length;
   const defLow = MSET.nodes.filter((n) => n < 60).length;
 
-  const row = (label, sub, now, def, unit, off) => `
-    <div class="sb-row ${off ? 'off' : ''}">
+  const row = (label, sub, now, def, unit) => `
+    <div class="sb-row">
       <div class="lbl">${label}${sub ? `<em>${sub}</em>` : ''}</div>
       <div class="now">${now}${unit || ''}</div>
-      <div class="dlt">${off ? '不适用' : (now === def ? '不变' : '原 ' + def)}</div>
+      <div class="dlt">${now === def ? '不变' : '原 ' + def}</div>
     </div>`;
 
   $('sbResults').innerHTML =
@@ -593,16 +450,7 @@ function renderSandbox() {
     row('达标率', `${pass} ÷ |mSet| ${total}`, fmt((pass / total) * 100), fmt((defPass / total) * 100), '%') +
     row('未掌握节点数', `mastery < ${p.low}`, lowN, defLow, ' 个') +
     row('顽固命中', `${stub.n} 次 ≥ ${p.nStub}`, stub.hit ? '是' : '否', defStub.hit ? '是' : '否', '') +
-    row('顽固强度', '按命中次数分档', stub.strength, defStub.strength, '') +
-    row('P 全期位置', `w2，分界 ±${p.B / 2}`, fmt(st.P, 2), fmt(defSt.P, 2), '') +
-    row('位置档', `P ${st.P <= -p.B / 2 ? '≤' : '>'} −${p.B / 2}`, st.posBand, defSt.posBand, '') +
-    row('S / L', `近 ${p.H / 2} 天 vs 更早`, `${fmt(st.S, 1)} / ${fmt(st.L, 1)}`, `${fmt(defSt.S, 1)} / ${fmt(defSt.L, 1)}`, '') +
-    row('Δ′ 变化量', 'S − L', fmt(st.delta, 2), fmt(defSt.delta, 2), '') +
-    row('趋势态', `|Δ′| ≥ ${p.B} 且连续 ${p.k} 次`, st.trend, defSt.trend, '') +
-    row('九显示态', '命中即停', st.badge.key, defSt.badge.key, '') +
-    row('需关注', '缺交 ∪ 下滑 ∪ 持续落后', st.badge.need, defSt.badge.need, '') +
-    row('五档等级', '半衰期加权 rate', st.gradeName, defSt.gradeName, '') +
-    row('缺交预警', `连续 ${p.m} 次未交`, '未触发', '未触发', '', changed.has('m'));
+    row('顽固强度', '按命中次数分档', stub.strength, defStub.strength, '');
 
   const impactSet = new Set();
   changed.forEach((id) => {
@@ -628,11 +476,7 @@ const PITFALLS = [
   { no: 'P-05', what: '未考查场次按 0 分计入', why: 'mastery 被系统性压低，与「确实没掌握」混为一谈（未知 ≠ 未掌握）。', do: 'null 场次不进分子也不进分母', assert: 'Σw 只累计有效场次' },
   { no: 'P-06', what: '顽固判定用得分率计数', why: '方向反了：得分率高的场次被判成顽固。本卡实例从 3 次变 4 次，强度从「疑似」跳到「结构性」。', do: '一律用 loss = 100 − rate 计数', assert: 'stub(loss) !== stub(rate)' },
   { no: 'P-07', what: '同一任务多次批改重复计数', why: '一次考试的多次改分会把「3 次不同任务」凑成 4 次，凭空造出顽固项。', do: '按任务去重，取最终生效成绩', assert: 'count(distinct taskId)' },
-  { no: 'P-08', what: 'S 与 L 的时间窗重叠', why: '近窗数据同时进基线，Δ′ 被自己抵消，下滑预警降级成「持续落后」。本卡实例 Δ′ 从 −13.2 变 −4.6。', do: 'S：days ≤ H/2；L：days > H/2，严格互斥', assert: 'S ∩ L === ∅' },
-  { no: 'P-09', what: 'P 用 w 而不是 w2', why: '「平时水平」退化成「近期水平」，位置档跟着漂移。', do: 'P 用 w2 = 0.5^(Δ/2H)', assert: '|P(w2) − P(w)| > 0.5' },
-  { no: 'P-10', what: 'd 用周期均值相减', why: '把两次考试的难度差混进「进步/退步」，同一批学生结论全反。', do: 'd 必须同场相减 rate − cRate', assert: '每行 d === rate − cRate' },
-  { no: 'P-11', what: 'Δ 符号复用（距锚点天数 / 变化量）', why: 'PRD 两处都写 Δ，实现时极易把 S − L 当成天数去做幂运算。两者锚点也不同：链 A 锚周期结束日，链 D 锚最新任务日。', do: '拆成 daysToAnchor 与 delta 两个变量', assert: '幂运算入参恒为非负整数天' },
-  { no: 'P-12', what: '跨口径互引（加权值进均价、累计列与 mastery 互补）', why: '页面之间互相打脸，且没人能判断哪个数对。', do: '三类口径各自只在链内流转', assert: '同一数字只出现在一个口径的展示位' },
+  { no: 'P-08', what: '跨口径互引（加权值进均价、累计列与 mastery 互补）', why: '页面之间互相打脸，且没人能判断哪个数对。', do: '三类口径各自只在链内流转', assert: '同一数字只出现在一个口径的展示位' },
 ];
 
 function renderPitfalls() {
@@ -654,18 +498,15 @@ function buildAsserts() {
   const sd = sdPop(rates);
   const sdS = sdSample(rates);
   const m = masteryOf(ATOM.losses, TASKS.map((t) => t.date), PERIOD_END, P.H);
-  const st = stateEngine(STUDENT.series, STUDENT.anchor, P);
   const stubLoss = stubbornOf(ATOM.losses, P.stubThr, P.nStub).n;
   const stubRate = ATOM.losses.filter((l) => l !== null && 100 - l >= P.stubThr).length;
   const total = MSET.knowledgeCount + MSET.abilityCount;
   const pass = MSET.nodes.filter((n) => n >= P.pass).length;
   const low = MSET.nodes.filter((n) => n < P.low).length;
   const oneField = wMean([71.3], [wOf(21, P.H)]);
-  const pw = wMean(st.rows.map((r) => r.d), st.rows.map((r) => r.w));
-  const pw2 = wMean(st.rows.map((r) => r.d), st.rows.map((r) => r.w * 2));
-  const recent = st.kept.filter((r) => r.days <= P.H / 2).map((r) => r.date);
-  const base = st.kept.filter((r) => r.days > P.H / 2).map((r) => r.date);
-  const bDef = PARAMS.find((x) => x.id === 'B').def;
+  const ws = TASKS.map((t) => wOf(dayDiff(t.date, PERIOD_END), P.H));
+  const pw = wMean(rates, ws);
+  const pw2 = wMean(rates, ws.map((w) => w * 2));
 
   return [
     { id: 'A-01', t: 'σ 除以 n 而非 n−1',
@@ -696,26 +537,10 @@ function buildAsserts() {
       expr: 'stub(loss) ≠ stub(100 − loss)',
       act: `${stubLoss} ≠ ${stubRate}`, exp: '两者不相等（默认 3 vs 4）',
       ok: stubLoss !== stubRate },
-    { id: 'A-08', t: 'd 必须同场相减',
-      expr: '每行 d === rate − cRate',
-      act: String(st.rows.every((r) => r.d === r1(r.rate - r.cRate))), exp: 'true',
-      ok: st.rows.every((r) => r.d === r1(r.rate - r.cRate)) },
-    { id: 'A-09', t: 'S 与 L 时间窗互斥',
-      expr: 'S 日期集 ∩ L 日期集 === ∅',
-      act: String(recent.filter((d) => base.includes(d)).length), exp: '0',
-      ok: recent.filter((d) => base.includes(d)).length === 0 },
-    { id: 'A-10', t: 'P 用 w2 而非 w',
-      expr: '|P(w2) − P(w)| > 0.5',
-      act: fmt(Math.abs(st.P - pw), 2), exp: '> 0.50',
-      ok: Math.abs(st.P - pw) > 0.5 },
-    { id: 'A-11', t: '权重等比缩放不改变结果',
+    { id: 'A-08', t: '权重等比缩放不改变结果',
       expr: 'wMean(v, 2w) === wMean(v, w)',
       act: String(Math.abs(pw2 - pw) < 1e-9), exp: 'true',
       ok: Math.abs(pw2 - pw) < 1e-9 },
-    { id: 'A-12', t: '状态派生界可由参数推出',
-      expr: '位置分界 === B/2 且 单场异常界 === 2B',
-      act: `${bDef / 2} / ${2 * bDef}`, exp: `${bDef / 2} / ${2 * bDef}`,
-      ok: bDef / 2 === 5 && 2 * bDef === 20 },
   ];
 }
 
@@ -756,8 +581,7 @@ function renderAll() {
   renderT4(P);
   renderT5(P);
   renderT6(P);
-  renderT7(P);
-  renderT8();
+  renderT7();
   renderSandbox();
 }
 
