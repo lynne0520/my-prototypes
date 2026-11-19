@@ -411,14 +411,15 @@ const kpTagColors = {
 /* ---------------- 周期分析数据（整合自班级周期分析报告） ---------------- */
 
 // 纳入统计的任务序列（时间正序，名称与学情来源 / 明细数据保持一致）
-// chapter/score/submitted/weakKp 为任务清单演示字段：已交口径与顶部提交率（288/276）自洽，薄弱点取自 kpTree 真实薄弱项
+// chapter/score/submitted 为任务清单演示字段（已交口径与顶部提交率 288/276 自洽）；
+// 「首要薄弱点」不在此预置：由该场题目挂接的末级知识点得分率派生（见 periodTaskWeakAtoms）
 const periodTasks = [
-    { name: '第一次月考', full: '2025-26学年第一次月考', date: '2025-09-28', type: 'exam', classRate: 72.4, gradeRate: 70.2, chapter: '集合与逻辑', score: 100, submitted: 48, weakKp: '充分与必要条件' },
-    { name: '同步作业(三)', full: '高中数学必修一同步作业 (三)', date: '2025-10-09', type: 'assignment', classRate: 68.1, gradeRate: 66.8, chapter: '函数基础', score: 50, submitted: 46, weakKp: '函数的概念' },
-    { name: '同步作业(五)', full: '高中数学必修一同步作业 (五)', date: '2025-10-16', type: 'assignment', classRate: 74.6, gradeRate: 72.1, chapter: '指数与对数', score: 50, submitted: 48, weakKp: '指数幂运算' },
-    { name: '期中联考', full: '十一月期中联考', date: '2025-11-13', type: 'exam', classRate: 63.4, gradeRate: 65.9, chapter: '函数基础', score: 100, submitted: 44, weakKp: '函数性质' },
-    { name: '同步作业(七)', full: '高中数学必修一同步作业 (七)', date: '2025-11-20', type: 'assignment', classRate: 71.3, gradeRate: 69.8, chapter: '指数与对数', score: 50, submitted: 45, weakKp: '指数函数' },
-    { name: '冲刺卷(一)', full: '期末模拟冲刺卷 (一)', date: '2025-12-11', type: 'exam', classRate: 76.8, gradeRate: 75.4, chapter: '综合测试', score: 100, submitted: 45, weakKp: '指数函数' }
+    { name: '第一次月考', full: '2025-26学年第一次月考', date: '2025-09-28', type: 'exam', classRate: 72.4, gradeRate: 70.2, chapter: '集合与逻辑', score: 100, submitted: 48 },
+    { name: '同步作业(三)', full: '高中数学必修一同步作业 (三)', date: '2025-10-09', type: 'assignment', classRate: 68.1, gradeRate: 66.8, chapter: '函数基础', score: 50, submitted: 46 },
+    { name: '同步作业(五)', full: '高中数学必修一同步作业 (五)', date: '2025-10-16', type: 'assignment', classRate: 74.6, gradeRate: 72.1, chapter: '指数与对数', score: 50, submitted: 48 },
+    { name: '期中联考', full: '十一月期中联考', date: '2025-11-13', type: 'exam', classRate: 63.4, gradeRate: 65.9, chapter: '函数基础', score: 100, submitted: 44 },
+    { name: '同步作业(七)', full: '高中数学必修一同步作业 (七)', date: '2025-11-20', type: 'assignment', classRate: 71.3, gradeRate: 69.8, chapter: '指数与对数', score: 50, submitted: 45 },
+    { name: '冲刺卷(一)', full: '期末模拟冲刺卷 (一)', date: '2025-12-11', type: 'exam', classRate: 76.8, gradeRate: 75.4, chapter: '综合测试', score: 100, submitted: 45 }
 ];
 
 // 错因体系（仅名称 + 配色；干预文案不在此预置，统一走 causeAdviceOf 的通用指标模板，
@@ -2562,6 +2563,25 @@ function renderPeriodKpis() {
     });
 }
 
+// 任务清单「首要薄弱点」：该场已考查的末级知识点中得分率最低者（= 失分率最高）；
+// 并列最低的全部返回（保持题库顺序），该场无挂接返回空数组——不猜值
+function periodTaskWeakAtoms(ti) {
+    const atoms = ensurePeriodModel().atoms.filter(a => a.values[ti] != null);
+    if (!atoms.length) return [];
+    const worst = Math.max(...atoms.map(a => a.values[ti]));
+    return atoms.filter(a => a.values[ti] === worst).map(a => a.name);
+}
+
+// 单元格单行容量约 11 个全角字符（列宽约 190px − 内边距 32px，14px 字号），超出截断、留给悬停气泡
+const WK_KP_CELL_CHARS = 11;
+function wkKpCellText(names) {
+    const full = names.join('、');
+    return full.length > WK_KP_CELL_CHARS ? full.slice(0, WK_KP_CELL_CHARS - 1) + '…' : full;
+}
+function wkKpTipText(names) {
+    return `本次得分率最低的末级知识点${names.length > 1 ? `（并列 ${names.length} 项）` : ''}：${names.join('、')}`;
+}
+
 // 期间任务清单（迁移自校级学情报告平台 · 班级周期分析报告第 3 节，列字段全量对齐）
 function renderPeriodTaskTable() {
     const el = El.periodTaskTableWrap;
@@ -2591,6 +2611,7 @@ function renderPeriodTaskTable() {
     }
     rows.forEach(t => {
         const d = Math.round((t.classRate - t.gradeRate) * 10) / 10;
+        const weakNames = periodTaskWeakAtoms(periodTasks.indexOf(t));
         html += '<tr>' +
             `<td>${t.date}</td>` +
             `<td class="task-name" title="${escapeHTML(t.full)}">${escapeHTML(t.name)}</td>` +
@@ -2600,7 +2621,9 @@ function renderPeriodTaskTable() {
             `<td class="rate-cell">${t.classRate}</td>` +
             `<td class="rate-cell muted">${t.gradeRate}</td>` +
             `<td class="rate-cell ${d >= 0 ? 'td-up' : 'td-down'}">${d > 0 ? '+' : ''}${d}%</td>` +
-            `<td class="left-cell weak-kp" title="该次任务失分最集中的${dimensionLabel()}">${escapeHTML(t.weakKp || '—')}</td>` +
+            (weakNames.length
+                ? `<td class="left-cell weak-kp" data-wk-tip="${escapeHTML(wkKpTipText(weakNames))}">${escapeHTML(wkKpCellText(weakNames))}</td>`
+                : '<td class="left-cell weak-kp">—</td>') +
             '<td><span class="task-link" onclick="showProtoToast(\'打开作业详情\')">查看明细</span></td>' +
             '</tr>';
     });
@@ -2613,7 +2636,9 @@ function renderPeriodTaskTable() {
         `<td class="rate-cell">${s.pRate}</td>` +
         `<td class="rate-cell muted">${gradeAvg}</td>` +
         `<td class="rate-cell ${diff >= 0 ? 'td-up' : 'td-down'}">${diff > 0 ? '+' : ''}${diff}%</td>` +
-        `<td class="left-cell weak-kp" title="周期内累计失分率最高的顽固薄弱项">${escapeHTML(worstKp)}</td>` +
+        (leafStubs.length
+            ? `<td class="left-cell weak-kp" data-wk-tip="周期内累计失分率最高的顽固薄弱项（考核项口径）：${escapeHTML(worstKp)}">${escapeHTML(worstKp)}</td>`
+            : '<td class="left-cell weak-kp">—</td>') +
         '<td>—</td>' +
         '</tr>';
     html += '</tbody></table></div>';
@@ -2636,6 +2661,44 @@ function showProtoToast(msg) {
     clearTimeout(protoToastTimer);
     protoToastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
+
+/* 首要薄弱点气泡：单元格文本按列宽截断，悬停显示全部并列项。
+   表格容器 overflow 会裁剪 CSS ::after 气泡，故用 body 级 fixed 浮层 */
+let wkKpTipEl = null;
+function wkKpTipNode() {
+    if (!wkKpTipEl) {
+        wkKpTipEl = document.createElement('div');
+        wkKpTipEl.className = 'wk-kp-tip';
+        document.body.appendChild(wkKpTipEl);
+    }
+    return wkKpTipEl;
+}
+function moveWkKpTip(x, y) {
+    const tip = wkKpTipNode();
+    const box = tip.getBoundingClientRect();
+    const pad = 14;
+    let left = x + pad, top = y + pad;
+    if (left + box.width > window.innerWidth - 8) left = x - box.width - pad;
+    if (top + box.height > window.innerHeight - 8) top = y - box.height - pad;
+    tip.style.left = Math.max(8, left) + 'px';
+    tip.style.top = Math.max(8, top) + 'px';
+}
+function hideWkKpTip() {
+    if (wkKpTipEl) wkKpTipEl.classList.remove('show');
+}
+// 事件委托挂一次：单元格随排序 / 重渲染重建，无需逐次绑定
+function wkKpTipTargetOf(e) {
+    return e.target && e.target.closest ? e.target.closest('.period-task-table .weak-kp[data-wk-tip]') : null;
+}
+document.addEventListener('mousemove', e => {
+    const cell = wkKpTipTargetOf(e);
+    if (!cell) { hideWkKpTip(); return; }
+    const tip = wkKpTipNode();
+    if (tip.innerText !== cell.dataset.wkTip) tip.innerText = cell.dataset.wkTip;
+    tip.classList.add('show');
+    moveWkKpTip(e.clientX, e.clientY);
+});
+window.addEventListener('scroll', hideWkKpTip, true);   // 页面 / 表格滚动时气泡不留在旧位置
 
 // 任务清单得分率列排序状态：升序 → 降序 → 恢复默认（三态切换）
 let periodTaskSort = { key: null, dir: 1 };
@@ -4726,7 +4789,22 @@ function updateSourceCounts() {
     if (elE) elE.innerText = `(${eChecked}/${ModalData.exams.length})`;
 }
 
-// 时间范围回显文案：按当前激活档位与对应日期控件生成（弹窗内设定 → 外部胶囊 / 弹窗底栏同源回显）
+// ISO 自然周解析：'2026-W38' → { year:2026, week:38, monday, sunday, start:'09-14', end:'09-20' }
+// 周一=1 … 周日=7；周口径回显与弹窗周选择器右侧的起止日期提示共用这一份算法，避免两处各算一遍算出不同日期
+function isoWeekRange(value) {
+    const m = /^(\d{4})-W(\d{1,2})$/.exec(value || '');
+    if (!m) return null;
+    const jan4 = new Date(Number(m[1]), 0, 4);
+    const day = jan4.getDay() || 7;
+    const monday = new Date(jan4);
+    monday.setDate(jan4.getDate() - (day - 1) + (Number(m[2]) - 1) * 7);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return { year: Number(m[1]), week: Number(m[2]), monday, sunday, start: fmt(monday), end: fmt(sunday) };
+}
+
+// 时间范围回显文案：按当前激活档位与对应日期控件生成（弹窗内设定 → 外部胶囊同源回显）
 function timeScopeText() {
     const active = document.querySelector('#timeSegment .segment-btn.active');
     const seg = active ? active.textContent.trim() : '月';
@@ -4739,23 +4817,22 @@ function timeScopeText() {
         return `${parts[0]}年${Number(parts[1])}月`;
     }
     if (seg === '周') {
-        const w = val('weekPickInput');
-        const hint = document.getElementById('weekPickHint');
-        const range = hint && hint.innerText && hint.innerText !== '--' ? `（${hint.innerText}）` : '';
-        return w ? `${w}${range}` : '—';
+        // 周口径回显只给「年 + 第 x 周 + 起始日期」：结束日由自然周隐含（周一 ~ 周日共 7 天），
+        // 完整起止区间仍显示在弹窗周选择器右侧的 .week-hint 里
+        const wk = isoWeekRange(val('weekPickInput'));
+        return wk ? `${wk.year}年第${wk.week}周（${wk.start}）` : '—';
     }
     const s = val('customDateStart'), e = val('customDateEnd');
     return s && e ? `${s} ~ ${e}` : '—';
 }
 
-// 回显同步：筛选栏胶囊（时间范围 · 已选 N 份）+ 弹窗底栏当前范围，两处同读一份口径
+// 回显同步：筛选栏胶囊（时间范围 · 已选 N 份）与弹窗底栏已选份数，两处同读一份口径
 function syncScopeEcho() {
     const total = ModalData.assignments.filter(a => a.checked).length + ModalData.exams.filter(e => e.checked).length;
     const range = timeScopeText();
     const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
     set('filterRangeText', range);
     set('filterCountText', `已选 ${total} 份`);
-    set('modalRangeEcho', range);
     set('modalCountEcho', `已选 ${total} / ${SOURCE_MAX_SELECT} 份`);
     if (El.filterCount) El.filterCount.title = `统计范围 ${range} · 已选 ${total} / ${SOURCE_MAX_SELECT} 份（作业 + 考试合计上限 ${SOURCE_MAX_SELECT} 份，点击设置时间范围与学情来源）`;
 }
@@ -5293,21 +5370,13 @@ function bindEvents() {
     const timeSegment = document.getElementById('timeSegment');
     const customDateRange = document.getElementById('customDateRange');
     if (timeSegment && customDateRange) {
-        // 自然周提示：由 ISO 周号推算周一~周日日期范围
+        // 自然周提示：由 ISO 周号推算周一~周日日期范围（与回显文案共用 isoWeekRange）
         const updateWeekHint = () => {
             const input = document.getElementById('weekPickInput');
             const hint = document.getElementById('weekPickHint');
             if (!input || !hint) return;
-            const m = /^(\d{4})-W(\d{1,2})$/.exec(input.value || '');
-            if (!m) { hint.innerText = '--'; return; }
-            const jan4 = new Date(Number(m[1]), 0, 4);
-            const day = jan4.getDay() || 7;               // 周一=1 … 周日=7
-            const monday = new Date(jan4);
-            monday.setDate(jan4.getDate() - (day - 1) + (Number(m[2]) - 1) * 7);
-            const sunday = new Date(monday);
-            sunday.setDate(monday.getDate() + 6);
-            const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-            hint.innerText = `${fmt(monday)} ~ ${fmt(sunday)}`;
+            const wk = isoWeekRange(input.value);
+            hint.innerText = wk ? `${wk.start} ~ ${wk.end}` : '--';
         };
         const pickers = {
             '学年': document.getElementById('yearRangePicker'),
@@ -6480,7 +6549,7 @@ init();
                 '| 学年 | 默认当前学年（演示 2025-2026）；下拉只列学年（含 2024-2025、2023-2024），不展示各学年所带年级班级；切换后按所选学年回查该班学生群体的作业与考试数据，年级班级选中保持不变，全量重算 |',
                 '| 班级 | 默认当前学年任教班级（演示高二 1 班）；列表随所选年级的任教权限生成；选「全部班级」时隐藏「班级平均得分率」卡（无单一班级可算均值） |',
                 '| 学科 | 范围为教务权限内学科，恒 ≥1 个：单学科固定不可切，多学科按列表切换，默认选中第一个；演示按双学科（数学、语文）配置，语文无知识体系 → 切语文学科进入 L2-a 缺省页（XK-13），切回数学恢复原页签与图表 |',
-                '| 时间 | 学年 / 月 / 周（默认）/ 自定义四档，档位切换对应日期控件显隐；月、周、自定义可跨学年选择（范围取教务权限数据并集）；档位与日期控件收在「学情来源与统计范围」弹窗顶部的时间条内，筛选栏只回显「时间范围 · 已选 N 份」胶囊，不再直放时间控件；默认档位为「周」（默认周 2026-W38 = 09-14 ~ 09-20） |',
+                '| 时间 | 学年 / 月 / 周（默认）/ 自定义四档，档位切换对应日期控件显隐；月、周、自定义可跨学年选择（范围取教务权限数据并集）；档位与日期控件收在「学情来源与统计范围」弹窗顶部的时间条内，筛选栏只回显「时间范围 · 已选 N 份」胶囊，不再直放时间控件；周档胶囊文案为「年 + 第 x 周（起始日期）」（默认周显示 2026年第38周（09-14），结束日由自然周隐含，完整起止区间仅在弹窗周选择器右侧提示），默认档位为「周」 |',
                 '| 学情来源 | 筛选栏胶囊点开弹窗（XK-12）：顶部设统计时间范围、下方勾选作业 / 考试，一次设定；选择即时生效，取消不回滚；**作业 + 考试合计最多 20 份**，默认选中最近 20 份（两栏合并后按日期从新到旧，同日按列表原序、作业列在前）；数据时效：作业截止到前一天（不含今天），考试以完整学情发布为准 |',
                 '| 掌握程度 | 「设置掌握程度」打开弹窗（XK-12）；档位全校共用，学科组长及以上可写，学科教师 / 班主任为只读查看（悬停提示联系学科组长） |',
                 '',
@@ -6519,7 +6588,8 @@ init();
                 '| 顽固薄弱 | 全维度末级顽固非空 | 恒红 | 命中数 + 名单（含能力维度）+ 判定口径；定性「结构性问题，建议专项复习而非重复讲题」 |',
                 '| 行动建议 | 全维度末级顽固非空 | 恒琥珀 | 针对平均失分率最高的一项优先安排专项课时；验证目标失分率降至 40% 以下 |',
                 '',
-                '- **得分趋势图**：本班得分率（蓝实线，考试三角、作业圆点）与年级得分率（灰虚线）双折线；**任务清单**：列头可排序，合计行「首要薄弱点」取全部维度末级节点中平均失分率最高的一项。',
+                '- **得分趋势图**：本班得分率（蓝实线，考试三角、作业圆点）与年级得分率（灰虚线）双折线。',
+                '- **任务清单**：列头可排序。每行「首要薄弱点」= 该场任务**已考查末级知识点中得分率最低**者（得分率 = 100 − 失分率，同一末级知识点挂多题时按分值加权）；并列最低的全部展示、顿号分隔；列宽不足截断为「…」，悬停单元格弹出气泡显示全部（并列时标注并列项数）；该场无挂接末级知识点置「—」。合计行口径不同：取 `mSet` 内周期累计失分率最高的一项（考核项 / 能力末级节点口径，与卡4 顽固薄弱同源），悬停同样显示气泡说明。',
                 '- **查看明细分流**：作业 → 作业讲评页，考试 → 试卷讲评页，携带该行任务标识落地到具体任务；跳转前按角色判定讲评页菜单权限，无权限不跳转并提示「暂无查看权限」（约 2.2 秒消失，入口仍可见）；原型阶段点击仅提示「打开作业详情」，真实跳转与权限判定待讲评模块接入。'
             ].join('\n')
         },
@@ -7055,7 +7125,7 @@ init();
                 '| 模块 | 条件、显示、交互与样式 |',
                 '| --- | --- |',
                 '| 设置掌握程度 | 3 档 / 4 档单选，显示最后保存时间与操作人；学科组长及以上可改并确认，确认后班级与学生追踪同步；打开后若他人已保存，须选择「使用最新」或「以我的为准」。学科教师 / 班主任只读：选项与区间呈灰色禁改态，区间用灰底虚线和禁止光标，仅右上角 × 关闭，不显示取消 / 确认及权限说明条 |',
-                '| 学情来源与统计范围 | 顶部为学年 / 月 / 周 / 自定义时间条及对应日期控件；**标题旁小字**注明「最多支持分析 20 份作业或考试」（达上限转琥珀）；下方作业 / 考试双栏，支持单选、栏头全选和已选计数；底栏左组为回显「当前范围 · 已选 N / 20 份」+ 内联配额状态（还可再选 N 份 / 已达上限）+「恢复最近 20 份」按钮（置于回显后），与筛选栏胶囊同步。选择即时生效，取消不回滚；作业截至前一天且不含今天，考试仅计已发布完整学情；学生追踪复用同款弹窗 |',
+                '| 学情来源与统计范围 | 顶部为学年 / 月 / 周 / 自定义时间条及对应日期控件；**标题旁小字**注明「最多支持分析 20 份作业或考试」（达上限转琥珀）；下方作业 / 考试双栏，支持单选、栏头全选和已选计数；底栏左组为回显「已选 N / 20 份」+ 内联配额状态（还可再选 N 份 / 已达上限）+「恢复最近 20 份」按钮（置于回显后），与筛选栏胶囊同步；底栏不再回显时间范围（时间范围只在筛选栏胶囊）。选择即时生效，取消不回滚；作业截至前一天且不含今天，考试仅计已发布完整学情；学生追踪复用同款弹窗 |',
                 '| 关联诊断抽屉 | 右侧滑入白底抽屉，宽不超过 560px、窄屏为视口 94%，内容滚动、底栏固定。头部显示知识点层级、名称、路径、证据、周期汇总、掌握档位和未掌握人数；正文按前置、易混淆、后续、学生分组排列。点击关系名可切换目标点；仅有关系时显示对应区，仅有建议时显示建议入口 |',
                 '| 分组教学建议抽屉 | 显示六类建议的教学动作、关注范围、建议对象和判定依据；顶部可返回关联诊断，底部支持关闭、复制建议、导出 CSV。从指定建议进入时滚动定位并短暂高亮；无建议时显示统一空态 |',
                 '| 题库知识图谱组件 | 一期保留自研图谱组件；题库组件仅提供全屏查看入口 |',
@@ -7072,7 +7142,7 @@ init();
                 '| 栏头全选 | 取消全选不受限；勾选全选时保留已选项，只把剩余配额按日期从新到旧补入本栏；补不完时 toast 告知「仅补入最近 N 份，其余 M 份未选；再次点击栏头可清空本栏」，配额为 0 且本栏无已选时只提示先取消已选项；部分选中时栏头复选框呈半选态。**两段式意图**：被截断后紧接着的第二次点击 = 清空本栏（toast 告知腾出配额），避免栏头永久卡在半选导致整栏取消不可达；单行勾选变化或一键恢复会清除该意图 |',
                 '| 一键恢复 | 「恢复最近 20 份」按钮位于底栏回显之后，按默认口径重选（覆盖当前勾选），用于配额用尽后快速回到可用状态 |',
                 '| 上限说明与状态 | 不设独立配额条 / 进度条：标题旁小字「最多支持分析 20 份作业或考试」；底栏回显内联状态——未满灰字「还可再选 N 份」（剩余 ≤3 份转琥珀字）、已满琥珀徽章「已达上限」且已选计数转琥珀加粗 |',
-                '| 回显 | 弹窗底栏「已选 N / 20 份」+ 内联配额状态；筛选栏胶囊保持「已选 N 份」，悬停提示含上限口径 |',
+                '| 回显 | 弹窗底栏「已选 N / 20 份」+ 内联配额状态（不显示时间范围字段）；筛选栏胶囊保持「时间范围 · 已选 N 份」，悬停提示含上限口径 |',
                 '| 视口兜底 | 矮视口（高 ≤700px）只压缩固定占位留白、不删说明文案，弹窗整体滚动且头部吸顶 / 底栏吸底，双栏区域保底 320px 不被压成一条缝；窄屏（宽 ≤760px）双栏上下排列、只保留弹窗一条滚动轴（考试栏不得藏在嵌套滚动区折叠线以下），底栏左组（回显 + 恢复按钮）独占换行保证「已选 N / 20 份」不被裁切，档位按钮不逐字竖排 |',
                 '',
                 '> **边界与红线**：不生成题目、题量、题型配比、组卷、题库保存或新练习；效果验证只给教学建议，不生成复测题。无作答证据 = 未知 ≠ 未掌握；综合题失分 ≠ 全关联薄弱；前后序关系须经教研确认，未确认不得作为失分归因事实；班级均值不得写成每名学生的问题。',
@@ -7314,7 +7384,8 @@ init();
                 '| 提交率 | 实交人次 ÷ 应交人次 × 100，应交人次 = 班级人数 × 任务数（迟交计入已交，不单列） | XK-04 卡5 |',
                 '| 年级对比胜率 | 本班 `cRate` 高于年级同场得分率的场次 ÷ 任务数 | XK-04 周期结论「年级对比」条 |',
                 '| 趋势档位 | 首末变化按 +3 / +1 / −1 / −3 分档 | XK-04 周期结论「趋势」条 |',
-                '| 任务清单首要薄弱点 | `mSet` 内累计失分率最高的一项（含能力末级节点） | XK-04 任务清单合计行 |',
+                '| 任务清单行首要薄弱点 | 该场任务已考查末级知识点中得分率最低者（= 失分率最高），并列全取；无挂接置「—」 | XK-04 任务清单各行 |',
+                '| 任务清单合计行首要薄弱点 | `mSet` 内累计失分率最高的一项（含能力末级节点，考核项口径，与卡4 同源） | XK-04 任务清单合计行 |',
                 '',
                 '#### 4.2 知识点分析 · 明细、热力与图谱（XK-05 / XK-06 / XK-06A）',
                 '',

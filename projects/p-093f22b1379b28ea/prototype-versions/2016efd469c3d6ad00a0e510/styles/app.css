@@ -2107,10 +2107,6 @@ body {
         flex: 1 1 100%;
         max-width: 100%;
     }
-
-    .source-modal .modal-scope-range {
-        max-width: 58vw;
-    }
 }
 
 /* 矮视口：压缩固定占位的内边距，把高度还给任务列表；
@@ -2430,30 +2426,13 @@ body {
     flex-shrink: 0;
 }
 
-.modal-scope-label {
-    font-weight: 600;
-    color: var(--secondary);
-    flex-shrink: 0;
-    white-space: nowrap;
-}
-
-.modal-scope-echo .filter-scope-sep,
 .modal-scope-echo #modalCountEcho,
 .modal-scope-echo #stKpModalCountEcho {
     flex-shrink: 0;
     white-space: nowrap;
 }
 
-.modal-scope-range {
-    font-weight: 700;
-    color: var(--text-main);
-    flex: 0 1 auto;
-    min-width: 0;
-    max-width: 38vw;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
+/* 底栏不再回显时间范围（范围只在筛选栏胶囊里），.modal-scope-label / .modal-scope-range 样式随之废弃 */
 
 /* 底栏按钮不参与收缩：回显过长时只压缩回显文本，按钮不换行、不竖排 */
 .modal-footer > .btn {
@@ -2868,6 +2847,34 @@ body {
 
 .period-task-table .weak-kp {
     font-weight: 600;
+}
+
+/* 首要薄弱点：文本由 JS 按列宽截断为「…」，悬停光标提示可看全部 */
+.period-task-table .weak-kp[data-wk-tip] {
+    cursor: help;
+}
+
+/* 首要薄弱点气泡：body 级 fixed 浮层（表格容器 overflow 会裁剪 ::after 气泡），位置由 JS 跟随光标 */
+.wk-kp-tip {
+    position: fixed;
+    z-index: 1400;
+    max-width: 320px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: rgba(48, 59, 86, 0.95);
+    color: #fff;
+    font-size: 12.5px;
+    line-height: 1.6;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.15s;
+}
+
+.wk-kp-tip.show {
+    opacity: 1;
+    visibility: visible;
 }
 
 .period-task-table .task-link {
