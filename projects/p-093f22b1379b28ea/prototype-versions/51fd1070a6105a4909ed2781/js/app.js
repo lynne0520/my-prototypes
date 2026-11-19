@@ -1590,7 +1590,7 @@ let kgChart = null;
 const kgState = {
     layout: 'force',          // force | radial
     depth: 3,                 // 展示深度：1/2/3 级知识点
-    labelMode: 'compact',     // all | compact | none
+    labelMode: 'compact',     // 文字说明显示策略：compact 简洁(仅一二级) | auto 自动(全显+重叠自动隐藏) | all 全显(强制全显示)
     onlyRelated: false,       // 仅看有关联的知识点（至少有一条 kp↔kp 关系边）
     // 关系开关只保留画布可见的三类（KG_CANVAS_RELATIONS + 树状结构）；
     // 能力/题型/方法/易错点类关系不上画布，故不设开关
@@ -1673,11 +1673,11 @@ function kgEntryOf(name) {
     return kgAggEntry(name);
 }
 
-// 当前可见的知识点（模块过滤 + 深度过滤）
-function kgVisibleKpNodes() {
+// 当前可见的知识点（模块过滤 + 深度过滤）；ignoreModules=true 时忽略目录模块开关（统计条算总数用）
+function kgVisibleKpNodes(ignoreModules) {
     return kgIndex.list.filter(n => {
         const info = kgIndex.byName[n.name];
-        if (kgState.modules[info.module] === false) return false;
+        if (!ignoreModules && kgState.modules[info.module] === false) return false;
         if (n.level > kgState.depth) return false;
         // 范围开关（渲染层）：默认仅保留周期学情包含的知识点——零覆盖一级模块按归属模块整棵剔除
         // （模块行及其全部后代含 unlearned，避免孤儿节点漂浮；目录行同步隐藏），
@@ -1703,10 +1703,10 @@ function kgCollectEdges(kpSet) {
     return { edges };
 }
 
-// 构图：可见知识点 + 知识点间关联边 + 树状结构边
-function kgBuildGraph() {
+// 构图：可见知识点 + 知识点间关联边 + 树状结构边；ignoreModules=true 时不套目录模块开关（统计条分母用）
+function kgBuildGraph(ignoreModules) {
     const visible = {};
-    kgVisibleKpNodes().forEach(n => { visible[n.name] = n; });
+    kgVisibleKpNodes(ignoreModules).forEach(n => { visible[n.name] = n; });
 
     let kpSet = visible;
     if (kgState.onlyRelated) {
@@ -1790,14 +1790,20 @@ function kgRender() {
     const statEl = document.getElementById('kgStat');
 
     const kpCount = Object.keys(kpSet).length;
-    // 范围内无证据节点计数（none 已学未检测 + unlearned 未学）：统计条后缀「含未检测 N」，灰色编码可辨
+    // 统计条口径：可见知识点数 / 知识点总数。总数 = 与可见集合同口径（深度、范围开关、仅看关联）
+    // 但不套目录模块开关，所以目录里隐藏模块时只有分子减少，分母不变
+    const kpTotal = Object.keys(kgBuildGraph(true).kpSet).length;
+    // 范围内无证据节点计数（none 已学未检测 + unlearned 未学）：不再占一个数字位，改挂到统计条悬停提示里
     const noEvCount = Object.values(kpSet).filter(n => {
         const st = evidenceStateOf(n.name).state;
         return st === 'none' || st === 'unlearned';
     }).length;
-    // 画布只画知识点与知识点间关系，不再统计/展示「关联节点」数
-    if (statEl) statEl.innerHTML = `知识点 <b>${kpCount}</b> · 关联边 <b>${edges.length}</b>` +
-        (noEvCount ? `<span style="color:#94a3b8">（含未检测 ${noEvCount}）</span>` : '');
+    // 画布只画知识点与知识点间关系：统计条只给两个数字（当前显示数量 / 总数量），不再展示关联边数
+    if (statEl) {
+        statEl.innerHTML = `知识点 <b>${kpCount}</b><span class="kg-stat-total"> / ${kpTotal}</span>`;
+        statEl.title = `当前画布显示 ${kpCount} 个知识点，当前深度与范围内共 ${kpTotal} 个` +
+            (noEvCount ? `；其中未检测 ${noEvCount} 个（未知 ≠ 未掌握）` : '');
+    }
 
     if (!kpCount) {
         kgChart.clear();
@@ -1835,7 +1841,8 @@ function kgRender() {
                 shadowBlur: isFault ? 12 : 0
             },
             label: {
-                show: kgState.labelMode === 'all' || (kgState.labelMode === 'compact' && n.level <= 2),
+                // 简洁：只显示一、二级文字（三级不显示）；自动/全显：所有节点都显示文字，区别在 labelLayout 是否隐藏重叠
+                show: kgState.labelMode !== 'compact' || n.level <= 2,
                 position: 'right', distance: 4,
                 color: noEv ? '#94a3b8' : (n.level === 1 ? '#1e293b' : '#475569'),
                 fontSize: n.level === 1 ? 11.5 : 10.5,
@@ -1877,7 +1884,8 @@ function kgRender() {
         scaleLimit: { min: 0.25, max: 4 },
         edgeSymbol: ['none', 'arrow'],
         edgeSymbolSize: 6,
-        labelLayout: { hideOverlap: true },
+        // 标签避让：自动=重叠标签自动隐藏；全显=强制全部显示（允许重叠）
+        labelLayout: kgState.labelMode === 'all' ? { hideOverlap: false } : { hideOverlap: true },
         emphasis: { focus: 'adjacency', scale: 1.15 },
         lineStyle: { curveness: 0.18 },
         data: nodes,
@@ -4718,7 +4726,22 @@ function updateSourceCounts() {
     if (elE) elE.innerText = `(${eChecked}/${ModalData.exams.length})`;
 }
 
-// 时间范围回显文案：按当前激活档位与对应日期控件生成（弹窗内设定 → 外部胶囊 / 弹窗底栏同源回显）
+// ISO 自然周解析：'2026-W38' → { year:2026, week:38, monday, sunday, start:'09-14', end:'09-20' }
+// 周一=1 … 周日=7；周口径回显与弹窗周选择器右侧的起止日期提示共用这一份算法，避免两处各算一遍算出不同日期
+function isoWeekRange(value) {
+    const m = /^(\d{4})-W(\d{1,2})$/.exec(value || '');
+    if (!m) return null;
+    const jan4 = new Date(Number(m[1]), 0, 4);
+    const day = jan4.getDay() || 7;
+    const monday = new Date(jan4);
+    monday.setDate(jan4.getDate() - (day - 1) + (Number(m[2]) - 1) * 7);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return { year: Number(m[1]), week: Number(m[2]), monday, sunday, start: fmt(monday), end: fmt(sunday) };
+}
+
+// 时间范围回显文案：按当前激活档位与对应日期控件生成（弹窗内设定 → 外部胶囊同源回显）
 function timeScopeText() {
     const active = document.querySelector('#timeSegment .segment-btn.active');
     const seg = active ? active.textContent.trim() : '月';
@@ -4731,23 +4754,22 @@ function timeScopeText() {
         return `${parts[0]}年${Number(parts[1])}月`;
     }
     if (seg === '周') {
-        const w = val('weekPickInput');
-        const hint = document.getElementById('weekPickHint');
-        const range = hint && hint.innerText && hint.innerText !== '--' ? `（${hint.innerText}）` : '';
-        return w ? `${w}${range}` : '—';
+        // 周口径回显只给「年 + 第 x 周 + 起始日期」：结束日由自然周隐含（周一 ~ 周日共 7 天），
+        // 完整起止区间仍显示在弹窗周选择器右侧的 .week-hint 里
+        const wk = isoWeekRange(val('weekPickInput'));
+        return wk ? `${wk.year}年第${wk.week}周（${wk.start}）` : '—';
     }
     const s = val('customDateStart'), e = val('customDateEnd');
     return s && e ? `${s} ~ ${e}` : '—';
 }
 
-// 回显同步：筛选栏胶囊（时间范围 · 已选 N 份）+ 弹窗底栏当前范围，两处同读一份口径
+// 回显同步：筛选栏胶囊（时间范围 · 已选 N 份）与弹窗底栏已选份数，两处同读一份口径
 function syncScopeEcho() {
     const total = ModalData.assignments.filter(a => a.checked).length + ModalData.exams.filter(e => e.checked).length;
     const range = timeScopeText();
     const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
     set('filterRangeText', range);
     set('filterCountText', `已选 ${total} 份`);
-    set('modalRangeEcho', range);
     set('modalCountEcho', `已选 ${total} / ${SOURCE_MAX_SELECT} 份`);
     if (El.filterCount) El.filterCount.title = `统计范围 ${range} · 已选 ${total} / ${SOURCE_MAX_SELECT} 份（作业 + 考试合计上限 ${SOURCE_MAX_SELECT} 份，点击设置时间范围与学情来源）`;
 }
@@ -5285,21 +5307,13 @@ function bindEvents() {
     const timeSegment = document.getElementById('timeSegment');
     const customDateRange = document.getElementById('customDateRange');
     if (timeSegment && customDateRange) {
-        // 自然周提示：由 ISO 周号推算周一~周日日期范围
+        // 自然周提示：由 ISO 周号推算周一~周日日期范围（与回显文案共用 isoWeekRange）
         const updateWeekHint = () => {
             const input = document.getElementById('weekPickInput');
             const hint = document.getElementById('weekPickHint');
             if (!input || !hint) return;
-            const m = /^(\d{4})-W(\d{1,2})$/.exec(input.value || '');
-            if (!m) { hint.innerText = '--'; return; }
-            const jan4 = new Date(Number(m[1]), 0, 4);
-            const day = jan4.getDay() || 7;               // 周一=1 … 周日=7
-            const monday = new Date(jan4);
-            monday.setDate(jan4.getDate() - (day - 1) + (Number(m[2]) - 1) * 7);
-            const sunday = new Date(monday);
-            sunday.setDate(monday.getDate() + 6);
-            const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-            hint.innerText = `${fmt(monday)} ~ ${fmt(sunday)}`;
+            const wk = isoWeekRange(input.value);
+            hint.innerText = wk ? `${wk.start} ~ ${wk.end}` : '--';
         };
         const pickers = {
             '学年': document.getElementById('yearRangePicker'),
@@ -6472,7 +6486,7 @@ init();
                 '| 学年 | 默认当前学年（演示 2025-2026）；下拉只列学年（含 2024-2025、2023-2024），不展示各学年所带年级班级；切换后按所选学年回查该班学生群体的作业与考试数据，年级班级选中保持不变，全量重算 |',
                 '| 班级 | 默认当前学年任教班级（演示高二 1 班）；列表随所选年级的任教权限生成；选「全部班级」时隐藏「班级平均得分率」卡（无单一班级可算均值） |',
                 '| 学科 | 范围为教务权限内学科，恒 ≥1 个：单学科固定不可切，多学科按列表切换，默认选中第一个；演示按双学科（数学、语文）配置，语文无知识体系 → 切语文学科进入 L2-a 缺省页（XK-13），切回数学恢复原页签与图表 |',
-                '| 时间 | 学年 / 月 / 周（默认）/ 自定义四档，档位切换对应日期控件显隐；月、周、自定义可跨学年选择（范围取教务权限数据并集）；档位与日期控件收在「学情来源与统计范围」弹窗顶部的时间条内，筛选栏只回显「时间范围 · 已选 N 份」胶囊，不再直放时间控件；默认档位为「周」（默认周 2026-W38 = 09-14 ~ 09-20） |',
+                '| 时间 | 学年 / 月 / 周（默认）/ 自定义四档，档位切换对应日期控件显隐；月、周、自定义可跨学年选择（范围取教务权限数据并集）；档位与日期控件收在「学情来源与统计范围」弹窗顶部的时间条内，筛选栏只回显「时间范围 · 已选 N 份」胶囊，不再直放时间控件；周档胶囊文案为「年 + 第 x 周（起始日期）」（默认周显示 2026年第38周（09-14），结束日由自然周隐含，完整起止区间仅在弹窗周选择器右侧提示），默认档位为「周」 |',
                 '| 学情来源 | 筛选栏胶囊点开弹窗（XK-12）：顶部设统计时间范围、下方勾选作业 / 考试，一次设定；选择即时生效，取消不回滚；**作业 + 考试合计最多 20 份**，默认选中最近 20 份（两栏合并后按日期从新到旧，同日按列表原序、作业列在前）；数据时效：作业截止到前一天（不含今天），考试以完整学情发布为准 |',
                 '| 掌握程度 | 「设置掌握程度」打开弹窗（XK-12）；档位全校共用，学科组长及以上可写，学科教师 / 班主任为只读查看（悬停提示联系学科组长） |',
                 '',
@@ -6538,7 +6552,7 @@ init();
                 '- **查看全部知识点**：默认不勾选，仅知识点维度渲染；勾选后目录、树状图、表格、关联图谱显示全部 111 个节点；统计口径（摘要卡、KPI、诊断计数、教学建议）不随开关变化，属统计红线；知识点与能力两个维度的开关状态分别记忆。',
                 '- **树状图（默认）**：节点按掌握度档位着色；暂无证据与未学恒灰（勾选后仍灰，悬停提示证据状态）；有历史得分的按历史得分率着色；底部图例随掌握档位实时生成。',
                 '- **表格**：层级页签「全部/一级/二级/三级」；不显示检测状态列；无本期证据的行数值显示「—」，未知不算未掌握。',
-                '- **关联图谱**：深度一级 / 二级 / 三级（默认）；关系开关 3 项（前置·后续、易混淆、树状结构，仅文字加选中态）；另有标签策略、仅看关联、力导向 / 放射布局。画布只渲染知识点节点及其间边，能力、题型、方法、易错点四类关联对象只在节点详情面板的关联清单出现（类型标签 + 引用计数），不占节点也不连边；节点填充色 = 掌握度档位色，断层节点改红色描边 + 红晕 + 加粗线宽（填充仍表掌握度）；断层红边只画有证据的前置关系；统计条只显示「知识点 N · 关联边 E」；点击节点打开详情面板，统计项仅保留「关联关系 / 子节点」，点击分别切换关联清单与直接子节点清单，不展示子孙节点统计；「前后序关联诊断」按钮只在关联关系列表显示，子节点列表不显示。切换知识点时默认回到关联关系列表。',
+                '- **关联图谱**：深度一级 / 二级 / 三级（默认）；关系开关 3 项（前置·后续、易混淆、树状结构，仅文字加选中态）；另有标签策略（简洁/自动/全显，控制画布文字说明）、仅看关联、力导向 / 放射布局。画布只渲染知识点节点及其间边，能力、题型、方法、易错点四类关联对象只在节点详情面板的关联清单出现（类型标签 + 引用计数），不占节点也不连边；节点填充色 = 掌握度档位色，断层节点改红色描边 + 红晕 + 加粗线宽（填充仍表掌握度）；断层红边只画有证据的前置关系；统计条只给两个数字「知识点 当前显示数 / 总数」（总数不随目录模块开关变化，目录隐藏模块时只有显示数减少；未检测数量与口径见悬停提示）；点击节点打开详情面板，统计项仅保留「关联关系 / 子节点」，点击分别切换关联清单与直接子节点清单，不展示子孙节点统计；「前后序关联诊断」按钮只在关联关系列表显示，子节点列表不显示。切换知识点时默认回到关联关系列表。',
                 '- **导出**：按当前维度、层级、目录过滤后的同口径数据导出 CSV（带 BOM），含检测状态列。',
                 '',
                 '**节点得分率**：按时间衰减加权计算——单场得分率 = 100 − 该场失分率，权重 = 0.5 的（距周期结束天数 ÷ 半衰期 30 天）次幂，加权求和后除以权重之和。完整步骤、数值示例、边界与口径边界见 XK-06A；热力演进累计列用未加权的有效场次算术平均，两者不可互相引用。',
@@ -7047,7 +7061,7 @@ init();
                 '| 模块 | 条件、显示、交互与样式 |',
                 '| --- | --- |',
                 '| 设置掌握程度 | 3 档 / 4 档单选，显示最后保存时间与操作人；学科组长及以上可改并确认，确认后班级与学生追踪同步；打开后若他人已保存，须选择「使用最新」或「以我的为准」。学科教师 / 班主任只读：选项与区间呈灰色禁改态，区间用灰底虚线和禁止光标，仅右上角 × 关闭，不显示取消 / 确认及权限说明条 |',
-                '| 学情来源与统计范围 | 顶部为学年 / 月 / 周 / 自定义时间条及对应日期控件；**标题旁小字**注明「最多支持分析 20 份作业或考试」（达上限转琥珀）；下方作业 / 考试双栏，支持单选、栏头全选和已选计数；底栏左组为回显「当前范围 · 已选 N / 20 份」+ 内联配额状态（还可再选 N 份 / 已达上限）+「恢复最近 20 份」按钮（置于回显后），与筛选栏胶囊同步。选择即时生效，取消不回滚；作业截至前一天且不含今天，考试仅计已发布完整学情；学生追踪复用同款弹窗 |',
+                '| 学情来源与统计范围 | 顶部为学年 / 月 / 周 / 自定义时间条及对应日期控件；**标题旁小字**注明「最多支持分析 20 份作业或考试」（达上限转琥珀）；下方作业 / 考试双栏，支持单选、栏头全选和已选计数；底栏左组为回显「已选 N / 20 份」+ 内联配额状态（还可再选 N 份 / 已达上限）+「恢复最近 20 份」按钮（置于回显后），与筛选栏胶囊同步；底栏不再回显时间范围（时间范围只在筛选栏胶囊）。选择即时生效，取消不回滚；作业截至前一天且不含今天，考试仅计已发布完整学情；学生追踪复用同款弹窗 |',
                 '| 关联诊断抽屉 | 右侧滑入白底抽屉，宽不超过 560px、窄屏为视口 94%，内容滚动、底栏固定。头部显示知识点层级、名称、路径、证据、周期汇总、掌握档位和未掌握人数；正文按前置、易混淆、后续、学生分组排列。点击关系名可切换目标点；仅有关系时显示对应区，仅有建议时显示建议入口 |',
                 '| 分组教学建议抽屉 | 显示六类建议的教学动作、关注范围、建议对象和判定依据；顶部可返回关联诊断，底部支持关闭、复制建议、导出 CSV。从指定建议进入时滚动定位并短暂高亮；无建议时显示统一空态 |',
                 '| 题库知识图谱组件 | 一期保留自研图谱组件；题库组件仅提供全屏查看入口 |',
@@ -7064,7 +7078,7 @@ init();
                 '| 栏头全选 | 取消全选不受限；勾选全选时保留已选项，只把剩余配额按日期从新到旧补入本栏；补不完时 toast 告知「仅补入最近 N 份，其余 M 份未选；再次点击栏头可清空本栏」，配额为 0 且本栏无已选时只提示先取消已选项；部分选中时栏头复选框呈半选态。**两段式意图**：被截断后紧接着的第二次点击 = 清空本栏（toast 告知腾出配额），避免栏头永久卡在半选导致整栏取消不可达；单行勾选变化或一键恢复会清除该意图 |',
                 '| 一键恢复 | 「恢复最近 20 份」按钮位于底栏回显之后，按默认口径重选（覆盖当前勾选），用于配额用尽后快速回到可用状态 |',
                 '| 上限说明与状态 | 不设独立配额条 / 进度条：标题旁小字「最多支持分析 20 份作业或考试」；底栏回显内联状态——未满灰字「还可再选 N 份」（剩余 ≤3 份转琥珀字）、已满琥珀徽章「已达上限」且已选计数转琥珀加粗 |',
-                '| 回显 | 弹窗底栏「已选 N / 20 份」+ 内联配额状态；筛选栏胶囊保持「已选 N 份」，悬停提示含上限口径 |',
+                '| 回显 | 弹窗底栏「已选 N / 20 份」+ 内联配额状态（不显示时间范围字段）；筛选栏胶囊保持「时间范围 · 已选 N 份」，悬停提示含上限口径 |',
                 '| 视口兜底 | 矮视口（高 ≤700px）只压缩固定占位留白、不删说明文案，弹窗整体滚动且头部吸顶 / 底栏吸底，双栏区域保底 320px 不被压成一条缝；窄屏（宽 ≤760px）双栏上下排列、只保留弹窗一条滚动轴（考试栏不得藏在嵌套滚动区折叠线以下），底栏左组（回显 + 恢复按钮）独占换行保证「已选 N / 20 份」不被裁切，档位按钮不逐字竖排 |',
                 '',
                 '> **边界与红线**：不生成题目、题量、题型配比、组卷、题库保存或新练习；效果验证只给教学建议，不生成复测题。无作答证据 = 未知 ≠ 未掌握；综合题失分 ≠ 全关联薄弱；前后序关系须经教研确认，未确认不得作为失分归因事实；班级均值不得写成每名学生的问题。',

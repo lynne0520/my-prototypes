@@ -2107,10 +2107,6 @@ body {
         flex: 1 1 100%;
         max-width: 100%;
     }
-
-    .source-modal .modal-scope-range {
-        max-width: 58vw;
-    }
 }
 
 /* 矮视口：压缩固定占位的内边距，把高度还给任务列表；
@@ -2430,30 +2426,13 @@ body {
     flex-shrink: 0;
 }
 
-.modal-scope-label {
-    font-weight: 600;
-    color: var(--secondary);
-    flex-shrink: 0;
-    white-space: nowrap;
-}
-
-.modal-scope-echo .filter-scope-sep,
 .modal-scope-echo #modalCountEcho,
 .modal-scope-echo #stKpModalCountEcho {
     flex-shrink: 0;
     white-space: nowrap;
 }
 
-.modal-scope-range {
-    font-weight: 700;
-    color: var(--text-main);
-    flex: 0 1 auto;
-    min-width: 0;
-    max-width: 38vw;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
+/* 底栏不再回显时间范围（范围只在筛选栏胶囊里），.modal-scope-label / .modal-scope-range 样式随之废弃 */
 
 /* 底栏按钮不参与收缩：回显过长时只压缩回显文本，按钮不换行、不竖排 */
 .modal-footer > .btn {
@@ -4237,6 +4216,12 @@ body {
 
 .kg-stat b {
     color: var(--primary);
+}
+
+/* 统计条分母：「/ 总数」弱化一级，蓝字只留给当前画布显示的数目 */
+.kg-stat .kg-stat-total {
+    color: var(--text-muted);
+    font-weight: 500;
 }
 
 /* ── 知识点分析：四视图合并布局（树状 / 热力 / 表格 / 关联图谱） ── */
