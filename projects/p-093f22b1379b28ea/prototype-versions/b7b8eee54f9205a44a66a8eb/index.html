@@ -421,7 +421,7 @@
                             <i class="fas fa-calendar-day"></i>
                             <span class="filter-scope-range" id="filterRangeText">2026年9月</span>
                             <span class="filter-scope-sep">·</span>
-                            <span class="filter-scope-count" id="filterCountText">已选 24 份</span>
+                            <span class="filter-scope-count" id="filterCountText">已选 20 份</span>
                             <i class="fas fa-chevron-down filter-scope-caret"></i>
                         </button>
                         <!-- 掌握程度设置：对整体学科学情生效，与学情来源同级放筛选栏；入口随角色权限切换（学科组长及以上可改，其余只读） -->
@@ -685,10 +685,11 @@
                                         </div>
                                         <div class="kg-toolbar-group">
                                             <span class="kg-toolbar-label">标签</span>
+                                            <!-- 文字说明显示策略：简洁=仅一、二级；自动=全部显示并自动隐藏重叠标签；全显=强制全显示不隐藏 -->
                                             <div class="kg-chip-group" id="kgLabelGroup">
-                                                <span class="kg-chip active" data-label="compact">简洁</span>
-                                                <span class="kg-chip" data-label="all">全部</span>
-                                                <span class="kg-chip" data-label="none">隐藏</span>
+                                                <span class="kg-chip active" data-label="compact" title="仅显示一、二级知识点文字，三级不显示">简洁</span>
+                                                <span class="kg-chip" data-label="auto" title="全部知识点显示文字，标签互相重叠时自动隐藏">自动</span>
+                                                <span class="kg-chip" data-label="all" title="强制显示全部知识点文字，重叠也不隐藏">全显</span>
                                             </div>
                                         </div>
                                         <label class="kg-check"><input type="checkbox" id="kgOnlyRelated"> 仅看有关联的知识点</label>
@@ -847,6 +848,7 @@
                                 <div class="cause-insight-panel">
                                     <h4 class="panel-title"> 关键发现</h4>
                                     <div class="insight-list" id="causeFindingList"></div>
+                                    <p class="cause-insight-note"><i class="fas fa-circle-info"></i>升降与幅度由<b>首末占比差</b>判定；「逐场持续 / 波动」由<b>逐场占比序列的相邻差分</b>判定（与堆叠图同源），并非仅凭首末两点推断。</p>
                                 </div>
                             </div>
                         </section>
@@ -1280,7 +1282,10 @@
     <div class="modal-overlay" id="filterModalOverlay">
         <div class="filter-modal source-modal">
             <header class="modal-header">
-                <h2>学情来源与统计范围</h2>
+                <div class="modal-title-wrap">
+                    <h2>学情来源与统计范围</h2>
+                    <span class="modal-title-note" id="sourceCapNote"><i class="fas fa-circle-info"></i>最多支持分析 20 份作业或考试</span>
+                </div>
                 <i class="fas fa-times close-modal" id="closeModalIcon"></i>
             </header>
             <!-- 统计时间范围：原筛选栏的档位与日期控件整体迁入，与下方勾选同屏一次设定 -->
@@ -1351,12 +1356,19 @@
                 </section>
             </div>
             <footer class="modal-footer">
-                <div class="modal-scope-echo" title="与筛选栏胶囊同源：时间范围 + 已选份数">
-                    <i class="fas fa-circle-check"></i>
-                    <span class="modal-scope-label">当前范围</span>
-                    <span class="modal-scope-range" id="modalRangeEcho">2026年9月</span>
-                    <span class="filter-scope-sep">·</span>
-                    <span id="modalCountEcho">已选 24 份</span>
+                <div class="modal-footer-left">
+                    <div class="modal-scope-echo" id="sourceScopeEcho" title="与筛选栏胶囊同源：时间范围 + 已选份数 + 配额状态">
+                        <i class="fas fa-circle-check"></i>
+                        <span class="modal-scope-label">当前范围</span>
+                        <span class="modal-scope-range" id="modalRangeEcho">2026年9月</span>
+                        <span class="filter-scope-sep">·</span>
+                        <span id="modalCountEcho">已选 20 / 20 份</span>
+                        <span class="modal-scope-state" id="sourceQuotaState" aria-live="polite">已达上限</span>
+                    </div>
+                    <button type="button" class="source-quota-reset" id="btnSourceRecent"
+                        title="按日期从新到旧重新选中最近 20 份，覆盖当前勾选">
+                        <i class="fas fa-rotate-left"></i>恢复最近 20 份
+                    </button>
                 </div>
                 <button class="btn btn-ghost" id="btnCancelModal">取消</button>
                 <button class="btn btn-primary" id="btnConfirmModal">确定</button>
