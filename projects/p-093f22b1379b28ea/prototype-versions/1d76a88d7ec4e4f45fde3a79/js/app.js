@@ -353,6 +353,11 @@ const ModalData = {
     ]
 };
 
+// 统计份数上限：作业 + 考试合计最多 20 份（两栏共用一个配额，不是每栏 20）。
+// 默认选中「最近 20 份」：两栏合并后按日期从新到旧取前 20，同日按列表原序（作业列在前，稳定排序）
+const SOURCE_MAX_SELECT = 20;
+const sourceDateDesc = (a, b) => String(b.date || '').localeCompare(String(a.date || ''));
+
 // 年级 / 班级二级菜单
 const gradeClassData = {
     '高一': ['全部班级', '1班', '2班'],
@@ -416,14 +421,15 @@ const periodTasks = [
     { name: '冲刺卷(一)', full: '期末模拟冲刺卷 (一)', date: '2025-12-11', type: 'exam', classRate: 76.8, gradeRate: 75.4, chapter: '综合测试', score: 100, submitted: 45, weakKp: '指数函数' }
 ];
 
-// 错因体系（配色 + 教学建议文案，幅度数字由数据动态计算）
+// 错因体系（仅名称 + 配色；干预文案不在此预置，统一走 causeAdviceOf 的通用指标模板，
+// 保证错因种类随学科扩展时无需逐名补文案）
 const CAUSE_DEFS = [
-    { name: '计算失误', color: '#ef4444', advice: { up: '占比持续上升，建议用「限时 10 分钟 3 题」高频短训替代整卷练习', down: '计算准确率改善，继续保持解题步骤规范化要求' } },
-    { name: '概念混淆', color: '#f59e0b', advice: { up: '相近概念辨析不清，建议采用成对对比式讲解', down: '概念辨析讲评见效，可维持当前教学节奏' } },
-    { name: '审题不清', color: '#f97316', advice: { up: '漏读条件增多，建议强化「圈画关键词」审题训练', down: '审题习惯培养见效，错误占比稳步下降' } },
-    { name: '方法选择', color: '#8b5cf6', advice: { up: '题型与方法匹配困难，建议按题型归纳解题决策路径', down: '方法选择趋于合理，可进入综合题型训练' } },
-    { name: '书写规范', color: '#3b82f6', advice: { up: '步骤书写失分增加，建议展示标准答卷范例', down: '书写规范保持良好，基本稳定' } },
-    { name: '未作答', color: '#94a3b8', advice: { up: '空白题增多，集中在卷末压轴题，属答题时间分配问题', down: '作答完成度改善，继续保持' } }
+    { name: '计算失误', color: '#ef4444' },
+    { name: '概念混淆', color: '#f59e0b' },
+    { name: '审题不清', color: '#f97316' },
+    { name: '方法选择', color: '#8b5cf6' },
+    { name: '书写规范', color: '#3b82f6' },
+    { name: '未作答', color: '#94a3b8' }
 ];
 
 // 错因配色兜底：错因种类随学科/题目动态扩展（CAUSE_DEFS 仅为当前演示集），未预置颜色的错因按色板循环取色；
@@ -432,10 +438,26 @@ const CAUSE_PALETTE = ['#ef4444', '#f59e0b', '#f97316', '#8b5cf6', '#3b82f6', '#
 function causeColorOf(def, idx) {
     return (def && def.color) || CAUSE_PALETTE[idx % CAUSE_PALETTE.length];
 }
-// 错因干预文案兜底：未预置 advice 的错因用通用模板，避免新增错因种类后关键发现出现空文案
-function causeAdviceOf(def, up) {
-    return (def && def.advice && (up ? def.advice.up : def.advice.down))
-        || (up ? '占比持续上升，建议针对该错因安排专项干预，并在下周期复测验证' : '占比稳步下降，保持当前教学节奏并持续观察');
+// 错因干预文案：与错因名称 / 学科完全解耦，只由「方向 + 幅度 + 末次占比 + 逐场单调性」四个通用指标驱动。
+// 错因名只出现在条目头部（数据展示），不进入文案模板；任意学科新增错因种类无需补文案。
+// 阈值：急升 Δ≥6 个百分点；高位末次占比 ≥30%；低位末次占比 ≤10%。优先级：急升 > 高位 > 常规；低位 > 常规。
+const CAUSE_ADVICE_HIGH_SHARE = 30;
+const CAUSE_ADVICE_LOW_SHARE = 10;
+const CAUSE_ADVICE_SURGE = 6;
+function causeAdviceOf(d) {
+    const up = d.delta > 0;
+    const series = d.series || [];
+    const mono = series.length > 1 && series.every((v, i) => i === 0 || (up ? v >= series[i - 1] : v <= series[i - 1]));
+    const dir = up
+        ? (mono ? '占比逐场持续上升' : '占比波动上行')
+        : (mono ? '占比逐场稳步下降' : '占比波动回落');
+    if (up) {
+        if (d.delta >= CAUSE_ADVICE_SURGE) return `${dir}，升幅达 ${d.delta} 个百分点：建议先复盘近期任务中该错因的典型题、定位共性触发条件，再安排专项干预`;
+        if (d.to >= CAUSE_ADVICE_HIGH_SHARE) return `${dir}且末次占比已 ≥${CAUSE_ADVICE_HIGH_SHARE}%：建议列为本周期首要干预错因，短时高频专项讲练 + 下周期复测验证`;
+        return `${dir}：建议安排短时、高频率的针对性讲练，并在下周期复测验证是否退出上升名单`;
+    }
+    if (d.to <= CAUSE_ADVICE_LOW_SHARE) return `${dir}且末次占比已 ≤${CAUSE_ADVICE_LOW_SHARE}%：干预见效，转为滚动观察，把课时让给上升错因`;
+    return `${dir}：保持当前干预节奏并持续观察，防止反弹`;
 }
 
 // 每次任务的错因占比（行 = 任务，列 = CAUSE_DEFS 顺序）
@@ -1086,34 +1108,34 @@ const KG_EVIDENCE_EXCEPTIONS = {
 // 学生名单池（原型模拟；真实数据按学生粒度作答证据生成，支持教师手工增删）
 const KG_STUDENT_POOL = ['赵雨', '王笑天', '李墨白', '杨静云', '段问薇', '丁曼容', '周乐心', '傅彭薄', '潘夏彤', '张启航', '林疏影', '沈砚秋'];
 
-// 显式分组样例（与断层卡演示链对齐，四组互斥覆盖全部 12 人）
+// 显式分组样例：只保存演示名单，分组理由由 relGroupReason 按命中规则实时生成
 const KG_STUDENT_GROUPS = {
     '对数函数': {
-        diag: { students: [], reason: '直接前置均有周期内作答证据，无需前置诊断' },
-        pre: { students: ['赵雨', '丁曼容', '周乐心', '沈砚秋'], reason: '最弱前置「对数运算法则」周期内 3 场汇总 42%（<70%），先补基础再回当前' },
-        solid: { students: ['王笑天', '杨静云', '段问薇', '潘夏彤', '张启航'], reason: '前置尚可的学生中当前仅 38%，重点巩固对数函数图像与性质' },
-        next: { students: ['李墨白'], reason: '个人周期汇总 ≥80%，可安排对数函数→数列综合的后续应用' }
+        diag: [],
+        pre: ['赵雨', '丁曼容', '周乐心', '沈砚秋'],
+        solid: ['王笑天', '杨静云', '段问薇', '潘夏彤', '张启航'],
+        next: ['李墨白']
     },
     '指数函数': {
-        diag: { students: ['傅彭薄', '林疏影'], reason: '当前汇总 46% 失分，且前置「指数幂运算」暂无作答证据，先诊断再决定' },
-        pre: { students: ['赵雨', '周乐心'], reason: '前置「函数的概念」周期汇总 58%（<70%），先补基础' },
-        solid: { students: ['王笑天', '杨静云', '段问薇', '丁曼容', '潘夏彤', '张启航'], reason: '前置尚可，重点巩固指数函数图像与底数讨论' },
-        next: { students: ['李墨白', '沈砚秋'], reason: '个人周期汇总 ≥80%，可安排指数函数→对数函数的后续应用' }
+        diag: ['傅彭薄', '林疏影'],
+        pre: ['赵雨', '周乐心'],
+        solid: ['王笑天', '杨静云', '段问薇', '丁曼容', '潘夏彤', '张启航'],
+        next: ['李墨白', '沈砚秋']
     },
     '单调性': {
-        diag: { students: [], reason: '前置「函数的概念」周期内有作答证据，无需前置诊断' },
-        pre: { students: ['赵雨', '杨静云', '沈砚秋'], reason: '前置「函数的概念」周期汇总 58%（<70%），先补基础' },
-        solid: { students: ['王笑天', '段问薇', '丁曼容', '周乐心', '傅彭薄', '潘夏彤'], reason: '前置尚可，重点巩固单调性判定与证明步骤' },
-        next: { students: ['李墨白', '张启航', '林疏影'], reason: '个人周期汇总 ≥80%，可进入「最值 / 恒成立问题」后续应用' }
+        diag: [],
+        pre: ['赵雨', '杨静云', '沈砚秋'],
+        solid: ['王笑天', '段问薇', '丁曼容', '周乐心', '傅彭薄', '潘夏彤'],
+        next: ['李墨白', '张启航', '林疏影']
     }
 };
 
 // 六类教学建议目的元数据（仅描述教学动作，不包含题量、题型或组卷参数）
 const DRILL_PURPOSE_META = {
     diag: { label: '前置诊断', color: '#f59e0b', desc: '前置暂无证据 → 先通过课堂提问、既有作答或面谈确认基础情况' },
-    pre: { label: '前置补练', color: '#0891b2', desc: '最弱前置有证据且汇总 <70% → 先补齐当前学习所需的基础' },
+    pre: { label: '前置补练', color: '#0891b2', desc: '直接前置周期内汇总 <70% → 先补齐当前学习所需的基础' },
     confuse: { label: '概念辨析', color: '#ec4899', desc: '存在易混淆教研标注 → 成对对比讲解与学生互讲，替代无效刷题' },
-    solid: { label: '同点巩固', color: '#3b82f6', desc: '前置尚可、当前 <80% → 重点巩固当前知识点本身' },
+    solid: { label: '同点巩固', color: '#3b82f6', desc: '个人当前点 <80% 且前置达标（无直接前置则豁免），班级周期汇总 <80% → 同点巩固' },
     next: { label: '后续应用', color: '#22c55e', desc: '个人周期汇总 ≥80% → 通过课堂任务检查迁移并适度提高' },
     retest: { label: '效果验证', color: '#8b5cf6', desc: '补练完成后 → 结合后续课堂反馈或既有任务验证掌握情况' }
 };
@@ -1419,14 +1441,13 @@ function renderTable(mode = 0) {
         <th>得分率差值 (%)</th>
         <th>班级未掌握人数</th>
         <th>掌握程度</th>
-        <th>检测状态</th>
         <th>操作</th>
     </tr>`;
 
     const rows = currentTableRows(mode);
 
     if (!rows.length) {
-        El.kpTableBody.innerHTML = `<tr><td colspan="9" style="padding: 40px; color: var(--text-muted);">暂无符合条件的数据</td></tr>`;
+        El.kpTableBody.innerHTML = `<tr><td colspan="8" style="padding: 40px; color: var(--text-muted);">暂无符合条件的数据</td></tr>`;
         return;
     }
 
@@ -1436,7 +1457,6 @@ function renderTable(mode = 0) {
         const icon = iconOf(d.level);
         const paddingLeft = isAll ? (24 + (d.level - 1) * 24) : 24;
 
-        // 检测状态（仅知识点维度）：一级模块行显示覆盖「已考x/y」（零覆盖显示「本期未检测」），末级行显示四态徽章；
         // 无本期证据的行数值列置 —（未知 ≠ 未掌握，不展示误导性演示值）；history 行班级得分率用历史得分率
         const ev = currentDimension === 'kp' ? evidenceStateOf(d.name) : null;
         const evState = ev ? ev.state : null;
@@ -1448,19 +1468,6 @@ function renderTable(mode = 0) {
         const diffColor = diff === null ? 'var(--text-muted)' : diff < 0 ? 'var(--danger)' : diff > 0 ? 'var(--success)' : 'var(--text-main)';
         const diffText = diff === null ? '—' : (diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1));
         const st = noEv ? null : statusOf(shownRate);
-        let evBadge = '<span class="tb-ev">—</span>';
-        if (ev) {
-            if (d.level === 1) {
-                const c = kpModuleCoverage(d.name);
-                evBadge = `<span class="tb-ev ${c.covered === 0 ? 'tb-ev-none' : 'tb-ev-ok'}" title="本期已检测 ${c.covered} / 共 ${c.total} 个知识点（含周期外历史证据）">${c.covered === 0 ? '本期未检测' : `已考${c.covered}/${c.total}`}</span>`;
-            } else if (evState === 'period') {
-                evBadge = '<span class="tb-ev tb-ev-ok">本期已检测</span>';
-            } else if (isHis) {
-                evBadge = `<span class="tb-ev tb-ev-his" title="历史证据：${escapeHTML(ev.source || '周期外检测')}">历史证据</span>`;
-            } else {
-                evBadge = `<span class="tb-ev tb-ev-none" title="${evState === 'unlearned' ? '教学进度未到，未检测' : '已学 · 本期暂无作答证据（未知 ≠ 未掌握）'}">${evState === 'unlearned' ? '未学' : '本期未检测'}</span>`;
-            }
-        }
 
         return `<tr${noEv ? ' style="color:#94a3b8;"' : ''}>
             <td style="text-align:left; padding-left: ${paddingLeft}px;">
@@ -1473,7 +1480,6 @@ function renderTable(mode = 0) {
             <td style="font-weight:700; color:${diffColor}">${diffText}${diff === null ? '' : '%'}</td>
             <td style="color: var(--primary); font-weight: 600;">${noPeriod ? '—' : (d.unmasteredCount || 0)}</td>
             <td>${noEv ? '<span class="status-label" style="color:#94a3b8;">—</span>' : `<span class="status-label ${st.cls}">${st.name}</span>`}</td>
-            <td>${evBadge}</td>
             <td><span class="action-link" style="justify-content:center;" onclick="window.openDetails('${d.name}')">查看详情</span></td>
         </tr>`;
     }).join('');
@@ -1591,7 +1597,8 @@ const kgState = {
     rels: { prerequisite: true, confusable: false, structure: true },
     modules: {},              // 知识点模块目录状态（四视图共用）
     abilityModules: null,     // 能力维度目录状态（懒初始化，与模块状态各自保持）
-    selected: null
+    selected: null,
+    detailTab: 'relations'    // 详情列表：relations 关联关系 | children 直接子节点
 };
 
 // 知识点索引：name -> { node, parent, module, path, level }
@@ -1909,6 +1916,7 @@ function kgRender() {
 
 // 选中知识点：图谱高亮 + 详情面板
 function kgSelectNode(name) {
+    if (kgState.selected !== name) kgState.detailTab = 'relations';
     kgState.selected = name;
     kgRenderDetail(name);
     if (kgChart && name && kgIndex.byName[name]) {
@@ -1928,7 +1936,6 @@ function kgRenderDetail(name) {
     const info = kgIndex.byName[name];
     const n = info.node;
     const children = n.children || [];
-    const descCount = flattenTree(n, false).length - 1;
     // 证据四态：无证据节点头部显示「未检测」（不展示演示掌握度）；history 用历史得分率
     const ev = evidenceStateOf(name);
     const noEv = ev.state === 'none' || ev.state === 'unlearned';
@@ -1947,14 +1954,32 @@ function kgRenderDetail(name) {
         { key: 'errorPoints', title: '易错点', color: KP_RELATION_DEFS.errorPoint.color, tag: '易错点' }
     ];
 
-    const relRow = (target, tag, dotColor, count, kMastery, brokenRow) => `
+    // 关联均值：非知识点关联对象（能力 / 题型 / 方法 / 易错点）自身没有掌握度——题目只挂接到末级知识点与
+    // 能力末级节点上，这三类是标签而不是考核单元，所以不可能有「它自己的得分率」。可比的是派生画像：
+    // 引用它的知识点本期得分率的算术平均（对齐 PRD 方法聚合 / 能力聚合口径：不按关系度加权）。
+    // 仅统计本期有作答证据的关联点；全无证据时不得出数字（未知 ≠ 掌握/未掌握）
+    const relAvgOf = (srcKps) => {
+        const rates = [];
+        (srcKps || []).forEach(nm => {
+            const ev = evidenceStateOf(nm);
+            if (ev.state === 'period' && ev.rate !== null && ev.rate !== undefined) rates.push(ev.rate);
+        });
+        if (!rates.length) return { avg: null, n: 0, total: (srcKps || []).length };
+        return { avg: rates.reduce((a, b) => a + b, 0) / rates.length, n: rates.length, total: (srcKps || []).length };
+    };
+
+    // relRow：一条关联清单行。非知识点行尾部只挂一个胶囊（数量 + 关联均值）——300px 面板容不下
+    // 「N 个知识点引用」+「关联均 X%」两段独立文字，合并后知识点名才不会被截成两个字
+    // 叶子知识点的直接关系只有它自己一个引用者：计数恒为 1、均值等于头部已有掌握度，都属重复信息，不出
+    const relRow = (target, tag, dotColor, count, kMastery, brokenRow, relAvg) => `
         <div class="kg-rel-row${brokenRow ? ' kg-rel-broken' : ''}" data-target="${escapeHTML(target)}">
             <span class="kg-rel-dot" style="background:${dotColor}"></span>
             <span class="kg-rel-name">${escapeHTML(target)}</span>
             <span class="kg-rel-tag">${tag}</span>
             ${kMastery !== null && kMastery !== undefined ? `<span class="kg-rel-mastery" style="color:${statusOf(kMastery).color}" title="班级掌握度">${kMastery.toFixed(0)}%</span>` : ''}
+            ${relAvg && relAvg.avg !== null ? `<span class="kg-rel-avg" style="color:${statusOf(relAvg.avg).color};background:${statusOf(relAvg.avg).hexColor}14" title="关联 ${relAvg.total} 个知识点，其中 ${relAvg.n} 个本期有作答证据，得分率算术平均 ${relAvg.avg.toFixed(1)}%；这是关联知识点的画像，不是该${tag}自身的掌握度">${count} 点 · 均 ${relAvg.avg.toFixed(0)}%</span>` : ''}
+            ${relAvg && relAvg.avg === null ? `<span class="kg-rel-avg none" title="关联 ${relAvg.total} 个知识点，本期均无作答证据，不能给出该${tag}的得分率画像（未知 ≠ 掌握 / 未掌握）">${count} 点 · 未检测</span>` : ''}
             ${brokenRow ? '<span class="kg-rel-break">断层</span>' : ''}
-            ${count ? `<span class="kg-rel-count">${count} 个知识点</span>` : ''}
         </div>`;
 
     let relHtml = '';
@@ -1980,11 +2005,38 @@ function kgRenderDetail(name) {
                 const brokenRow = g.key === 'prerequisite' && !noEv && kMastery !== null && shownMastery < 60 && kMastery < 70;
                 // 行首色点 = 目标知识点自身的掌握情况（无证据灰）；非知识点（能力/题型/方法/易错点）仍按类型区分色
                 const dotColor = g.kp ? (kMastery === null ? '#94a3b8' : statusOf(kMastery).hexColor) : g.color;
-                return relRow(k, tag, dotColor, g.kp ? 0 : map[k].length, kMastery, brokenRow);
+                // 非知识点行：引用集只有自身（叶子直接关系）时不出计数与均值，否则出引用计数 + 关联均值
+                // （一级 / 二级节点为子树聚合，即使只 1 个外部引用，也是另一个知识点的分，不能隐）
+                const srcKps = g.kp ? [] : (map[k] || []);
+                const selfOnly = srcKps.length === 1 && srcKps[0] === name;
+                const relCount = (g.kp || selfOnly) ? 0 : srcKps.length;
+                const relAvg = relCount ? relAvgOf(srcKps) : null;
+                return relRow(k, tag, dotColor, relCount, kMastery, brokenRow, relAvg);
             }).join('') +
             (keys.length > 8 ? `<div class="kg-rel-more">… 及另外 ${keys.length - 8} 项</div>` : '') +
             `</div>`;
     });
+
+    const childRows = children.map(child => {
+        const childName = child.name;
+        const childInfo = kgIndex.byName[childName];
+        const childEv = evidenceStateOf(childName);
+        const childNoEv = childEv.state === 'none' || childEv.state === 'unlearned';
+        const childMastery = childNoEv
+            ? null
+            : (childEv.state === 'history' ? childEv.rate : masteryOf(child));
+        const tag = ['一级', '二级', '三级'][childInfo.level - 1] + '知识点';
+        const dotColor = childMastery === null ? '#94a3b8' : statusOf(childMastery).hexColor;
+        return relRow(childName, tag, dotColor, 0, childMastery, false);
+    }).join('');
+    const childrenHtml = `<div class="kg-rel-group">
+        <div class="kg-rel-title" style="color:var(--primary)">直接子节点 <span>${children.length}</span></div>
+        ${childRows}
+    </div>`;
+    const activeTab = kgState.detailTab === 'children' ? 'children' : 'relations';
+    const activeListHtml = activeTab === 'children'
+        ? (childRows ? childrenHtml : '<div class="kg-detail-none">该知识点暂无直接子节点</div>')
+        : (relHtml || '<div class="kg-detail-none">该知识点暂未维护关联关系</div>');
 
     panel.innerHTML = `
         <div class="kg-detail-head">
@@ -1995,17 +2047,24 @@ function kgRenderDetail(name) {
         </div>
         <h4 class="kg-detail-title">${escapeHTML(name)}</h4>
         <div class="kg-detail-path">${escapeHTML(info.path)}</div>
-        <div class="kg-detail-stats">
-            <span>关联<b>${relTotal}</b></span>
-            <span>子节点<b>${children.length}</b></span>
-            <span>子孙节点<b>${descCount}</b></span>
+        <div class="kg-detail-stats" aria-label="节点详情列表切换">
+            <button type="button" class="${activeTab === 'relations' ? 'active' : ''}" data-detail-tab="relations" aria-pressed="${activeTab === 'relations'}">关联关系<b>${relTotal}</b></button>
+            <button type="button" class="${activeTab === 'children' ? 'active' : ''}" data-detail-tab="children" aria-pressed="${activeTab === 'children'}">子节点<b>${children.length}</b></button>
         </div>
-        <button type="button" class="kg-detail-diag-btn" id="kgDetailDiagBtn" title="查看该知识点的前后序证据与分目的加练建议">
+        ${activeTab === 'relations' ? `<button type="button" class="kg-detail-diag-btn" id="kgDetailDiagBtn" title="查看该知识点的前后序证据与分目的加练建议">
             <i class="fas fa-diagram-project"></i> 前后序关联诊断
-        </button>
-        <div class="kg-detail-scroll">
-            ${relHtml || '<div class="kg-detail-none">该知识点暂未维护关联关系</div>'}
-        </div>`;
+        </button>` : ''}
+        <div class="kg-detail-scroll">${activeListHtml}</div>`;
+
+    // 统计项即列表切换入口；诊断按钮只存在于关联关系列表。
+    panel.querySelectorAll('[data-detail-tab]').forEach(btn => {
+        btn.onclick = () => {
+            const nextTab = btn.dataset.detailTab;
+            if (nextTab === activeTab) return;
+            kgState.detailTab = nextTab;
+            kgRenderDetail(name);
+        };
+    });
 
     // 点击关系行 → 跳转选中目标知识点 / 高亮关联节点
     panel.querySelectorAll('.kg-rel-row').forEach(row => {
@@ -2840,7 +2899,8 @@ function renderCauseFindings() {
     const first = causeMatrix[0], last = causeMatrix[causeMatrix.length - 1];
     const diffs = CAUSE_DEFS.map((c, i) => ({
         def: c, from: first[i], to: last[i],
-        delta: Math.round((last[i] - first[i]) * 10) / 10
+        delta: Math.round((last[i] - first[i]) * 10) / 10,
+        series: causeMatrix.map(r => r[i])
     }));
     const significant = diffs.filter(d => Math.abs(d.delta) >= 3).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
     const stable = diffs.filter(d => Math.abs(d.delta) < 3);
@@ -2850,13 +2910,18 @@ function renderCauseFindings() {
         return `<div class="insight-item ${up ? 'i-red' : 'i-green'}">
             <div><b>${d.def.name}</b>：${d.from}% → <b>${d.to}%</b>
             <span class="cause-delta ${up ? 'up' : 'down'}">${up ? '+' : ''}${d.delta}%</span><br>
-            <span class="insight-advice">${causeAdviceOf(d.def, up)}</span></div>
+            <span class="insight-advice">${causeAdviceOf(d)}</span></div>
         </div>`;
     }).join('');
 
     if (stable.length) {
+        // 高位稳定：未迁移 ≠ 无问题，末次占比仍 ≥30% 的稳定错因须提示纳入常态讲评
+        const high = stable.filter(d => d.to >= CAUSE_ADVICE_HIGH_SHARE);
+        const highTxt = high.length
+            ? `其中 <b>${high.map(d => escapeHTML(d.def.name)).join('、')}</b> 末次占比仍 ≥${CAUSE_ADVICE_HIGH_SHARE}%，属高位稳定：建议纳入常态讲评，不因「未迁移」而忽略。`
+            : '';
         html += `<div class="insight-item i-blue">
-            <div><b>基本稳定</b>：${stable.map(d => d.def.name).join('、')} 的占比变化均在 ±3% 以内，错因结构未发生明显迁移。</div></div>`;
+            <div><b>基本稳定</b>：${stable.map(d => escapeHTML(d.def.name)).join('、')} 的占比变化均在 ±3% 以内，错因结构未发生明显迁移。${highTxt}</div></div>`;
     }
     El.causeFindingList.innerHTML = html;
 }
@@ -2944,41 +3009,67 @@ function weakestPrereqEvidence(name) {
         const ev = evidenceStateOf(p);
         if (ev.state === 'none') { noEvidence = true; return; }
         if (ev.state === 'unlearned') return;
-        if (!worst || ev.rate < worst.rate) worst = { name: p, rate: ev.rate };
+        if (!worst || ev.rate < worst.rate) worst = { name: p, rate: ev.rate, state: ev.state, count: ev.count || 0 };
     });
     return { worst, noEvidence };
 }
 
 // 学生分组派生（原型模拟：名单池确定性旋转，四组互斥；真实数据按学生粒度作答证据生成）
 function deriveStudentGroups(node) {
+    const targetState = evidenceStateOf(node.name).state;
+    if (targetState === 'none' || targetState === 'unlearned') return { diag: [], pre: [], solid: [], next: [] };
     const off = [...node.name].reduce((s, c) => s + c.charCodeAt(0), 0) % KG_STUDENT_POOL.length;
     const rotated = KG_STUDENT_POOL.slice(off).concat(KG_STUDENT_POOL.slice(0, off));
     const m = masteryOf(node);
     const wp = weakestPrereqEvidence(node.name);
     if (m >= 80) return { diag: [], pre: [], solid: [], next: rotated.slice(0, 8) };
     if (m < 60 && wp && wp.noEvidence) return { diag: rotated.slice(0, 4), pre: [], solid: rotated.slice(4, 9), next: rotated.slice(9, 12) };
-    if (m < 60 && wp && wp.worst && wp.worst.rate < 70) return { diag: [], pre: rotated.slice(0, 4), solid: rotated.slice(4, 9), next: rotated.slice(9, 12) };
+    if (m < 60 && wp && wp.worst && wp.worst.state === 'period' && wp.worst.rate < 70) return { diag: [], pre: rotated.slice(0, 4), solid: rotated.slice(4, 9), next: rotated.slice(9, 12) };
     return { diag: [], pre: [], solid: rotated.slice(0, 6), next: rotated.slice(6, 10) };
 }
 
-// 统一分组访问：显式样例优先，其余派生；统一携带分组理由
+// 分组理由统一由规则和数据生成；演示名单只是分组结果，不在数据层保存展示文案
+function relGroupReason(name, key, students) {
+    const cnt = students.length;
+    if (!cnt) return '';
+    const entry = kgEntryOf(name);
+    const pres = Object.keys(entry.prerequisite || {});
+    const nonePres = pres.filter(p => evidenceStateOf(p).state === 'none');
+    const weakPres = pres.map(p => ({ name: p, ev: evidenceStateOf(p) }))
+        .filter(x => x.ev.state === 'period' && x.ev.rate < 70)
+        .sort((a, b) => a.ev.rate - b.ev.rate);
+    const nextNames = Object.keys(entry.followUps || {});
+    if (key === 'diag') {
+        return `${cnt} 人｜当前点待巩固且直接前置暂无证据：${nonePres.join('、')}；先诊断，不把未知判为薄弱`;
+    }
+    if (key === 'pre' && weakPres.length) {
+        const weak = weakPres[0];
+        return `${cnt} 人｜最弱前置「${weak.name}」周期内 ${weak.ev.count} 场汇总 ${weak.ev.rate}% <70%；先补前置再回当前点`;
+    }
+    if (key === 'solid') {
+        const preCondition = pres.length
+            ? '个人直接前置均有周期证据且 ≥70%'
+            : '当前点无直接前置关系，前置条件豁免';
+        return `${cnt} 人｜${preCondition}；个人当前点 <80%；巩固「${name}」本身`;
+    }
+    if (key === 'next') {
+        return `${cnt} 人｜个人当前点周期汇总 ≥80%；后续应用范围：${nextNames.join('、')}`;
+    }
+    return '';
+}
+
+// 统一分组访问：显式样例优先，其余派生；展示理由不在此写死
 function groupsOf(name) {
     const explicit = KG_STUDENT_GROUPS[name];
-    if (explicit) {
-        return { diag: explicit.diag, pre: explicit.pre, solid: explicit.solid, next: explicit.next };
-    }
     const node = kgIndex.byName[name] ? kgIndex.byName[name].node : null;
-    if (!node) return null;
-    const d = deriveStudentGroups(node);
-    const wp = weakestPrereqEvidence(name);
-    const nonePres = ((kpRelations[name] || {}).prerequisite || []).filter(p => evidenceStateOf(p).state === 'none');
-    const reasons = {
-        diag: nonePres.length ? `当前失分，且前置「${nonePres.join('、')}」暂无作答证据，先诊断再决定` : '前置均有作答证据，无需前置诊断',
-        pre: wp && wp.worst ? `最弱前置「${wp.worst.name}」周期汇总 ${wp.worst.rate}%（<70%），先补基础再回当前` : '前置表现尚可，无需前置补练',
-        solid: '前置尚可，重点巩固当前知识点本身',
-        next: '个人周期汇总 ≥80%，可安排后续应用检查'
-    };
-    return { diag: { students: d.diag, reason: reasons.diag }, pre: { students: d.pre, reason: reasons.pre }, solid: { students: d.solid, reason: reasons.solid }, next: { students: d.next, reason: reasons.next } };
+    if (!explicit && !node) return null;
+    const raw = explicit || deriveStudentGroups(node);
+    return ['diag', 'pre', 'solid', 'next'].reduce((acc, key) => {
+        const value = raw[key];
+        const students = Array.isArray(value) ? value : ((value && value.students) || []);
+        acc[key] = { students, reason: relGroupReason(name, key, students) };
+        return acc;
+    }, {});
 }
 
 // 前序断层归因：对掌握度 <60% 的知识点，沿 kpRelations.prerequisite 链回溯，定位根因层
@@ -3835,20 +3926,47 @@ function evBadgeHtml(ev) {
     return `<span class="kg-ev-badge ${d.cls}"${style} title="${d.label}">${text}</span>`;
 }
 
-// 前序区动作：按证据状态生成（未学仅衔接 / 无证据先诊断 / <70% 补练 / 尚可无需补练）
-function prereqActionHtml(target, ev) {
-    if (ev.state === 'unlearned') return '<span class="rd-rel-note">未学内容仅课堂衔接，不诊断、不加练</span>';
-    if (ev.state === 'none') return `<button type="button" class="rd-mini-btn rd-btn-diag" data-act="diag" data-kp="${escapeHTML(target)}">查看分组建议</button>`;
-    if (ev.rate < 70) return `<button type="button" class="rd-mini-btn rd-btn-pre" data-act="pre" data-kp="${escapeHTML(target)}">查看分组建议</button>`;
-    return '<span class="rd-rel-note ok">前置表现尚可，暂无需补练</span>';
+// 行说明统一为「数值 + 阈值 + 是否建议练习」；按钮仍由实际建议区决定。
+function relPracticeNoteHtml(rate, threshold, shouldPractice) {
+    let shownRate = Math.round(rate * 10) / 10;
+    if (rate < threshold && shownRate >= threshold) {
+        shownRate = (Math.floor(rate * 10) / 10).toFixed(1);
+    }
+    const operator = rate < threshold ? '&lt;' : '≥';
+    const okClass = !shouldPractice && rate >= threshold ? ' ok' : '';
+    return `<span class="rd-rel-note${okClass}">${shownRate}% ${operator}${threshold}%，${shouldPractice ? '建议练习' : '不触发练习'}</span>`;
 }
 
-// 后序区动作：未学仅衔接；当前 ≥80% 才提供后续应用；其余掌握后再安排
-function followUpActionHtml(target, ev, currentM) {
-    if (ev.state === 'unlearned') return '<span class="rd-rel-note">未学内容，仅课堂衔接预告，不布置加练</span>';
-    if (ev.state === 'none') return '<span class="rd-rel-note">暂无作答证据，待诊断 / 考查后评估</span>';
-    if (currentM >= 80) return `<button type="button" class="rd-mini-btn rd-btn-next" data-act="next" data-kp="${escapeHTML(target)}">查看分组建议</button>`;
-    return '<span class="rd-rel-note">当前知识点掌握后再安排</span>';
+// 前序区：关联点 <70% 建议练习，≥70% 不触发练习；无证据仍可进入前置诊断。
+function prereqActionHtml(target, ev, availablePurposes) {
+    if (ev.state === 'unlearned') return '<span class="rd-rel-note">未学：不触发练习</span>';
+    if (ev.state === 'none') {
+        return availablePurposes.has('diag')
+            ? `<button type="button" class="rd-mini-btn rd-btn-diag" data-act="diag" data-kp="${escapeHTML(target)}">查看分组建议</button>`
+            : '';
+    }
+    if (ev.state === 'history') return '<span class="rd-rel-note">历史证据仅参考，不触发练习</span>';
+    if (ev.state === 'period') {
+        const shouldPractice = ev.rate < 70;
+        const note = relPracticeNoteHtml(ev.rate, 70, shouldPractice);
+        const btn = shouldPractice && availablePurposes.has('pre')
+            ? `<button type="button" class="rd-mini-btn rd-btn-pre" data-act="pre" data-kp="${escapeHTML(target)}">查看分组建议</button>`
+            : '';
+        return note + btn;
+    }
+    return '';
+}
+
+// 后序区：当前点 ≥80% 建议练习，<80% 不触发练习；建议区非空时才显示入口。
+function followUpActionHtml(target, ev, currentM, currentEv, availablePurposes) {
+    if (ev.state === 'unlearned') return '<span class="rd-rel-note">未学：不触发练习</span>';
+    if (ev.state === 'none' || currentEv.state !== 'period') return '';
+    const shouldPractice = currentM >= 80;
+    const note = relPracticeNoteHtml(currentM, 80, shouldPractice);
+    const btn = shouldPractice && availablePurposes.has('next')
+        ? `<button type="button" class="rd-mini-btn rd-btn-next" data-act="next" data-kp="${escapeHTML(target)}">查看分组建议</button>`
+        : '';
+    return note + btn;
 }
 
 function openRelDiagDrawer(name, focusRelName, studentCtx) {
@@ -3894,7 +4012,11 @@ function renderRelDiagBody(name) {
     const ev = evidenceStateOf(name);
     const entry = kgEntryOf(name);
     const groups = groupsOf(name);
+    const drillSecs = drillSectionsOf(name).secs;
+    const availablePurposes = new Set(drillSecs.map(sec => sec.key));
     const confHits = confusionData.filter(c => c.kp === name || c.a === name || c.b === name);
+    const genBtn = document.getElementById('relDiagGenDrill');
+    if (genBtn) genBtn.hidden = !drillSecs.length;
 
     const ownRate = ev.state === 'period'
         ? `<b style="color:${st.color}">${m.toFixed(1)}%</b>`
@@ -3913,10 +4035,9 @@ function renderRelDiagBody(name) {
         const evT = evidenceStateOf(t);
         const src = (entry.prerequisite[t] || []).filter(s => s !== name && s !== t);
         return `<div class="rd-rel-row" data-kp="${escapeHTML(t)}" ${src.length ? `title="来源子知识点：${escapeHTML(src.join('、'))}"` : ''}>
-            <span class="rd-rel-chip rd-chip-neutral">前置</span>
             <span class="rd-rel-name" style="color:${kpHexOf(t)}">${escapeHTML(t)}</span>
             ${evBadgeHtml(evT)}
-            <span class="rd-rel-act">${prereqActionHtml(t, evT)}</span>
+            <span class="rd-rel-act">${prereqActionHtml(t, evT, availablePurposes)}</span>
         </div>`;
     }).join('');
 
@@ -3926,11 +4047,10 @@ function renderRelDiagBody(name) {
         const hit = confHits.find(c => c.a === t || c.b === t);
         const hitHtml = hit ? `<span class="rd-conf-hits">全班 ${hit.cls} 人次命中</span>` : '';
         return `<div class="rd-rel-row" data-kp="${escapeHTML(t)}">
-            <span class="rd-rel-chip rd-chip-neutral">易混淆</span>
             <span class="rd-rel-name" style="color:${kpHexOf(t)}">${escapeHTML(t)}</span>
             ${evBadgeHtml(evT)}
             ${hitHtml}
-            <span class="rd-rel-act"><button type="button" class="rd-mini-btn rd-btn-confuse" data-act="confuse" data-kp="${escapeHTML(t)}">查看分组建议</button></span>
+            <span class="rd-rel-act">${availablePurposes.has('confuse') ? `<button type="button" class="rd-mini-btn rd-btn-confuse" data-act="confuse" data-kp="${escapeHTML(t)}">查看分组建议</button>` : ''}</span>
         </div>`;
     }).join('');
 
@@ -3938,34 +4058,30 @@ function renderRelDiagBody(name) {
     const nextRows = nextKeys.map(t => {
         const evT = evidenceStateOf(t);
         return `<div class="rd-rel-row" data-kp="${escapeHTML(t)}">
-            <span class="rd-rel-chip rd-chip-neutral">后续</span>
             <span class="rd-rel-name" style="color:${kpHexOf(t)}">${escapeHTML(t)}</span>
             ${evBadgeHtml(evT)}
-            <span class="rd-rel-act">${followUpActionHtml(t, evT, m)}</span>
+            <span class="rd-rel-act">${followUpActionHtml(t, evT, m, ev, availablePurposes)}</span>
         </div>`;
     }).join('');
 
     const GROUP_DEFS = [
         { key: 'diag' }, { key: 'pre' }, { key: 'solid' }, { key: 'next' }
     ];
-    const groupsHtml = groups ? GROUP_DEFS.map(g => {
+    const groupsHtml = groups ? GROUP_DEFS.filter(g => availablePurposes.has(g.key)).map(g => {
         const grp = groups[g.key];
         const md = DRILL_PURPOSE_META[g.key];
         const cnt = grp.students.length;
         const chips = grp.students.map(s => `<span class="rd-chip">${escapeHTML(s)}</span>`).join('');
-        const extra = cnt
-            ? `<div class="rd-group-chips">${chips}</div>
-               <button type="button" class="rd-mini-btn rd-btn-${g.key}" data-act="${g.key}" data-kp="${escapeHTML(name)}">查看分组建议</button>`
-            : '';
-        return `<div class="rd-group-card g-${g.key} ${cnt ? '' : 'g-empty'}">
+        return `<div class="rd-group-card g-${g.key}">
             <div class="rd-group-hd">
                 <span class="rd-group-tag" style="background:${md.color}">${md.label}</span>
-                <span class="rd-group-cnt">${cnt ? cnt + ' 人' : '本组无人'}</span>
+                <span class="rd-group-cnt">${cnt} 人</span>
             </div>
             <div class="rd-group-reason">${escapeHTML(grp.reason)}</div>
-            ${extra}
+            <div class="rd-group-chips">${chips}</div>
+            <button type="button" class="rd-mini-btn rd-btn-${g.key}" data-act="${g.key}" data-kp="${escapeHTML(name)}">查看分组建议</button>
         </div>`;
-    }).join('') : '<div class="kg-diag-empty">暂无分组数据</div>';
+    }).join('') : '';
 
     body.innerHTML = `
         ${(() => {
@@ -3993,15 +4109,14 @@ function renderRelDiagBody(name) {
                 <span>档位 <b>${st.name}</b></span>
                 <span>未掌握 <b>${node.unmasteredCount || 0}</b> 人</span>
             </div>
-            ${node.level < 3 ? '<div class="rd-agg-tip">关联由子知识点聚合，已剔除模块内自关联；点击前置 / 后续名称可切换目标知识点</div>' : '<div class="rd-agg-tip">点击前置 / 后续名称可切换目标知识点</div>'}
         </div>
-        ${relSection('前序 · 证据与补练建议', KP_RELATION_DEFS.prerequisite.color, preKeys, preRows)}
-        ${relSection('易混淆 · 辨析建议', KP_RELATION_DEFS.confusable.color, confKeys, confRows)}
-        ${relSection('后序 · 衔接与应用建议', '#22c55e', nextKeys, nextRows)}
-        <div class="rd-sec">
+        ${relSection('前置知识', KP_RELATION_DEFS.prerequisite.color, preKeys, preRows)}
+        ${relSection('易混淆知识点', KP_RELATION_DEFS.confusable.color, confKeys, confRows)}
+        ${relSection('后续知识', '#22c55e', nextKeys, nextRows)}
+        ${groupsHtml ? `<div class="rd-sec">
             <div class="rd-sec-title" style="color:#0f172a">学生分组建议 <span>按知识点作答证据，非总分分层</span></div>
             <div class="rd-groups">${groupsHtml}</div>
-        </div>
+        </div>` : ''}
         <div class="rd-redline">
             <i class="fas fa-shield-halved"></i>
             判断边界：综合题失分 ≠ 全关联薄弱；班级均值 ≠ 人人有问题；无作答证据 = 未知，先诊断再下结论。
@@ -4041,7 +4156,7 @@ function drillSecScope(name, secKey) {
         case 'pre':
             return pres
                 .map(p => ({ p, ev: evidenceStateOf(p) }))
-                .filter(x => (x.ev.state === 'period' || x.ev.state === 'history') && x.ev.rate < 70)
+                .filter(x => x.ev.state === 'period' && x.ev.rate < 70)
                 .sort((a, b) => a.ev.rate - b.ev.rate)
                 .map(x => x.p);
         case 'confuse':
@@ -4069,21 +4184,33 @@ function drillSectionsOf(name) {
     const confKeys = Object.keys(entry.confusable || {});
     const confHits = confusionData.filter(c => c.kp === name || c.a === name || c.b === name);
 
+    const targetEv = evidenceStateOf(name);
     const secs = [];
-    if (groups.diag.students.length) secs.push({ key: 'diag', students: groups.diag.students, basis: groups.diag.reason, scopeKps: drillSecScope(name, 'diag') });
-    if (groups.pre.students.length) secs.push({ key: 'pre', students: groups.pre.students, basis: groups.pre.reason, scopeKps: drillSecScope(name, 'pre') });
-    if (confKeys.length) {
-        const hitTxt = confHits.length ? `，全班合计命中 ${confHits.reduce((s, h) => s + h.cls, 0)} 人次` : '（暂无命中记录）';
-        secs.push({ key: 'confuse', students: null, scope: 'class', basis: `教研标注易混淆：${confKeys.join('、')}${hitTxt}，成对对比替代无效刷题`, scopeKps: drillSecScope(name, 'confuse') });
+    const diagScope = drillSecScope(name, 'diag');
+    const preScope = drillSecScope(name, 'pre');
+    const nextScope = drillSecScope(name, 'next');
+    const canGroup = targetEv.state === 'period' && m < 80;
+    if (canGroup && groups.diag.students.length && diagScope.length) {
+        secs.push({ key: 'diag', students: groups.diag.students, basis: groups.diag.reason, scopeKps: diagScope });
     }
-    if (m < 80 && groups.solid.students.length) {
-        secs.push({ key: 'solid', students: groups.solid.students, basis: `${groups.solid.reason}；目标周期汇总 ${Math.round(m)}% <80%`, scopeKps: drillSecScope(name, 'solid') });
+    if (canGroup && groups.pre.students.length && preScope.length) {
+        secs.push({ key: 'pre', students: groups.pre.students, basis: groups.pre.reason, scopeKps: preScope });
     }
-    if (groups.next.students.length) {
+    if (targetEv.state !== 'unlearned' && confKeys.length) {
+        const diagnosticHits = confHits.filter(h => h.cls >= 5);
+        const hitTxt = diagnosticHits.length
+            ? `；${diagnosticHits.length} 个易混对达到 5 人次诊断门槛`
+            : '；未达到 5 人次诊断门槛，仅作预防性辨析';
+        secs.push({ key: 'confuse', students: null, scope: 'class', basis: `教研标注易混淆：${confKeys.join('、')}${hitTxt}；成对对比替代无效刷题`, scopeKps: drillSecScope(name, 'confuse') });
+    }
+    if (canGroup && groups.solid.students.length) {
+        secs.push({ key: 'solid', students: groups.solid.students, basis: `${groups.solid.reason}；目标班级周期汇总 ${Math.round(m)}% <80%`, scopeKps: drillSecScope(name, 'solid') });
+    }
+    if (targetEv.state === 'period' && groups.next.students.length && nextScope.length) {
         secs.push({
             key: 'next', students: groups.next.students, basis: groups.next.reason,
-            warn: m < 80 ? `目标周期汇总 ${Math.round(m)}% <80%，建议先完成同点巩固，再进入后续应用` : '',
-            scopeKps: drillSecScope(name, 'next')
+            warn: m < 80 ? `目标班级周期汇总 ${Math.round(m)}% <80%，名单学生可先行，班级整体先完成同点巩固` : '',
+            scopeKps: nextScope
         });
     }
     return { secs, m, groups };
@@ -4143,7 +4270,7 @@ function renderDrillBody(name) {
     const ev = evidenceStateOf(name);
     const { secs } = drillSectionsOf(name);
     if (!secs.length) {
-        body.innerHTML = `<div class="drill-empty"><i class="fas fa-circle-check"></i>当前知识点暂无需要分组干预的教学建议<br><em>前置均有证据且达标、周期汇总 ≥80%、无易混淆标注</em></div>`;
+        body.innerHTML = `<div class="drill-empty"><i class="fas fa-circle-info"></i>当前没有满足生成规则的教学建议<br><em>仅在关系、作答证据、建议对象与关注范围同时满足对应条件时显示</em></div>`;
         updateDrillSummary([]);
         return;
     }
@@ -4430,40 +4557,156 @@ function renderDetailsChart(node) {
 
 /* ---------------- 弹窗：学情来源 ---------------- */
 
+// 两栏合并的任务集与配额：上限对「作业 + 考试」总数生效
+function sourceItems() {
+    return ModalData.assignments.concat(ModalData.exams);
+}
+function sourceSelectedCount() {
+    return sourceItems().filter(i => i.checked).length;
+}
+function sourceQuotaLeft() {
+    return Math.max(0, SOURCE_MAX_SELECT - sourceSelectedCount());
+}
+
+// 栏头全选的两段式意图：配额截断后栏头仍是半选态，若不记录意图，第二次点击又会走「全选」并再次被拦下，
+// 栏头就永远卡在半选、整栏取消无从下手。故约定：第一次点击 = 全选（按配额补入最近若干份），
+// 被截断后紧接着的第二次点击 = 清空本栏；任何单行勾选变化或一键恢复都会清掉该意图。
+const sourceAllIntent = { assign: false, exam: false };
+
+// 默认 / 一键恢复：按日期从新到旧选中前 SOURCE_MAX_SELECT 份，其余全部取消
+function applyRecentSourceDefault() {
+    const all = sourceItems();
+    all.forEach(i => { i.checked = false; });
+    all.slice().sort(sourceDateDesc).slice(0, SOURCE_MAX_SELECT).forEach(i => { i.checked = true; });
+    sourceAllIntent.assign = false;
+    sourceAllIntent.exam = false;
+}
+
+// 配额回显（轻量化）：标题旁小字上限说明 + 底栏内联剩余/已达上限徽章；勾选被拦下时抖动底栏回显
+function updateSourceQuota() {
+    const total = sourceSelectedCount();
+    const left = SOURCE_MAX_SELECT - total;
+    const state = document.getElementById('sourceQuotaState');
+    const echo = document.getElementById('sourceScopeEcho');
+    const note = document.getElementById('sourceCapNote');
+    if (state) {
+        state.textContent = left === 0 ? '已达上限' : `还可再选 ${left} 份`;
+        state.className = 'modal-scope-state' + (left === 0 ? ' is-full' : (left <= 3 ? ' is-near' : ''));
+    }
+    if (echo) echo.classList.toggle('is-full', left === 0);
+    if (note) note.classList.toggle('is-full', left === 0);
+    // 栏头全选框：悬停说明全选同样受配额约束；已截断时说明第二次点击是清空本栏
+    [[El.checkAllAssignments, 'assign'], [El.checkAllExams, 'exam']].forEach(([cb, key]) => {
+        if (!cb) return;
+        cb.title = sourceAllIntent[key]
+            ? `全选已被 ${SOURCE_MAX_SELECT} 份上限截断，再次点击栏头可清空本栏勾选`
+            : (left === 0
+                ? `已达 ${SOURCE_MAX_SELECT} 份上限，需先取消已选项才能继续勾选`
+                : `全选本栏（受 ${SOURCE_MAX_SELECT} 份总上限约束，剩余配额 ${left} 份，超出部分只补入最近的若干份）`);
+    });
+}
+
+let sourceQuotaFlashTimer = null;
+function flashSourceQuota() {
+    const echo = document.getElementById('sourceScopeEcho');
+    if (!echo) return;
+    echo.classList.remove('flash');
+    void echo.offsetWidth;   // 强制重排，保证连续拦截时动画能重新播放
+    echo.classList.add('flash');
+    clearTimeout(sourceQuotaFlashTimer);
+    sourceQuotaFlashTimer = setTimeout(() => echo.classList.remove('flash'), 600);
+}
+
 function renderModalList() {
-    renderSourceColumn(ModalData.assignments, El.modalAssignList, El.checkAllAssignments, El.assignEmpty);
-    renderSourceColumn(ModalData.exams, El.modalExamList, El.checkAllExams, El.examEmpty);
+    renderSourceColumn(ModalData.assignments, El.modalAssignList, El.checkAllAssignments, El.assignEmpty, 'assign');
+    renderSourceColumn(ModalData.exams, El.modalExamList, El.checkAllExams, El.examEmpty, 'exam');
     updateSourceCounts();
+    updateSourceQuota();
     syncScopeEcho();   // 勾选变化即时同步弹窗底栏与外部胶囊的已选份数
 }
 
-function renderSourceColumn(list, container, checkAll, emptyEl) {
+function renderSourceColumn(list, container, checkAll, emptyEl, key) {
     if (!container) return;
     if (list.length === 0) {
         container.innerHTML = '';
         checkAll.checked = false;
+        checkAll.indeterminate = false;
         emptyEl.style.display = 'flex';
         return;
     }
     emptyEl.style.display = 'none';
-    checkAll.checked = list.every(item => item.checked);
+    const checkedN = list.filter(i => i.checked).length;
+    checkAll.checked = checkedN === list.length;
+    checkAll.indeterminate = checkedN > 0 && checkedN < list.length;
 
-    container.innerHTML = list.map(item => `
-        <label class="check-item">
+    // 配额用尽后，未选项置灰并给出悬停原因；仍可点击，点击时由 onchange 拦下并提示
+    const full = sourceQuotaLeft() === 0;
+    container.innerHTML = list.map(item => {
+        const capped = full && !item.checked;
+        return `
+        <label class="check-item${capped ? ' is-capped' : ''}"${capped ? ` title="已达 ${SOURCE_MAX_SELECT} 份上限，请先取消部分已选项"` : ''}>
             <input type="checkbox" class="modal-item-checkbox" data-id="${item.id}" ${item.checked ? 'checked' : ''}>
             <i class="fas fa-folder"></i>
             <span title="${escapeHTML(item.name)}">${escapeHTML(item.name)}</span>
             ${item.date ? `<span class="item-date">${item.date}</span>` : ''}
-        </label>
-    `).join('');
+        </label>`;
+    }).join('');
 
     container.querySelectorAll('.modal-item-checkbox').forEach(cb => {
         cb.onchange = (e) => {
             const item = list.find(i => i.id === e.target.dataset.id);
-            if (item) item.checked = e.target.checked;
+            if (!item) return;
+            // 超上限：回滚勾选态，不写入数据，并给出明确原因与下一步动作
+            if (e.target.checked && sourceQuotaLeft() === 0) {
+                e.target.checked = false;
+                flashSourceQuota();
+                mainToast(`最多同时统计 ${SOURCE_MAX_SELECT} 份（作业 + 考试合计），请先取消部分已选项`);
+                return;
+            }
+            sourceAllIntent[key] = false;   // 手动改过单行，栏头回到「第一次点击 = 全选」
+            item.checked = e.target.checked;
             renderModalList();
         };
     });
+}
+
+// 栏头全选：取消不受限；勾选时只把剩余配额按日期从新到旧补入本栏，超出部分明确告知；
+// 被截断后的下一次点击视为「清空本栏」，保证配额用尽时整栏取消仍然可达
+function checkAllSourceColumn(list, on, key) {
+    if (!on) {
+        sourceAllIntent[key] = false;
+        list.forEach(i => { i.checked = false; });
+        renderModalList();
+        return;
+    }
+    if (sourceAllIntent[key]) {
+        sourceAllIntent[key] = false;
+        const cleared = list.filter(i => i.checked).length;
+        list.forEach(i => { i.checked = false; });
+        renderModalList();
+        mainToast(`已清空本栏 ${cleared} 份勾选，腾出的配额可换入其他任务`);
+        return;
+    }
+    const hadChecked = list.filter(i => i.checked).length;
+    let left = sourceQuotaLeft();
+    const pending = list.filter(i => !i.checked).slice().sort(sourceDateDesc);
+    let added = 0;
+    pending.forEach(i => {
+        if (left <= 0) return;
+        i.checked = true;
+        left--;
+        added++;
+    });
+    // 本栏一份都没选上时不进入「再点清空」态（清空 0 份无意义），只提示配额已满
+    sourceAllIntent[key] = added < pending.length && (hadChecked + added) > 0;
+    renderModalList();
+    if (added < pending.length) {
+        flashSourceQuota();
+        const tail = sourceAllIntent[key] ? '；再次点击栏头可清空本栏' : '';
+        mainToast((added
+            ? `已达 ${SOURCE_MAX_SELECT} 份上限，本栏仅补入最近 ${added} 份，其余 ${pending.length - added} 份未选`
+            : `已达 ${SOURCE_MAX_SELECT} 份上限，请先取消部分已选项再全选本栏`) + tail);
+    }
 }
 
 function updateSourceCounts() {
@@ -4505,8 +4748,8 @@ function syncScopeEcho() {
     set('filterRangeText', range);
     set('filterCountText', `已选 ${total} 份`);
     set('modalRangeEcho', range);
-    set('modalCountEcho', `已选 ${total} 份`);
-    if (El.filterCount) El.filterCount.title = `统计范围 ${range} · 已选 ${total} 份（点击设置时间范围与学情来源）`;
+    set('modalCountEcho', `已选 ${total} / ${SOURCE_MAX_SELECT} 份`);
+    if (El.filterCount) El.filterCount.title = `统计范围 ${range} · 已选 ${total} / ${SOURCE_MAX_SELECT} 份（作业 + 考试合计上限 ${SOURCE_MAX_SELECT} 份，点击设置时间范围与学情来源）`;
 }
 
 function updateFilterCount() {
@@ -4991,15 +5234,19 @@ function bindEvents() {
         applySubjectView();
     };
 
-    // 两栏全选
-    El.checkAllAssignments.onchange = (e) => {
-        ModalData.assignments.forEach(i => i.checked = e.target.checked);
-        renderModalList();
-    };
-    El.checkAllExams.onchange = (e) => {
-        ModalData.exams.forEach(i => i.checked = e.target.checked);
-        renderModalList();
-    };
+    // 两栏全选（受 20 份总配额约束：只补入最近的若干份，超出部分提示）
+    El.checkAllAssignments.onchange = (e) => checkAllSourceColumn(ModalData.assignments, e.target.checked, 'assign');
+    El.checkAllExams.onchange = (e) => checkAllSourceColumn(ModalData.exams, e.target.checked, 'exam');
+
+    // 一键恢复默认口径：按日期从新到旧重选最近 20 份（覆盖当前勾选）
+    const btnSourceRecent = document.getElementById('btnSourceRecent');
+    if (btnSourceRecent) {
+        btnSourceRecent.onclick = () => {
+            applyRecentSourceDefault();
+            renderModalList();
+            mainToast(`已恢复为最近 ${SOURCE_MAX_SELECT} 份（按日期从新到旧）`);
+        };
+    }
 
     // 学科筛选：演示双学科权限（数学 / 语文），切语文进入 L2-a 缺省页（见 applySubjectView）
     const subjectSelectEl = document.getElementById('subjectSelect');
@@ -5289,8 +5536,10 @@ function bindEvents() {
 /* ---------------- Init ---------------- */
 
 function init() {
+    applyRecentSourceDefault();   // 学情来源默认选中最近 20 份（作业 + 考试合计上限）
     kgBuildIndex();   // 证据索引提前构建：refreshDashboard 卡1 覆盖口径依赖 evidenceStateOf（幂等）
     bindEvents();
+    renderModalList();        // 首屏即把底栏配额回显 / 置灰态 / 栏头半选态 / 已选计数渲染到位，不等到开弹窗才一致
     refreshDashboard();
     switchView('tree');       // 默认树状图
     renderCauseFindings();    // 错因关键发现（与维度无关，初始化一次）
@@ -6224,8 +6473,8 @@ init();
                 '| 班级 | 默认当前学年任教班级（演示高二 1 班）；列表随所选年级的任教权限生成；选「全部班级」时隐藏「班级平均得分率」卡（无单一班级可算均值） |',
                 '| 学科 | 范围为教务权限内学科，恒 ≥1 个：单学科固定不可切，多学科按列表切换，默认选中第一个；演示按双学科（数学、语文）配置，语文无知识体系 → 切语文学科进入 L2-a 缺省页（XK-13），切回数学恢复原页签与图表 |',
                 '| 时间 | 学年 / 月 / 周（默认）/ 自定义四档，档位切换对应日期控件显隐；月、周、自定义可跨学年选择（范围取教务权限数据并集）；档位与日期控件收在「学情来源与统计范围」弹窗顶部的时间条内，筛选栏只回显「时间范围 · 已选 N 份」胶囊，不再直放时间控件；默认档位为「周」（默认周 2026-W38 = 09-14 ~ 09-20） |',
-                '| 学情来源 | 筛选栏胶囊点开弹窗（XK-12.3）：顶部设统计时间范围、下方勾选作业 / 考试，一次设定；选择即时生效，取消不回滚；数据时效：作业截止到前一天（不含今天），考试以完整学情发布为准 |',
-                '| 掌握程度 | 「设置掌握程度」打开弹窗（XK-12.1）；档位全校共用，学科组长及以上可写，学科教师 / 班主任为只读查看（悬停提示联系学科组长） |',
+                '| 学情来源 | 筛选栏胶囊点开弹窗（XK-12）：顶部设统计时间范围、下方勾选作业 / 考试，一次设定；选择即时生效，取消不回滚；**作业 + 考试合计最多 20 份**，默认选中最近 20 份（两栏合并后按日期从新到旧，同日按列表原序、作业列在前）；数据时效：作业截止到前一天（不含今天），考试以完整学情发布为准 |',
+                '| 掌握程度 | 「设置掌握程度」打开弹窗（XK-12）；档位全校共用，学科组长及以上可写，学科教师 / 班主任为只读查看（悬停提示联系学科组长） |',
                 '',
                 '> 已知限制：学科切换不重算演示数据。',
                 '> 已知限制：时间档位只改统计区间回显，不改演示周期任务集——周期模块恒为 6 场演示任务（2025-09-28 ~ 2025-12-11），与默认周 2026-W38 不同年，属原型演示数据的固有取舍；接入真实数据后按档位重取任务集。',
@@ -6288,8 +6537,8 @@ init();
                 '- **统一目录**：一级节点多选开关 + 「已开/总数」计数 + 覆盖徽章「已考 x/y」（子树有检测证据节点数 ÷ 子树节点总数）；关闭项灰显加删除线，再次点击恢复，只影响展示层；零覆盖一级模块默认隐藏，勾选「查看全部知识点」后显示（琥珀提醒，得分率位改「未检测」）；目录色点 = 该模块掌握度档位色，无证据恒灰，不按模块类型取色。',
                 '- **查看全部知识点**：默认不勾选，仅知识点维度渲染；勾选后目录、树状图、表格、关联图谱显示全部 111 个节点；统计口径（摘要卡、KPI、诊断计数、教学建议）不随开关变化，属统计红线；知识点与能力两个维度的开关状态分别记忆。',
                 '- **树状图（默认）**：节点按掌握度档位着色；暂无证据与未学恒灰（勾选后仍灰，悬停提示证据状态）；有历史得分的按历史得分率着色；底部图例随掌握档位实时生成。',
-                '- **表格**：层级页签「全部/一级/二级/三级」；检测状态四态（本期已检测绿 / 仅有历史证据青 / 本期未检测灰 / 未学灰）；无本期证据的行数值显示「—」，未知不算未掌握。',
-                '- **关联图谱**：深度一级 / 二级 / 三级（默认）；关系开关 3 项（前置·后续、易混淆、树状结构，仅文字加选中态）；另有标签策略、仅看关联、力导向 / 放射布局。画布只渲染知识点节点及其间边，能力、题型、方法、易错点四类关联对象只在节点详情面板的关联清单出现（类型标签 + 引用计数），不占节点也不连边；节点填充色 = 掌握度档位色，断层节点改红色描边 + 红晕 + 加粗线宽（填充仍表掌握度）；断层红边只画有证据的前置关系；统计条只显示「知识点 N · 关联边 E」；点击节点打开详情面板（关联清单 / 断层警示 / 前后序关联诊断）。',
+                '- **表格**：层级页签「全部/一级/二级/三级」；不显示检测状态列；无本期证据的行数值显示「—」，未知不算未掌握。',
+                '- **关联图谱**：深度一级 / 二级 / 三级（默认）；关系开关 3 项（前置·后续、易混淆、树状结构，仅文字加选中态）；另有标签策略、仅看关联、力导向 / 放射布局。画布只渲染知识点节点及其间边，能力、题型、方法、易错点四类关联对象只在节点详情面板的关联清单出现（类型标签 + 引用计数），不占节点也不连边；节点填充色 = 掌握度档位色，断层节点改红色描边 + 红晕 + 加粗线宽（填充仍表掌握度）；断层红边只画有证据的前置关系；统计条只显示「知识点 N · 关联边 E」；点击节点打开详情面板，统计项仅保留「关联关系 / 子节点」，点击分别切换关联清单与直接子节点清单，不展示子孙节点统计；「前后序关联诊断」按钮只在关联关系列表显示，子节点列表不显示。切换知识点时默认回到关联关系列表。',
                 '- **导出**：按当前维度、层级、目录过滤后的同口径数据导出 CSV（带 BOM），含检测状态列。',
                 '',
                 '**节点得分率**：按时间衰减加权计算——单场得分率 = 100 − 该场失分率，权重 = 0.5 的（距周期结束天数 ÷ 半衰期 30 天）次幂，加权求和后除以权重之和。完整步骤、数值示例、边界与口径边界见 XK-06A；热力演进累计列用未加权的有效场次算术平均，两者不可互相引用。',
@@ -6457,7 +6706,7 @@ init();
                 '',
                 '## 一、为什么按「拓扑角色」分组',
                 '',
-                '题库知识关系共 21 类，但诊断规则不按关系名逐条写——因为名字不同但拓扑结构相同的关系，诊断算法完全一样。按拓扑角色分 4 组：',
+                '题库知识关系共 21 类。拓扑角色决定算法能力，每一类关系的建议生成条件与停用边界必须在 XK-12.3 逐类登记，不得用「同拓扑」省略具体显隐规则。按拓扑角色分 4 组：',
                 '',
                 '| 拓扑角色 | 结构特征 | 能做什么诊断 | 不能做什么 |',
                 '| --- | --- | --- | --- |',
@@ -6478,7 +6727,7 @@ init();
                 '| 前置 / 后续 / 易混淆题点 | 92 / 92 / 36 | 链条 + 二元 | 实线箭头 + 虚线 | 考法顺序与考法辨析 |',
                 '| 题点的方法 / 易错 / 能力类 | 59 / 69 / 134 / 111 | 枢纽 / 标签 / 汇聚 | 不上图 | 考法画像（启用范围待确认） |',
                 '| 微题点的方法 / 易错 / 能力类 | 23 / 18 / 40 / 36 | 枢纽 / 标签 / 汇聚 | 不上图 | 变式覆盖与变式方法（只做聚合不做链路） |',
-                '| 前置 / 后续 / 易混淆微题点 | 21 / 21 / 11 | 链条 + 二元 | 不上图 | 高中未开通则禁用，不得出断层或易混诊断 |',
+                '| 前置 / 后续 / 易混淆微题点 | 21 / 21 / 11 | 链条 + 二元 | 不上图 | 当前演示未展示；真实微题点证据满足对应规则后才出断层或易混诊断 |',
                 '',
                 '## 三、画布-诊断一致性（红线）',
                 '',
@@ -6685,39 +6934,101 @@ init();
         {
             id: 'XK-08', group: 'XK', title: '错因结构分析',
             body: [
-                '- **堆叠柱状图**：各次任务的失分归因占比（错因 × 任务）；图例可点击显隐系列；悬停某一段时高亮该错因在所有任务上的段落，并显示各次占比 + 周期均值 + 首尾变化。',
-                '- **错因体系动态化**：错因种类随学科或题目扩展，配色与干预文案均有通用兜底，教学建议只取首尾差 ≥3 个百分点且上升的错因，不写死错因枚举。',
+                '- **堆叠柱状图**：各次任务的失分归因占比（错因 × 任务）；图例可点击显隐系列；悬停某一段时高亮该错因在所有任务上的段落，并显示各次占比 + 周期均值 + 首尾占比变化。',
+                '- **错因体系动态化**：错因种类随学科或题目扩展，不写死枚举；配色走色板循环兜底；**干预文案与错因名称 / 学科完全解耦**，仅由方向、幅度、末次占比、逐场单调性四个通用指标驱动（见下表），新增错因种类无需补文案。教学建议只取首尾差 ≥3 个百分点且上升的错因。',
                 '- **限制**：仅智批作业支持错因分析。',
                 '',
                 '**关键发现规则**（与维度无关，页面初始化渲染一次）',
                 '',
                 '| 步骤 | 规则 |',
                 '| --- | --- |',
-                '| 取数 | 取错因矩阵首行（最早任务）与末行（最近任务），逐错因算 占比变化 = 末次 − 首次，保留 1 位小数 |',
-                '| 显著迁移 | 变化幅度 ≥3 个百分点判为显著迁移，按幅度降序逐条展示；上升（差值为正）红色、下降为绿色 |',
-                '| 基本稳定 | 变化幅度 <3 个百分点归入一条蓝色汇总，注明错因结构未发生明显迁移 |',
-                '| 单条结构 | 错因名 + 「首次占比 → 末次占比（变化幅度）」+ 对应干预建议；未预置文案的错因走通用模板兜底 |'
+                '| 取数 | 逐错因取两个口径：① **首末两点**＝矩阵首行（最早任务）与末行（最近任务），算 Δ＝末次−首次（1 位小数），只决定升降、幅度、显著性与红/绿；② **逐场序列**＝该错因在周期内每次任务的占比（与堆叠柱状图同源），只决定趋势形态（逐场持续 / 波动） |',
+                '| 显著迁移 | Δ 绝对值 ≥3 个百分点判为显著迁移，按绝对值降序逐条展示；上升红色、下降绿色 |',
+                '| 基本稳定 | Δ 绝对值 <3 归入一条蓝色汇总，注明错因结构未发生明显迁移；其中末次占比 ≥30% 者追加「高位稳定」句：建议纳入常态讲评，不因「未迁移」而忽略 |',
+                '| 单条结构 | 错因名 + 「首次占比 → 末次占比（Δ）」+ 通用干预文案；错因名只作数据展示，不进入文案模板 |',
+                '| 首末 vs 逐场分工 | 显著迁移判定（Δ 绝对值 ≥3）与红/绿着色**仅用首末两点**；方向短语的「逐场持续 / 波动」**额外用逐场序列的相邻差分**。二者同源于错因矩阵，不得仅凭首末两点推断波动 |',
+                '',
+                '- **波动如何计算**：设逐场序列 s(1)…s(n)（n＝周期任务数），相邻差分 d(i)＝s(i+1)−s(i)。全部 d(i)≥0 为「逐场不降」、全部 d(i)≤0 为「逐场不升」；存在反号差分即为「波动」。方向短语＝Δ 符号（首末）× 单调性（逐场）的四态组合；仅 Δ 绝对值 ≥3 的显著项才展示方向短语。n<2 时无相邻差分，按单调处理（此时 Δ＝0 亦不显著）。',
+                '',
+                '**干预文案生成规则**（通用模板，与错因名称 / 学科无关；阈值：急升 Δ≥6、高位末次 ≥30%、低位末次 ≤10%）',
+                '',
+                '| 判定 | 文案结构 |',
+                '| --- | --- |',
+                '| 方向短语 | Δ 符号（首末）× 逐场单调性（全序列相邻差分）四态：Δ>0 且逐场不降→「占比逐场持续上升」；Δ>0 但存在相邻回落→「占比波动上行」；Δ<0 且逐场不升→「占比逐场稳步下降」；Δ<0 但存在相邻反弹→「占比波动回落」。单调性依据逐场序列而非首末两点 |',
+                '| 上升·急升（Δ≥6，优先） | 方向短语 + 「升幅达 Δ 个百分点」+ 先复盘近期任务该错因典型题、定位共性触发条件，再安排专项干预 |',
+                '| 上升·高位（Δ<6 且末次 ≥30%） | 方向短语 + 列为本周期首要干预错因 + 短时高频专项讲练 + 下周期复测验证 |',
+                '| 上升·常规 | 方向短语 + 短时、高频率针对性讲练 + 下周期复测验证是否退出上升名单 |',
+                '| 下降·低位（末次 ≤10%，优先） | 方向短语 + 干预见效、转滚动观察 + 课时让给上升错因 |',
+                '| 下降·常规 | 方向短语 + 保持当前干预节奏并持续观察、防止反弹 |'
             ].join('\n')
         },
         {
             id: 'XK-09', group: 'XK', title: '教学建议',
             body: [
-                '由建议规则表驱动；一期只输出建议、数据依据与诊断直达，不提供题目生成或组卷。',
+                '由建议规则表驱动，把各诊断结论汇总为可执行建议条目；一期只输出建议、数据依据与诊断直达，不提供题目生成或组卷。每条建议 = 标题 + 语义色左边条与同色极浅底 + 数据依据段落 + 右侧直达按钮；数字与名单全部按当前周期数据实时派生。模块「导出建议」按钮仅提示「教学建议单已导出（原型演示）」。',
                 '',
-                '| 建议 | 触发条件 | 动作 |',
+                '**建议的数据依据（全部实时派生，不写死）**',
+                '',
+                '| 数据 | 口径与计算公式 |',
+                '| --- | --- |',
+                '| 顽固薄弱名单 | 按当前维度热力数据：同一考核项在 ≥3 次不同任务中失分率 ≥40%；按各次平均失分率降序 |',
+                '| 前序断层清单 | 知识点树二级及以下节点（一级模块不入）中掌握度 <60% 且有本周期或历史作答证据者；按掌握度升序，最多 5 项 |',
+                '| 根因回溯 | 对每个断层项沿前置链回溯：取有作答证据且掌握度最低的前置继续上溯，该前置掌握度 ≥70% 即停，最多 8 层；链上除起点外存在 <70% 的薄弱节点即判「根因在前序」，取最深层薄弱节点为根因；暂无作答证据的前置只记为断点，不判薄弱 |',
+                '| 上升错因 | 错因末次任务占比 − 首次任务占比 ≥3 个百分点；按差值降序 |',
+                '| 前置关系覆盖度 | 有作答证据且已建前置关系的知识点数 ÷ 有作答证据的知识点数 ×100%，四舍五入取整；能力维度或完全无证据时无值 |',
+                '| 无关系薄弱点 | 顽固名单与断层清单取并集去重，保留无前置关系标注者；按失分热度降序（顽固项取平均失分率，断层项取 100 − 掌握度） |',
+                '| 易混淆对数据 | 易混淆对记录是否为空；为空时关系建设引导追加同步补充提示 |',
+                '| 已达标数 | 掌握度 ≥ 当前最高档下限的末级节点数（3 档=80%、4 档=90%，默认 3 档） |',
+                '',
+                '**六类建议（一期实际产出 6 条；文案中的维度名随当前「知识点 / 能力」维度）**',
+                '',
+                '| 类型与语义色 | 触发条件 | 数据依据文案 | 直达按钮 |',
+                '| --- | --- | --- | --- |',
+                '| 专项突破 #EF4444 | 顽固薄弱名单非空 | 「N 个{维度}命中顽固薄弱（≥3 次失分率 ≥40%）：名单。统一建议：先复盘该考核项各次失分题、归类错因，再用同知识点变式题连续 2 次复测，失分率降到 40% 以下即退出顽固名单；重复讲题对结构性问题无效，建议安排专项课时。」 | 「查看顽固薄弱」→ 诊断区「顽固」标签 |',
+                '| 前序补偿 #F97316 | 前序断层清单非空 | 按下表三分支取文案 | 「查看断层归因」→ 诊断区「断层」标签 |',
+                '| 成对辨析 #F59E0B | 易混淆对非空 | 「N 对易混淆，最高「A vs B」全班 X 人次（取人次最高的一对）。建议 10 分钟辨析课 + 学生互讲差异，替代无效刷题。」 | 「查看易混淆」→ 诊断区「混淆」标签 |',
+                '| 限时短训 #EF4444 | 上升错因非空 | 「错因迁移：错因名 +Δ%，最多列 3 项、超出追加「等 N 项」，占比持续上升。建议安排短时、高频率的针对性讲练，并优先讲解对应错因。」 | 「查看错因分析」→ 错因分析区 |',
+                '| 减量维持 #10B981 | 已达标数 >0 | 「N 个{维度}已达掌握线（≥最高档下限%，3 档 80 / 4 档 90）。建议转为每周 1 次滚动复测防回退，把课时让给薄弱项。」 | 「查看已达标」→ 诊断区「已达标」标签 |',
+                '| 关系建设引导 #64748B | 无关系薄弱点非空 | 「N 个薄弱{维度}尚无前置关系标注，前序归因能力受限。建议题库优先标注：失分热度前 3 名；易混淆数据为空时追加「易混淆对数据为空，建议同步补充」。」 | 「查看断层归因」→ 诊断区「断层」标签 |',
+                '| 空态 | 六类全不命中 | 「本周期各项诊断均无异常，按既有教学节奏推进即可」 | 无按钮 |',
+                '',
+                '**前序补偿的三分支文案（按序判定，取第一个命中）**',
+                '',
+                '| 分支条件 | 数据依据文案 |',
+                '| --- | --- |',
+                '| 有根因 | 「N 个{维度}掌握度 <60%，其中 R 个根因在前序（如「首个根因名」）。直接讲薄弱点无效，须先补前序再讲当前。」 |',
+                '| 无根因但存在无证据前置 | 「N 个{维度}掌握度 <60%，根因暂未定位：B 个前置暂无作答证据，须先诊断再归因。」 |',
+                '| 其余（前置关系未建） | 「N 个{维度}掌握度 <60%，前置关系尚未建立（前置关系标注覆盖 C%），暂按同点巩固处理；题库补充标注后自动升级为前序归因。」覆盖度无值时省略括号 |',
+                '',
+                '**二期预留（本期规则表不产出，仅保留触发口径）**：方法专题（同一方法关联 ≥2 个知识点且 ≥50% 关联点薄弱）、能力专项（某能力关联知识点 ≥8 个且平均得分率 <65%）、补测验证（能力仅有依赖边无考查边，或关联题点未考占比 ≥50%）；见 XK-07 规则 6/7/8，一期不上线。',
+                '',
+                '**综合教学建议（建议列表下方的整合执行块）**',
+                '',
+                '| 部件 | 生成规则 |',
+                '| --- | --- |',
+                '| 入选与顺序 | 只取「前序补偿、专项突破、成对辨析、限时短训、减量维持」五类中的命中项，按此固定顺序（先补差 → 再突破 → 后巩固）；关系建设引导不进综合建议；「差距补齐」项为二期学生追踪预留，班级版不产出 |',
+                '| 标题与副题 | 标题「综合教学建议」；副题「将上方 N 条建议按「先补差、再突破、后巩固」整合为一周期执行建议」，N = 入选条数 |',
+                '| 覆盖度提醒 | 入选含前序补偿且覆盖度有值并 <60% 时，路径上方追加一行「前置关系标注覆盖 C% · 前序补偿按同点巩固口径，归因能力受限」 |',
+                '| 教学路径 | 入选项按序编号 1 至 N，编号底色 = 该条语义色，条目间用箭头连接 |',
+                '| 综合建议句 | 按固定语序拼接分句，用「；」分隔、只拼命中项，句末加「。」：前序补偿有根因「先补 R 个前序根因，否则当前薄弱点讲不透」/ 无根因「直接对 F 个断层点做同点巩固（前置关系未建，暂不归因）」；专项突破「再对 S 个顽固薄弱做同点巩固 + 变式复测」；成对辨析「课中穿插成对辨析，替代重复刷题」；限时短训「课后限时短训压制上升错因」；减量维持「已达标 A 项转为滚动复测，让出课时」 |',
+                '| 三列明细表 | 教学动作 = 语义色圆点 + 条目标题；关注范围与使用场景见下表 |',
+                '| 空态与导出 | 无入选条目时整块隐藏；「导出建议」按钮仅提示「综合教学建议已导出（原型演示）」 |',
+                '',
+                '**关注范围与使用场景（综合建议明细表逐行口径）**',
+                '',
+                '| 类型 | 关注范围（名单口径） | 使用场景（固定文案） |',
                 '| --- | --- | --- |',
-                '| 专项突破 | 存在顽固薄弱 | 安排专项课时，查看顽固薄弱 |',
-                '| 前序补偿 | 存在前序断层 | 先补前序再讲当前，查看断层归因 |',
-                '| 方法专题 | **本期不启用**：原触发条件依赖方法型病型判定（同一方法关联 ≥2 个知识点且 ≥50% 关联点薄弱） | 二期恢复病型后连排方法专题课、按方法组卷 |',
-                '| 成对辨析 | 存在易混淆对（单弱优先，其次双弱） | 课中辨析与学生互讲；双强只做换情境复测 |',
-                '| 能力专项 | 某能力关联知识点 ≥8 个且平均得分率 <65% | 跨知识点能力专项训练 |',
-                '| 补测验证 | 能力仅有依赖边无考查边，或知识点关联题点未考占比 ≥50% | 安排覆盖该能力或考法的测评，不得直接判薄弱 |',
-                '| 限时短训 | 存在显著错因迁移，或同一易错点 ≥3 个知识点命中 | 短时针对性讲练；习惯性错误走审题 / 书写规范 |',
-                '| 减量维持 | 存在已达标项 | 滚动复测、让出课时 |',
-                '| 关系建设引导 | 薄弱项缺前置关系，或顽固项无任何关系标注 | 查看断层归因，按薄弱热度排标注顺序 |',
+                '| 前序补偿 | 根因名单；无根因时退化为断层点名单 | 新课前 10 分钟前置补偿 |',
+                '| 专项突破 | 顽固薄弱名单 | 专项课时（连排 2 课时） |',
+                '| 成对辨析 | 人次最高的前 3 对，按「A vs B」展示 | 课中 10 分钟辨析 + 学生互讲 |',
+                '| 限时短训 | 差值 ≥3 个百分点的上升错因名 | 课后短时针对性讲练（隔天 1 次） |',
+                '| 减量维持 | 已达标名单 | 每周 1 次滚动复测（防回退） |',
+                '| 差距补齐（二期预留） | 低于班级 10% 的差距项 | 优先补齐低于班级 10% 的差距项 |',
+                '',
+                '关注范围显示规则：名单去重后只展示前 3 项，超过 3 项追加「等 N 项」（N 为去重后总数），悬停显示完整名单；名单为空显示「—」。',
                 '',
                 '- **动作优先级**：前序补偿 → 专项突破 → 成对辨析 → 能力专项 → 补测验证 → 限时短训 → 减量维持 → 关系建设引导（补标注）；同一知识点多标签命中只取优先级最高的一条作主因，其余折叠为「同时命中 N 项」。（方法专题本期不启用，不进优先级链）',
-                '- 底部综合建议只含教学路径、综合建议、关注范围与使用场景，不含题量、题型配比、试卷方案或题目内容；「导出建议单」为演示提示。'
+                '- **同源红线**：建议列表数据依据中的数字与综合建议句、关注范围计数必须同源同值，不一致即缺陷；综合建议只含教学路径、综合建议、关注范围与使用场景，不含题量、题型配比、试卷方案或题目内容。'
             ].join('\n')
         },
         {
@@ -6733,13 +7044,135 @@ init();
         {
             id: 'XK-12', group: 'XK', title: '弹窗与抽屉',
             body: [
-                '- **设置掌握程度**：3 档 / 4 档单选；按角色控制写权限，展示最后保存留痕并模拟并发冲突；确认后班级与学生追踪全量联动。学科组长及以上可改档位（底部取消 / 确认）；学科教师与班主任为只读查看，档位单选与得分率区间置禁用态（灰底虚线 + 禁止光标），不渲染取消 / 确认按钮，仅右上角 × 关闭；弹窗内不设权限说明条。',
-                '- **设置权重（已移除）**：得分率统一由后台默认时间衰减模型聚合。',
-                '- **学情来源与统计范围**：弹窗顶部为统计时间条（学年 / 月 / 周 / 自定义档位 + 对应日期控件），下方作业 / 考试双栏勾选、栏头全选与计数；底栏左侧回显「当前范围 · 已选 N 份」，与筛选栏胶囊同源；学生追踪同款弹窗交互。时间条下方常驻数据时效口径：**作业数据截止到前一天（不含今天），考试以完整学情发布为准（未发布不计入）**。',
-                '- **关联诊断与分组教学建议**：保留证据四态、前后序关系、学生分组、教学动作、关注范围、建议对象与判定依据；支持复制建议和导出 CSV。',
-                '- **题库知识图谱组件**：一期保留自研图谱组件，题库组件仅作全屏查看入口。',
-                '- **一期边界**：不包含题目生成、题量配置、题型配比、组卷、保存题库或布置新练习；效果验证只给教学建议，不生成复测题。',
-                '- **治理红线**：无作答证据 = 未知 ≠ 未掌握；前后序关系须经教研确认，未确认前不得作为失分归因事实。'
+                '| 模块 | 条件、显示、交互与样式 |',
+                '| --- | --- |',
+                '| 设置掌握程度 | 3 档 / 4 档单选，显示最后保存时间与操作人；学科组长及以上可改并确认，确认后班级与学生追踪同步；打开后若他人已保存，须选择「使用最新」或「以我的为准」。学科教师 / 班主任只读：选项与区间呈灰色禁改态，区间用灰底虚线和禁止光标，仅右上角 × 关闭，不显示取消 / 确认及权限说明条 |',
+                '| 学情来源与统计范围 | 顶部为学年 / 月 / 周 / 自定义时间条及对应日期控件；**标题旁小字**注明「最多支持分析 20 份作业或考试」（达上限转琥珀）；下方作业 / 考试双栏，支持单选、栏头全选和已选计数；底栏左组为回显「当前范围 · 已选 N / 20 份」+ 内联配额状态（还可再选 N 份 / 已达上限）+「恢复最近 20 份」按钮（置于回显后），与筛选栏胶囊同步。选择即时生效，取消不回滚；作业截至前一天且不含今天，考试仅计已发布完整学情；学生追踪复用同款弹窗 |',
+                '| 关联诊断抽屉 | 右侧滑入白底抽屉，宽不超过 560px、窄屏为视口 94%，内容滚动、底栏固定。头部显示知识点层级、名称、路径、证据、周期汇总、掌握档位和未掌握人数；正文按前置、易混淆、后续、学生分组排列。点击关系名可切换目标点；仅有关系时显示对应区，仅有建议时显示建议入口 |',
+                '| 分组教学建议抽屉 | 显示六类建议的教学动作、关注范围、建议对象和判定依据；顶部可返回关联诊断，底部支持关闭、复制建议、导出 CSV。从指定建议进入时滚动定位并短暂高亮；无建议时显示统一空态 |',
+                '| 题库知识图谱组件 | 一期保留自研图谱组件；题库组件仅提供全屏查看入口 |',
+                '| 设置权重（已移除） | 不再提供权重设置；得分率统一由后台默认时间衰减模型聚合 |',
+                '',
+                '**统计份数配额（作业 + 考试合计）**',
+                '',
+                '| 项 | 规则 |',
+                '| --- | --- |',
+                '| 上限 | 两栏共用一个配额，合计最多 **20 份**（不是每栏 20）；超出部分不得进入统计口径 |',
+                '| 默认选中 | 两栏合并后按日期从新到旧取前 20 份；同日并列按列表原序（作业列在前，稳定排序）；初始化即应用，不依赖用户手动勾选 |',
+                '| 单选拦截 | 配额用尽后再勾选：勾选态回滚、不写入数据，toast「最多同时统计 20 份（作业 + 考试合计），请先取消部分已选项」，底栏回显短促抖动 |',
+                '| 置灰态 | 配额用尽时未选行置灰（半透明 + 禁止光标）并带悬停原因；仍可点击，点击后由拦截逻辑提示，不做无声失败 |',
+                '| 栏头全选 | 取消全选不受限；勾选全选时保留已选项，只把剩余配额按日期从新到旧补入本栏；补不完时 toast 告知「仅补入最近 N 份，其余 M 份未选；再次点击栏头可清空本栏」，配额为 0 且本栏无已选时只提示先取消已选项；部分选中时栏头复选框呈半选态。**两段式意图**：被截断后紧接着的第二次点击 = 清空本栏（toast 告知腾出配额），避免栏头永久卡在半选导致整栏取消不可达；单行勾选变化或一键恢复会清除该意图 |',
+                '| 一键恢复 | 「恢复最近 20 份」按钮位于底栏回显之后，按默认口径重选（覆盖当前勾选），用于配额用尽后快速回到可用状态 |',
+                '| 上限说明与状态 | 不设独立配额条 / 进度条：标题旁小字「最多支持分析 20 份作业或考试」；底栏回显内联状态——未满灰字「还可再选 N 份」（剩余 ≤3 份转琥珀字）、已满琥珀徽章「已达上限」且已选计数转琥珀加粗 |',
+                '| 回显 | 弹窗底栏「已选 N / 20 份」+ 内联配额状态；筛选栏胶囊保持「已选 N 份」，悬停提示含上限口径 |',
+                '| 视口兜底 | 矮视口（高 ≤700px）只压缩固定占位留白、不删说明文案，弹窗整体滚动且头部吸顶 / 底栏吸底，双栏区域保底 320px 不被压成一条缝；窄屏（宽 ≤760px）双栏上下排列、只保留弹窗一条滚动轴（考试栏不得藏在嵌套滚动区折叠线以下），底栏左组（回显 + 恢复按钮）独占换行保证「已选 N / 20 份」不被裁切，档位按钮不逐字竖排 |',
+                '',
+                '> **边界与红线**：不生成题目、题量、题型配比、组卷、题库保存或新练习；效果验证只给教学建议，不生成复测题。无作答证据 = 未知 ≠ 未掌握；综合题失分 ≠ 全关联薄弱；前后序关系须经教研确认，未确认不得作为失分归因事实；班级均值不得写成每名学生的问题。',
+                '',
+                '### XK-12.1 关联诊断：证据、显示与生成总规则',
+                '',
+                '所有说明、分组原因和建议均由关系、证据状态、周期得分率与场次、学生名单、易混命中人次和关注范围实时生成，不按知识点名称匹配固定话术。【演示】名单与掌握度为模拟结果；真实接入后按学生作答重算，显隐规则不变。',
+                '',
+                '| 证据状态 | 显示内容与样式 | 建议规则 |',
+                '| --- | --- | --- |',
+                '| 周期内考查 | 徽章显示「周期内 N 场 · 得分率」，颜色随掌握档位 | 达到对应阈值且名单、范围满足条件时才生成建议 |',
+                '| 历史证据 | 徽章显示历史得分率与来源，颜色随掌握档位 | 仅供趋势参考；不冒充本周期证据，不触发前置补练 |',
+                '| 暂无证据 | 显示「暂无证据」，状态色 #F59E0B | 直接前置可触发前置诊断；不得判薄弱，不生成前置补练或后续应用 |',
+                '| 未学 | 显示「未学·仅衔接」，状态色 #94A3B8 | 只保留关系与未学标识，不生成诊断、补练或后续应用 |',
+                '',
+                '- **关系区**：区标题只显示关系名称与数量；关系行不重复显示类型标签，顶部不放聚合或点击提示。',
+                '- **建议入口**：对应建议区实际生成后才显示「查看分组建议」；至少一个建议区存在时，底部才显示「查看分组教学建议」。',
+                '- **学生分组**：只显示有建议且名单非空的分组卡；全部为空则隐藏整个分组区，不显示「本组无人」「暂无分组数据」等占位。',
+                '- **个人视角**：仅从学生追踪进入时，顶部增加个人掌握、与班级差和个人断层根因横幅；下方证据链与分组仍为班级口径。',
+                '',
+                '### XK-12.2 三类已演示关系的行级规则',
+                '',
+                '**前置知识**',
+                '',
+                '| 直接前置状态 | 行说明与按钮 | 建议区与关注范围 |',
+                '| --- | --- | --- |',
+                '| 周期 <70% | 显示「N% <70%，建议练习」；前置补练区存在时才显示按钮 | 满足 XK-12.4 条件时生成前置补练；范围为全部此类直接前置，按得分率升序 |',
+                '| 周期 ≥70% | 显示「N% ≥70%，不触发练习」 | 不生成前置补练 |',
+                '| 历史证据 | 显示「历史证据仅参考，不触发练习」 | 不生成前置补练 |',
+                '| 暂无证据 | 不另写动作说明；前置诊断区存在时才显示按钮 | 满足 XK-12.4 条件时生成前置诊断；范围为全部暂无证据的直接前置 |',
+                '| 未学 | 显示「未学：不触发练习」 | 不生成建议 |',
+                '',
+                '**后续知识**',
+                '',
+                '| 当前点 / 关联点状态 | 行说明与按钮 | 补充规则 |',
+                '| --- | --- | --- |',
+                '| 当前点周期 ≥80%，关联点非暂无证据、非未学 | 显示「N% ≥80%，建议练习」；后续应用区存在时才显示按钮 | 后续应用仍须名单和范围非空 |',
+                '| 当前点周期 <80%，关联点非暂无证据、非未学 | 显示「N% <80%，不触发练习」，不显示行内按钮 | 个别达标学生仍可进入后续应用；建议区追加「班级整体先巩固」提示 |',
+                '| 关联点暂无证据，或当前点非周期证据 | 动作区留空 | 不输出动作说明 |',
+                '| 关联点未学 | 显示「未学：不触发练习」 | 不生成该关联点动作 |',
+                '',
+                '**易混淆知识点**：有教研关系才显示关系行；有命中记录才显示全班人次。有关系即可生成全班概念辨析，范围为当前点加全部易混关联点；命中 <5 人次或无命中时仅作预防性辨析，命中 ≥5 人次才作为诊断依据。不得把「有关系」写成「学生已混淆」。',
+                '',
+                '> **数值与按钮分离**：前置、后续统一用「N% + 阈值比较 + 建议练习 / 不触发练习」。百分比按原值判断、最多显示 1 位小数；临界值不得因四舍五入与比较符矛盾。达到阈值不代表一定有按钮，按钮只随实际建议区出现。',
+                '',
+                '### XK-12.3 题库 21 类关系生成矩阵',
+                '',
+                '21 类关系 = 7 类业务关系 × 知识点 / 题点 / 微题点 3 个层级。当前抽屉演示仅展示 ID 2、3、4；ID 7 仅后台计算、不展示建议卡，其余规则待同级数据接入后生效。未展示不等于排除，未落地不得伪造卡片或结论。',
+                '',
+                '| 关系与 ID | 生成条件 | 分级边界与限制 |',
+                '| --- | --- | --- |',
+                '| 前置：知识 2、题点 10、微题点 17 | 同级关系与证据齐备后：暂无证据 → 前置诊断；周期 <70% → 前置补练；周期 ≥70% 不补练；历史仅参考；未学不生成 | 题点还须具备题点与知识点映射；三级证据不得互借。无关系不显示前序区，不推断「前置已达标」 |',
+                '| 后续：知识 3、题点 11、微题点 18 | 知识点 / 微题点当前周期 ≥80%；题点当前有周期证据且个人达标；同时名单与后续范围非空才生成后续应用 | 后续由前置关系反向推导，不重复维护；不得借用其他层级的掌握度 |',
+                '| 易混淆：知识 4、题点 12、微题点 19 | 有同级关系即可生成预防性辨析；同级真实命中 ≥5 人次才进入诊断 | 题点须先做无序对归一；知识点的双弱、单弱、双强同题失分分型及处置沿用 XK-07B 规则 4 |',
+                '| 解题方法：知识 7、题点 13、微题点 20 | 知识点：关联点 ≥2，且顽固或断层占比 ≥50%，或平均得分率 <65%，才生成方法聚合建议；题点按方法证据、微题点按变式方法证据达到同级聚合阈值后生成 | 不做路径回溯，不推断学习先后或前置链；ID 7 当前仅后台计算 |',
+                '| 常见易错：知识 8、题点 14、微题点 21 | 有同级阅卷标注或客观题规则命中才生成讲评落点；同一易错覆盖 ≥3 个知识点 / 题点时，升级为跨点 / 跨题点习惯错误 | 只有关系、没有命中不生成；微题点不得由知识点易错记录下放推断 |',
+                '| 考查能力：知识 5、题点 15、微题点 22 | 按同级真实作答聚合；关联项 ≥8 且平均得分率 <65% 才输出「能力短板」 | 未达条件不生成，不进入前后序抽屉，不生成前后序建议 |',
+                '| 依赖能力：知识 9、题点 16、微题点 23 | 依赖关系关联的薄弱点占比 ≥40%，且没有对应考查边时，只输出「待补测」 | 不直接判能力薄弱，不生成分组补练或补练名单 |',
+                '',
+                '### XK-12.4 学生分组与六类建议',
+                '',
+                '建议区、学生分组卡和建议按钮共用同一生成结果；必要条件任一不满足即隐藏。分组理由只由实时数据拼接，不另存固定文案。',
+                '',
+                '| 建议 | 显示条件 | 对象、范围与依据 |',
+                '| --- | --- | --- |',
+                '| 前置诊断 | 当前点为周期证据且班级 <80%；名单非空；至少一个直接前置暂无证据 | 对象为名单学生；范围为全部暂无证据的直接前置；依据显示人数、前置名称及「先诊断，不把未知判为薄弱」。历史、未学不进入范围 |',
+                '| 前置补练 | 当前点为周期证据且班级 <80%；名单非空；至少一个直接前置周期 <70% | 对象为名单学生；范围按得分率升序；依据显示人数、最弱前置、周期场次、得分率与 70% 阈值。其他状态及 ≥70% 不进入范围 |',
+                '| 概念辨析 | 当前点非未学，且存在易混淆关系；不要求班级 <80% 或学生名单 | 固定全班；范围为当前点加全部易混点；依据显示教研关系、命中情况及是否达到 5 人次诊断门槛 |',
+                '| 同点巩固 | 当前点为周期证据且班级 <80%，名单非空；个人入组条件见 XK-12.4.1 | 对象为名单学生；范围为当前点加全部直接子点；依据显示人数、个人入组条件、当前点和班级周期汇总 |',
+                '| 后续应用 | 当前点为周期证据，名单与后续范围均非空；不要求班级 ≥80% | 对象为个人当前点 ≥80% 的名单学生；范围为后续关联点；班级 <80% 时追加黄色整体先巩固提示 |',
+                '| 效果验证 | 上述五类建议至少存在一类即显示；不要求已补练或已取得复测证据 | 只提示结合后续课堂反馈或既有任务验证；原题订正只记完成，不直接计为掌握，不生成复测题 |',
+                '',
+                '- **建议对象切换**：前置诊断、前置补练、同点巩固、后续应用可单选「仅名单学生 N 人」或「全班关注」；选全班后名单保留为重点讲解对象。概念辨析固定全班。',
+                '- **效果验证开关**：默认开启；关闭后建议区与标签仍保留，整卡不透明度降为 55%，仅不纳入启用计数、复制和导出。',
+                '',
+                '#### XK-12.4.1 同点巩固的显示、范围与依据',
+                '',
+                '| 页面项 | 规则 |',
+                '| --- | --- |',
+                '| 建议区 | 班级层：当前点为周期证据且班级周期汇总 <80%，并且名单非空。个人层：个人当前点 <80%；有直接前置时，个人全部直接前置均为周期证据且 ≥70%，无直接前置则豁免。历史、暂无证据、未学均不算前置达标 |',
+                '| 建议说明 | 固定显示「个人当前点 <80% 且前置达标（无直接前置则豁免），班级周期汇总 <80% → 同点巩固」 |',
+                '| 关注范围 | 当前点在前，随后按树内顺序列全部直接子点；不递归后代、不按得分率筛选、不混入前置 / 后续 / 易混点。子点无证据只表示纳入教学范围，不表示薄弱 |',
+                '| 判定依据 | 依次显示名单人数、个人入组条件、「巩固当前点本身」、目标班级周期汇总；班级得分率四舍五入为整数百分比。人数、范围和班级得分率分别取数，不得相互推算 |',
+                '',
+                '> 班级条件决定建议区能否显示，个人条件决定谁能入组，两层不可合并或替代。【演示】显式名单和轮换名单视为已完成个人筛选；真实环境按个人前置与当前点证据重算，禁止按总分分层或用班级均值替代个人条件。',
+                '',
+                '#### XK-12.4.2 标签样式与建议区顺序',
+                '',
+                '标签依附于建议区，建议区未生成时不得单出标签。统一为 11px 粗体白字、2px 9px 内边距、7px 圆角；建议区为白底描边卡片，说明用灰色辅助文字，关注范围与依据用浅灰底信息条。',
+                '',
+                '| 标签 | 背景色 | 补充样式 / 规则 |',
+                '| --- | --- | --- |',
+                '| 前置诊断 | #F59E0B | 随前置诊断区生成 |',
+                '| 前置补练 | #0891B2 | 随前置补练区生成 |',
+                '| 概念辨析 | #EC4899 | 命中人次只改变依据，不是标签显示门槛 |',
+                '| 同点巩固 | #3B82F6 | 不随掌握档位、人数或知识点类型改变 |',
+                '| 后续应用 | #22C55E | 班级 <80% 时仍可显示，但须保留整体先巩固提示 |',
+                '| 效果验证 | #8B5CF6 | 关闭后标签仍在，整卡不透明度 55% |',
+                '',
+                '建议区固定按「前置诊断 → 前置补练 → 概念辨析 → 同点巩固 → 后续应用 → 效果验证」排列；未命中条件的区段直接省略，不显示空标签、空名单或「本组无人」。效果验证仅为后续建议，不代表补练已完成或已有复测证据。',
+                '',
+                '### XK-12.5 无死文案验收',
+                '',
+                '- 每条关系说明、分组卡、建议区、空态和底部按钮都必须能对应 XK-12.1～XK-12.4 的条件；无法对应的文案或建议删除。',
+                '- 前置改为历史证据后不得出现补练按钮；改为暂无证据后只能出现前置诊断，名单或范围为空时按钮也隐藏。',
+                '- 清空分组名单后，对应分组卡和建议区同时消失；全部建议为空时只显示统一空态，不得声称「前置均达标」或「周期汇总 ≥80%」。',
+                '- 删除易混命中记录后，只保留教研关系触发的预防性辨析，不显示命中人次或「学生已混淆」。',
+                '- 未覆盖的题点、微题点、方法、能力和易错关系不得伪造演示结论，也不得从 21 类矩阵删除；真实数据接入后按 XK-12.3 生成。'
             ].join('\n')
         },
         {
