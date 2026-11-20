@@ -9284,6 +9284,46 @@ body.prd-resizing {
     width: 112px;
 }
 
+/* XK-08 错因结构分析：自动列宽会把「首次占比 / 基本稳定」这类词拆成两行，
+   改为定宽布局：首列不拆行，第二列定宽，末列吃掉剩余宽度。
+   四张表都是三列，按 .prd-table-scroll 的出现顺序（只数 div，故用 nth-of-type）给变量：
+   1 取数、2 分拣、3 方向短语、4 处置句。靠变量而非 nth-child 选列，增删段落不影响。 */
+#prd-sec-XK-08 .prd-table-scroll table {
+    table-layout: fixed;
+    min-width: 340px;
+}
+
+#prd-sec-XK-08 .prd-table-scroll th:first-child,
+#prd-sec-XK-08 .prd-table-scroll td:first-child {
+    width: var(--xk8-c1, 88px);
+    white-space: nowrap;
+}
+
+#prd-sec-XK-08 .prd-table-scroll th:nth-child(2),
+#prd-sec-XK-08 .prd-table-scroll td:nth-child(2) {
+    width: var(--xk8-c2, 100px);
+}
+
+#prd-sec-XK-08 .prd-sec-body > .prd-table-scroll:nth-of-type(1) {
+    --xk8-c1: 88px;
+    --xk8-c2: 148px;
+}
+
+#prd-sec-XK-08 .prd-sec-body > .prd-table-scroll:nth-of-type(2) {
+    --xk8-c1: 88px;
+    --xk8-c2: 96px;
+}
+
+#prd-sec-XK-08 .prd-sec-body > .prd-table-scroll:nth-of-type(3) {
+    --xk8-c1: 48px;
+    --xk8-c2: 92px;
+}
+
+#prd-sec-XK-08 .prd-sec-body > .prd-table-scroll:nth-of-type(4) {
+    --xk8-c1: 88px;
+    --xk8-c2: 88px;
+}
+
 /* XK-06 热力结论规则表：自动列宽会按内容比例分配，「触发条件」列被压到 38px、表头逐字竖排；
    改为定宽布局：首列 88px（短标签不拆行），其余两列平分剩余宽度 */
 #prd-sec-XK-06 .prd-table-scroll table {
