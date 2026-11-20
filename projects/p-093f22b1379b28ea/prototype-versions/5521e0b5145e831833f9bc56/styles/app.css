@@ -2849,6 +2849,34 @@ body {
     font-weight: 600;
 }
 
+/* 首要薄弱点：文本由 JS 按列宽截断为「…」，悬停光标提示可看全部 */
+.period-task-table .weak-kp[data-wk-tip] {
+    cursor: help;
+}
+
+/* 首要薄弱点气泡：body 级 fixed 浮层（表格容器 overflow 会裁剪 ::after 气泡），位置由 JS 跟随光标 */
+.wk-kp-tip {
+    position: fixed;
+    z-index: 1400;
+    max-width: 320px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: rgba(48, 59, 86, 0.95);
+    color: #fff;
+    font-size: 12.5px;
+    line-height: 1.6;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.15s;
+}
+
+.wk-kp-tip.show {
+    opacity: 1;
+    visibility: visible;
+}
+
 .period-task-table .task-link {
     color: var(--primary);
     font-size: 13px;

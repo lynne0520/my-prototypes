@@ -411,14 +411,15 @@ const kpTagColors = {
 /* ---------------- 周期分析数据（整合自班级周期分析报告） ---------------- */
 
 // 纳入统计的任务序列（时间正序，名称与学情来源 / 明细数据保持一致）
-// chapter/score/submitted/weakKp 为任务清单演示字段：已交口径与顶部提交率（288/276）自洽，薄弱点取自 kpTree 真实薄弱项
+// chapter/score/submitted 为任务清单演示字段（已交口径与顶部提交率 288/276 自洽）；
+// 「首要薄弱点」不在此预置：由该场题目挂接的末级知识点得分率派生（见 periodTaskWeakAtoms）
 const periodTasks = [
-    { name: '第一次月考', full: '2025-26学年第一次月考', date: '2025-09-28', type: 'exam', classRate: 72.4, gradeRate: 70.2, chapter: '集合与逻辑', score: 100, submitted: 48, weakKp: '充分与必要条件' },
-    { name: '同步作业(三)', full: '高中数学必修一同步作业 (三)', date: '2025-10-09', type: 'assignment', classRate: 68.1, gradeRate: 66.8, chapter: '函数基础', score: 50, submitted: 46, weakKp: '函数的概念' },
-    { name: '同步作业(五)', full: '高中数学必修一同步作业 (五)', date: '2025-10-16', type: 'assignment', classRate: 74.6, gradeRate: 72.1, chapter: '指数与对数', score: 50, submitted: 48, weakKp: '指数幂运算' },
-    { name: '期中联考', full: '十一月期中联考', date: '2025-11-13', type: 'exam', classRate: 63.4, gradeRate: 65.9, chapter: '函数基础', score: 100, submitted: 44, weakKp: '函数性质' },
-    { name: '同步作业(七)', full: '高中数学必修一同步作业 (七)', date: '2025-11-20', type: 'assignment', classRate: 71.3, gradeRate: 69.8, chapter: '指数与对数', score: 50, submitted: 45, weakKp: '指数函数' },
-    { name: '冲刺卷(一)', full: '期末模拟冲刺卷 (一)', date: '2025-12-11', type: 'exam', classRate: 76.8, gradeRate: 75.4, chapter: '综合测试', score: 100, submitted: 45, weakKp: '指数函数' }
+    { name: '第一次月考', full: '2025-26学年第一次月考', date: '2025-09-28', type: 'exam', classRate: 72.4, gradeRate: 70.2, chapter: '集合与逻辑', score: 100, submitted: 48 },
+    { name: '同步作业(三)', full: '高中数学必修一同步作业 (三)', date: '2025-10-09', type: 'assignment', classRate: 68.1, gradeRate: 66.8, chapter: '函数基础', score: 50, submitted: 46 },
+    { name: '同步作业(五)', full: '高中数学必修一同步作业 (五)', date: '2025-10-16', type: 'assignment', classRate: 74.6, gradeRate: 72.1, chapter: '指数与对数', score: 50, submitted: 48 },
+    { name: '期中联考', full: '十一月期中联考', date: '2025-11-13', type: 'exam', classRate: 63.4, gradeRate: 65.9, chapter: '函数基础', score: 100, submitted: 44 },
+    { name: '同步作业(七)', full: '高中数学必修一同步作业 (七)', date: '2025-11-20', type: 'assignment', classRate: 71.3, gradeRate: 69.8, chapter: '指数与对数', score: 50, submitted: 45 },
+    { name: '冲刺卷(一)', full: '期末模拟冲刺卷 (一)', date: '2025-12-11', type: 'exam', classRate: 76.8, gradeRate: 75.4, chapter: '综合测试', score: 100, submitted: 45 }
 ];
 
 // 错因体系（仅名称 + 配色；干预文案不在此预置，统一走 causeAdviceOf 的通用指标模板，
@@ -2562,6 +2563,25 @@ function renderPeriodKpis() {
     });
 }
 
+// 任务清单「首要薄弱点」：该场已考查的末级知识点中得分率最低者（= 失分率最高）；
+// 并列最低的全部返回（保持题库顺序），该场无挂接返回空数组——不猜值
+function periodTaskWeakAtoms(ti) {
+    const atoms = ensurePeriodModel().atoms.filter(a => a.values[ti] != null);
+    if (!atoms.length) return [];
+    const worst = Math.max(...atoms.map(a => a.values[ti]));
+    return atoms.filter(a => a.values[ti] === worst).map(a => a.name);
+}
+
+// 单元格单行容量约 11 个全角字符（列宽约 190px − 内边距 32px，14px 字号），超出截断、留给悬停气泡
+const WK_KP_CELL_CHARS = 11;
+function wkKpCellText(names) {
+    const full = names.join('、');
+    return full.length > WK_KP_CELL_CHARS ? full.slice(0, WK_KP_CELL_CHARS - 1) + '…' : full;
+}
+function wkKpTipText(names) {
+    return `本次得分率最低的末级知识点${names.length > 1 ? `（并列 ${names.length} 项）` : ''}：${names.join('、')}`;
+}
+
 // 期间任务清单（迁移自校级学情报告平台 · 班级周期分析报告第 3 节，列字段全量对齐）
 function renderPeriodTaskTable() {
     const el = El.periodTaskTableWrap;
@@ -2591,6 +2611,7 @@ function renderPeriodTaskTable() {
     }
     rows.forEach(t => {
         const d = Math.round((t.classRate - t.gradeRate) * 10) / 10;
+        const weakNames = periodTaskWeakAtoms(periodTasks.indexOf(t));
         html += '<tr>' +
             `<td>${t.date}</td>` +
             `<td class="task-name" title="${escapeHTML(t.full)}">${escapeHTML(t.name)}</td>` +
@@ -2600,7 +2621,9 @@ function renderPeriodTaskTable() {
             `<td class="rate-cell">${t.classRate}</td>` +
             `<td class="rate-cell muted">${t.gradeRate}</td>` +
             `<td class="rate-cell ${d >= 0 ? 'td-up' : 'td-down'}">${d > 0 ? '+' : ''}${d}%</td>` +
-            `<td class="left-cell weak-kp" title="该次任务失分最集中的${dimensionLabel()}">${escapeHTML(t.weakKp || '—')}</td>` +
+            (weakNames.length
+                ? `<td class="left-cell weak-kp" data-wk-tip="${escapeHTML(wkKpTipText(weakNames))}">${escapeHTML(wkKpCellText(weakNames))}</td>`
+                : '<td class="left-cell weak-kp">—</td>') +
             '<td><span class="task-link" onclick="showProtoToast(\'打开作业详情\')">查看明细</span></td>' +
             '</tr>';
     });
@@ -2613,7 +2636,9 @@ function renderPeriodTaskTable() {
         `<td class="rate-cell">${s.pRate}</td>` +
         `<td class="rate-cell muted">${gradeAvg}</td>` +
         `<td class="rate-cell ${diff >= 0 ? 'td-up' : 'td-down'}">${diff > 0 ? '+' : ''}${diff}%</td>` +
-        `<td class="left-cell weak-kp" title="周期内累计失分率最高的顽固薄弱项">${escapeHTML(worstKp)}</td>` +
+        (leafStubs.length
+            ? `<td class="left-cell weak-kp" data-wk-tip="周期内累计失分率最高的顽固薄弱项（考核项口径）：${escapeHTML(worstKp)}">${escapeHTML(worstKp)}</td>`
+            : '<td class="left-cell weak-kp">—</td>') +
         '<td>—</td>' +
         '</tr>';
     html += '</tbody></table></div>';
@@ -2636,6 +2661,44 @@ function showProtoToast(msg) {
     clearTimeout(protoToastTimer);
     protoToastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
+
+/* 首要薄弱点气泡：单元格文本按列宽截断，悬停显示全部并列项。
+   表格容器 overflow 会裁剪 CSS ::after 气泡，故用 body 级 fixed 浮层 */
+let wkKpTipEl = null;
+function wkKpTipNode() {
+    if (!wkKpTipEl) {
+        wkKpTipEl = document.createElement('div');
+        wkKpTipEl.className = 'wk-kp-tip';
+        document.body.appendChild(wkKpTipEl);
+    }
+    return wkKpTipEl;
+}
+function moveWkKpTip(x, y) {
+    const tip = wkKpTipNode();
+    const box = tip.getBoundingClientRect();
+    const pad = 14;
+    let left = x + pad, top = y + pad;
+    if (left + box.width > window.innerWidth - 8) left = x - box.width - pad;
+    if (top + box.height > window.innerHeight - 8) top = y - box.height - pad;
+    tip.style.left = Math.max(8, left) + 'px';
+    tip.style.top = Math.max(8, top) + 'px';
+}
+function hideWkKpTip() {
+    if (wkKpTipEl) wkKpTipEl.classList.remove('show');
+}
+// 事件委托挂一次：单元格随排序 / 重渲染重建，无需逐次绑定
+function wkKpTipTargetOf(e) {
+    return e.target && e.target.closest ? e.target.closest('.period-task-table .weak-kp[data-wk-tip]') : null;
+}
+document.addEventListener('mousemove', e => {
+    const cell = wkKpTipTargetOf(e);
+    if (!cell) { hideWkKpTip(); return; }
+    const tip = wkKpTipNode();
+    if (tip.innerText !== cell.dataset.wkTip) tip.innerText = cell.dataset.wkTip;
+    tip.classList.add('show');
+    moveWkKpTip(e.clientX, e.clientY);
+});
+window.addEventListener('scroll', hideWkKpTip, true);   // 页面 / 表格滚动时气泡不留在旧位置
 
 // 任务清单得分率列排序状态：升序 → 降序 → 恢复默认（三态切换）
 let periodTaskSort = { key: null, dir: 1 };
@@ -6525,7 +6588,8 @@ init();
                 '| 顽固薄弱 | 全维度末级顽固非空 | 恒红 | 命中数 + 名单（含能力维度）+ 判定口径；定性「结构性问题，建议专项复习而非重复讲题」 |',
                 '| 行动建议 | 全维度末级顽固非空 | 恒琥珀 | 针对平均失分率最高的一项优先安排专项课时；验证目标失分率降至 40% 以下 |',
                 '',
-                '- **得分趋势图**：本班得分率（蓝实线，考试三角、作业圆点）与年级得分率（灰虚线）双折线；**任务清单**：列头可排序，合计行「首要薄弱点」取全部维度末级节点中平均失分率最高的一项。',
+                '- **得分趋势图**：本班得分率（蓝实线，考试三角、作业圆点）与年级得分率（灰虚线）双折线。',
+                '- **任务清单**：列头可排序。每行「首要薄弱点」= 该场任务**已考查末级知识点中得分率最低**者（得分率 = 100 − 失分率，同一末级知识点挂多题时按分值加权）；并列最低的全部展示、顿号分隔；列宽不足截断为「…」，悬停单元格弹出气泡显示全部（并列时标注并列项数）；该场无挂接末级知识点置「—」。合计行口径不同：取 `mSet` 内周期累计失分率最高的一项（考核项 / 能力末级节点口径，与卡4 顽固薄弱同源），悬停同样显示气泡说明。',
                 '- **查看明细分流**：作业 → 作业讲评页，考试 → 试卷讲评页，携带该行任务标识落地到具体任务；跳转前按角色判定讲评页菜单权限，无权限不跳转并提示「暂无查看权限」（约 2.2 秒消失，入口仍可见）；原型阶段点击仅提示「打开作业详情」，真实跳转与权限判定待讲评模块接入。'
             ].join('\n')
         },
@@ -6564,7 +6628,49 @@ init();
                 '| 单元格 | 失分率五档着色：<20% 轻度 / 20~40% 中度 / 40~60% 较重 / 60~75% 严重 / ≥75% 极重；五档固定，不随掌握档位的 3 档 / 4 档切换；0% 单独一档（与未考查区分；失分率与掌握度是两套口径，40% 分界是得分率 60% 未掌握线的镜像，属固定锚点） |',
                 '| 累计列 | 有效场次失分率的算术平均，不做时间衰减；得分率 = 100 − 失分率 |',
                 '| 顽固判定 | 失分率 ≥40% 的场次达到 3 次及以上（与摘要卡同名口径） |',
-                '| 行尾判定章 | 顽固 / 反复 / 偶发 / 恶化 / 回升 / 稳定六种；趋势按矩阵前后两半段均值差是否超过 5 个百分点判定，各带判定依据提示 |',
+                '| 行尾判定章 | 顽固 / 反复 / 偶发 / 恶化 / 回升 / 稳定六种，规则见下节「行尾判定章：六态判定规则」 |',
+                '',
+                '**行尾判定章：六态判定规则**',
+                '',
+                '判定按固定顺序短路，先命中先定档。先数重度场次：**H = 本行有效考查场次中失分率 ≥40% 的次数**，再按下表依次命中——H ≥ 3 判顽固、H = 2 判反复、H = 1 判偶发；只有 H = 0（全程没有任何一场失分率 ≥40%）时才进入趋势判定，用前后两半段均值差 Δ 分出恶化 / 回升 / 稳定。',
+                '',
+                '| 判定章 | 触发条件 | 章面文字 | 悬停判定依据 |',
+                '| --- | --- | --- | --- |',
+                '| 顽固 | H ≥ 3 | 顽固 · H 次 | H 次失分 ≥40%，结构性薄弱，重复讲题无效，建议专项课时 |',
+                '| 反复 | H = 2 | 反复 | 2 次失分 ≥40%，顽固苗头，需盯紧后续任务 |',
+                '| 偶发 | H = 1 | 偶发 | 仅 1 次重度失分，倾向偶发（题难 / 粗心），暂不专项处理 |',
+                '| 恶化 | H = 0 且 Δ ≥ 5 | 恶化 | 后半段失分均值较前半段 +Δ%，失分加重，建议尽快介入 |',
+                '| 回升 | H = 0 且 Δ ≤ −5 | 回升 | 后半段失分均值较前半段 Δ%，失分收窄，前期干预在起效 |',
+                '| 稳定 | H = 0 且 Δ 落在 −5 与 5 之间 | 稳定 | Δ ≠ 0 时显示「前后两半均值差 ±Δ%，基本稳定」；Δ = 0 时显示「前后两半均值持平」 |',
+                '',
+                '**趋势差 Δ 的算法**',
+                '',
+                '1. 取本行**实际考查**的场次（格子为「·」的未考查场次直接跳过，不按 0 计入），按任务日期正序排成 v₁ … vₙ；',
+                '2. 前半段 = 前 ⌊n ÷ 2⌋ 场，后半段 = 其余场次；n 为奇数时中间那一场归后半段；',
+                '3. 两段各取算术平均——不按分值加权，也不做时间衰减；',
+                '4. Δ = 后半段均值 − 前半段均值，四舍五入保留 1 位小数；',
+                '5. Δ ≥ 5 判恶化（失分变重）；Δ ≤ −5 判回升（失分收窄）；其余判稳定。n = 1 时无两段可比，Δ 记为 0，直接判稳定。',
+                '',
+                '**六态验算示例**（序列为按时间正序的失分率 %）',
+                '',
+                '| 考查序列 | 计算 | 判定 |',
+                '| --- | --- | --- |',
+                '| 55 / 30 / 45 / 38 / 52 | H = 3（55、45、52），趋势不参与 | 顽固 · 3 次 |',
+                '| 60 / 15 / 10 | H = 1；趋势虽为 Δ = 12.5 − 60 = −47.5 | 偶发（趋势被优先级吞并） |',
+                '| 38 / 22 / 30 / 18 | H = 0；前半 30，后半 24，Δ = −6 | 回升 |',
+                '| 12 / 20 / 26 / 18 / 32 | H = 0；前半 16，后半 25.3，Δ = +9.3 | 恶化 |',
+                '| 20 / 25 / 22 | H = 0；前半 20，后半 23.5，Δ = +3.5 | 稳定 |',
+                '',
+                '**边界与已知取舍**',
+                '',
+                '- **优先级吞并**：趋势只在 H = 0 时生效。只要本行出现过 1 次及以上重度失分，判定章就只回答「这块是否结构性薄弱」，不回答「是否在好转」。因此「回升」不等于「顽固项在好转」——它只描述全程失分率均 <40% 的行。要判断顽固项是否收窄，看矩阵末两列数值或行悬停叙事里的「最近一次」值。',
+                '- **考查场次的半，不是任务数的半**：未考查场次不参与前后切分，n 只数实际考到的次数；同一行在一场未考查的周期里，切分点会随之平移。',
+                '- **奇数取整方向**：n 为奇数时中间一场归后半段（n = 3 即「前 1 场对后 2 场」，n = 5 即「前 2 场对后 3 场」），让「最近」一侧多占一场。',
+                '- **阈值含等号**：Δ = 5 判恶化，Δ = −5 判回升；Δ 先四舍五入保留 1 位小数再比较，4.9 仍判稳定。',
+                '- **0% 与「·」不可混同**：0% 是一场有效考查且无失分，会拉低所在段均值、把走势推向「回升」；「·」是未考查，直接跳过，不影响判定。',
+                '- **与累计列无关**：累计列（有效场次算术平均）只决定行排序与「最突出短板」，不参与六态计算。两者可以背离——长周期累计偏高但近两场在下行，判定章照样可能是顽固。',
+                '- **必有且仅有一态**：六态互斥，考查场次 ≥1 的行必命中一态；行首「顽固」标记与判定章「顽固」同源（同为 H ≥ 3），不是两套判定。',
+                '- **口径同源**：摘要卡6 顽固薄弱项、周期结论的顽固薄弱规则都取 H ≥ 3，与判定章同一阈值，改动须三处同改。',
                 '',
                 '**底部结论生成规则**（按当次数据实时生成，无固定文案）',
                 '',
@@ -7320,7 +7426,8 @@ init();
                 '| 提交率 | 实交人次 ÷ 应交人次 × 100，应交人次 = 班级人数 × 任务数（迟交计入已交，不单列） | XK-04 卡5 |',
                 '| 年级对比胜率 | 本班 `cRate` 高于年级同场得分率的场次 ÷ 任务数 | XK-04 周期结论「年级对比」条 |',
                 '| 趋势档位 | 首末变化按 +3 / +1 / −1 / −3 分档 | XK-04 周期结论「趋势」条 |',
-                '| 任务清单首要薄弱点 | `mSet` 内累计失分率最高的一项（含能力末级节点） | XK-04 任务清单合计行 |',
+                '| 任务清单行首要薄弱点 | 该场任务已考查末级知识点中得分率最低者（= 失分率最高），并列全取；无挂接置「—」 | XK-04 任务清单各行 |',
+                '| 任务清单合计行首要薄弱点 | `mSet` 内累计失分率最高的一项（含能力末级节点，考核项口径，与卡4 同源） | XK-04 任务清单合计行 |',
                 '',
                 '#### 4.2 知识点分析 · 明细、热力与图谱（XK-05 / XK-06 / XK-06A）',
                 '',
