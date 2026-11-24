@@ -123,6 +123,8 @@
             .markdown th, .markdown td { border: 1px solid var(--border); padding: 6px; text-align: left; }
             .markdown blockquote { border-left: 3px solid var(--border); margin: 8px 0; padding: 2px 12px; color: var(--muted); }
             .markdown ul, .markdown ol { padding-left: 22px; }
+            .markdown ol { list-style-type: decimal; } .markdown ol ol { list-style-type: lower-alpha; } .markdown ol ol ol { list-style-type: lower-roman; }
+            .note-title { margin-left: 10px; min-width: 0; font-weight: 700; overflow-wrap: anywhere; }
             .markdown li.task { list-style: none; margin-left: -20px; }
             .markdown a { color: var(--accent); }
             .markdown hr { border: 0; border-top: 1px solid var(--border); }
@@ -214,7 +216,12 @@ dialog.ppn-trash-dialog{position:fixed;top:12px;bottom:auto;margin:0;padding:0;w
 .ppn .ppn-expand svg{width:12px;height:12px;transition:transform 140ms ease}
 .ppn .ppn-expand[aria-expanded="false"] svg{transform:rotate(-90deg)}
 .ppn .ppn-expand:hover{background:var(--nav-hover);color:var(--nav-ink)}
-.ppn .ppn-state{padding-left:calc(62px + var(--ppn-depth,0)*14px)}
+.ppn .ppn-state{position:relative;padding-left:calc(62px + var(--ppn-depth,0)*14px)}
+.ppn .ppn-state-grip{position:absolute;left:calc(38px + var(--ppn-depth,0)*14px);top:50%;transform:translateY(-50%);display:grid;place-items:center;width:16px;height:18px;color:var(--nav-muted);opacity:0;touch-action:none}.ppn .ppn-state-grip svg{width:15px;height:17px}.ppn .ppn-state:focus-visible .ppn-state-grip,.ppn.ppn-drag-ghost .ppn-state-grip{opacity:1}
+@media(hover:hover){.ppn .ppn-state[data-ppn-drag]:hover{cursor:grab}.ppn .ppn-state[data-ppn-drag]:hover .ppn-state-grip{opacity:1}}
+.ppn .ppn-state-wrap{position:relative}.ppn .ppn-state-wrap>.ppn-state{padding-right:42px;min-height:32px;overflow-wrap:anywhere}.ppn .ppn-state-edit{top:50%;transform:translateY(-50%);width:24px;height:24px;padding:5px;background:transparent;opacity:0;pointer-events:none}.ppn .ppn-state-wrap:hover>.ppn-state-edit,.ppn .ppn-state-wrap:has(:focus-visible)>.ppn-state-edit{opacity:1;pointer-events:auto}.ppn .ppn-state-edit:hover{background:var(--nav-hover);color:var(--nav-ink)}
+@media(hover:none),(pointer:coarse){.ppn .ppn-state-edit{opacity:1;pointer-events:auto}}
+@media(pointer:coarse){.ppn .ppn-state-wrap>.ppn-state{min-height:44px;padding-right:52px}.ppn .ppn-state-edit{width:40px;height:40px;padding:12px}.ppn .ppn-state-grip{left:calc(34px + var(--ppn-depth,0)*14px);width:22px;height:30px;opacity:1}}
 .ppn .ppn-page.ppn-drop-inside{background:color-mix(in srgb,var(--nav-focus) 10%,var(--nav-surface));box-shadow:inset 0 0 0 1.5px var(--nav-focus);color:var(--nav-ink)}
 .ppn .ppn-drop-invalid{box-shadow:inset 0 0 0 1px var(--nav-danger);background:color-mix(in srgb,var(--nav-danger) 8%,var(--nav-surface))}
 .ppn .ppn-root-active{background:color-mix(in srgb,var(--nav-focus) 9%,var(--nav-surface));box-shadow:inset 0 0 0 1px var(--nav-focus);color:var(--nav-focus)}
@@ -645,7 +652,19 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
         function visit(page) {if (!page || seen.has(page.id)) return; seen.add(page.id); result.push(page); (project.pages || []).filter(p => p.parentId === page.id).forEach(visit);}
         visit((project.pages || []).find(p => p.id === id)); return result;
     }
+    function orderedStates(page) {
+        const states=page?.states || [],records=new Map(states.map(s=>[s.id,s]));
+        const ordered=[];
+        for(const id of Array.isArray(page?.stateOrder)?page.stateOrder:[]){const state=records.get(id);if(state){ordered.push(state);records.delete(id);}}
+        return ordered.concat(states.filter(s=>records.has(s.id)));
+    }
     function reorderError(project, request) {
+        if(request.kind==='state'){
+            const page=project.pages?.find(p=>p.id===request.pageId && !p.trashedAt);
+            if(!page || !page.states?.some(s=>s.id===request.id) || !page.states.some(s=>s.id===request.targetId))return '状态已变化，请重新拖动';
+            if(!['before','after'].includes(request.position))return '状态只支持同一页面内上下排序';
+            return request.id===request.targetId?'请选择其他状态':'';
+        }
         if (request.kind === 'client') return '';
         const source = project.pages?.find(p => p.id === request.id), target = project.pages?.find(p => p.id === request.targetId);
         if (!source || source.trashedAt) return '页面已移除';
@@ -665,7 +684,7 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
         return depth + height(source) - 1 > 3 ? '最多支持三级页面，当前子树会超过三级' : '';
     }
     function reorderProject(project, request) {
-        if (!['page', 'client'].includes(request.kind)) return false;
+        if (!['page', 'client', 'state'].includes(request.kind)) return false;
         if (request.kind === 'client') {
             const records = [...(project.clients || [])], source = records.findIndex(p => p.id === request.id), target = records.findIndex(p => p.id === request.targetId);
             if (source < 0 || target < 0 || source === target || !['before', 'after'].includes(request.position)) return false;
@@ -675,6 +694,12 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
             project.clients = records; return true;
         }
         if (reorderError(project, request)) return false;
+        if(request.kind==='state'){
+            const page=project.pages.find(p=>p.id===request.pageId),states=orderedStates(page),ids=states.map(s=>s.id);
+            const next=ids.filter(id=>id!==request.id);next.splice(next.indexOf(request.targetId)+(request.position==='after'?1:0),0,request.id);
+            if(next.every((id,index)=>id===ids[index]))return false;
+            project.pages=project.pages.map(p=>p===page?{...p,stateOrder:next}:p);return true;
+        }
         const tree = pageTree(project), target = tree.nodes.get(request.targetId)?.page;
         const moved = subtreePages(project, request.id).map(p => ({...p})), ids = new Set(moved.map(p => p.id));
         const records = project.pages.filter(p => !ids.has(p.id));
@@ -709,6 +734,14 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
         if(page.role==='launcher'||(parent&&(parent.clientId || '')!==(page.clientId || '')))delete page.parentId;
         if(page.role==='launcher')for(const child of project.pages)if(child.parentId===id)delete child.parentId;
     }
+    function updateStateTitle(project, pageId, stateId, value) {
+        const title=typeof value==='string'?value.trim():'';
+        if(!title || title.length>100 || /[\u0000-\u001f\u007f]/.test(title))throw new Error(!title?'请填写状态名称':'状态名称最多 100 个字符，不能包含换行或控制字符');
+        const page=project.pages.find(p=>p.id===pageId && !p.trashedAt),state=page?.states?.find(s=>s.id===stateId);
+        if(!state)throw new Error('状态已移除，请重新打开项目');
+        if(title===(state.title || state.id))return false;
+        state.title=title;state.titleUserSet=true;return true;
+    }
     function mount(host, initial) {
         let options = initial, filter = '', closed = new Set(['__launchers']), closedPages = new Set(), filterControl = null, drag = null, saving = false, suppressClick = false;
         host.classList.add('ppn');
@@ -720,7 +753,7 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
         }
         function render() {
             const focused = document.activeElement?.closest('[data-ppn-key]')?.dataset.ppnKey;
-            const { project, currentPage, currentState, onSelect, onEdit, onReorder, annotations = [] } = options;
+            const { project, currentPage, currentState, onSelect, onEdit, onEditState, onReorder, annotations = [] } = options;
             const pages = (project.pages || []).filter(p=>!p.trashedAt), clients = project.clients || [], tree = pageTree(project);
             if (filter && !clients.some(c => c.id === filter)) filter = '';
             filterControl?.destroy(); filterControl = null; host.replaceChildren();
@@ -792,10 +825,18 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
                         const expand=button('ppn-expand','',()=>{closedPages.has(page.id)?closedPages.delete(page.id):closedPages.add(page.id);render();});
                         expand.innerHTML=chevron;expand.setAttribute('aria-label',(nested.hidden?'展开':'收起')+' '+title.textContent+'的子页面');expand.setAttribute('aria-expanded',String(!nested.hidden));expand.setAttribute('aria-controls',nested.id);expand.dataset.ppnKey='expand:'+page.id;item.append(expand);
                     }
-                    if ((page.states || []).length>1) for (const state of page.states) {
+                    if ((page.states || []).length>1) for (const state of orderedStates(page)) {
                         const st=button('ppn-state',state.title || state.id,()=>onSelect(page.id,state.id));
                         st.dataset.pageId=page.id;st.dataset.stateId=state.id;st.dataset.scope=page.id+'\n'+state.id;st.dataset.ppnKey='state:'+page.id+':'+state.id;
-                        st.style.setProperty('--ppn-depth',depth-1);st.setAttribute('aria-current',String(page.id===currentPage && state.id===currentState));node.append(st);
+                        st.style.setProperty('--ppn-depth',depth-1);st.setAttribute('aria-current',String(page.id===currentPage && state.id===currentState));
+                        if(onReorder){const grip=document.createElement('span');grip.className='ppn-state-grip';grip.innerHTML=dragIcon;grip.setAttribute('aria-hidden','true');st.prepend(grip);st.dataset.ppnDrag='state';st.dataset.dragId=state.id;st.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');st.title='拖动调整状态顺序 · Alt + ↑ / ↓';}
+                        if(onEditState){
+                            const row=document.createElement('div');row.className='ppn-state-wrap';
+                            const edit=button('ppn-edit ppn-state-edit','',event=>{event.stopPropagation();onEditState(page,state,event.currentTarget);});
+                            edit.innerHTML=editIcon;edit.setAttribute('aria-label','修改状态名称：'+(state.title || state.id));edit.title='修改状态名称';edit.dataset.ppnKey='edit-state:'+page.id+':'+state.id;
+                            st.setAttribute('aria-keyshortcuts',(onReorder?'Alt+ArrowUp Alt+ArrowDown ':'')+'F2');st.onkeydown=event=>{if(event.key==='F2'){event.preventDefault();event.stopPropagation();onEditState(page,state,edit);}};
+                            row.append(st,edit);node.append(row);
+                        }else node.append(st);
                     }
                     children.forEach(child=>renderPage(child,nested));if(children.length)node.append(nested);
                 }
@@ -812,13 +853,14 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
             if (saving || !options.onReorder) return;
             const check = {pages: [...options.project.pages], clients: [...(options.project.clients || [])]};
             const error=reorderError(options.project,request);if(error){live.textContent=error;return;}
-            if (!reorderProject(check, request)) {live.textContent='页面位置未改变';return;}
+            const stateMove=request.kind==='state',label=stateMove?'状态顺序':'页面结构';
+            if (!reorderProject(check, request)) {live.textContent=label+'未改变';return;}
             const previousProject=options.project, save=options.onReorder;
             if(request.position==='inside')closedPages.delete(request.targetId);
-            const moved=check.pages.find(p=>p.id===request.id);if(moved)closed.delete(groupKey(moved,check));
+            const moved=request.kind==='page'&&check.pages.find(p=>p.id===request.id);if(moved)closed.delete(groupKey(moved,check));
             if(filter && moved && groupKey(moved,check)!==filter)filter='';
-            saving = true; options={...options,project:check}; live.textContent = '正在保存页面结构'; render();
-            try {const ok = await save(request); if(ok===false && options.project===check)options={...options,project:previousProject};live.textContent = ok === false ? '移动未保存，已恢复原结构' : '页面结构已保存';}
+            saving = true; options={...options,project:check}; live.textContent = '正在保存'+label; render();
+            try {const ok = await save(request); if(ok===false && options.project===check)options={...options,project:previousProject};live.textContent = ok === false ? '移动未保存，已恢复原结构' : label+'已保存';}
             catch (_) {if(options.project===check)options={...options,project:previousProject};live.textContent = '移动未保存，已恢复原结构';}
             finally {saving = false; render(); if(focusKey) Array.from(host.querySelectorAll('[data-ppn-key]')).find(n=>n.dataset.ppnKey===focusKey)?.focus({preventScroll:true});}
         }
@@ -842,7 +884,7 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
                 drag.caption=document.createElement('div');drag.caption.className='ppn-drag-caption';drag.ghost.append(drag.caption);
                 drag.ghost.style.width=startRect.width+'px';document.body.append(drag.ghost);
                 drag.line=document.createElement('div');drag.line.className='ppn-drop-line';document.body.append(drag.line);
-                live.textContent=node.dataset.ppnDrag==='client'?'正在拖动端分组':'拖到中间成为子页面，上下边缘同级排序';tick();
+                live.textContent=node.dataset.ppnDrag==='state'?'上下拖动调整状态顺序，仅限当前页面':node.dataset.ppnDrag==='client'?'正在拖动端分组':'拖到中间成为子页面，上下边缘同级排序';tick();
             }
             function tick(schedule=true) {
                 if (!drag?.started) return;
@@ -851,13 +893,13 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
                 const inPanel=d.x>=r.left-18 && d.x<=r.right+18;
                 if(inPanel){const edge=38;const delta=d.y<r.top+edge?-Math.min(9,(r.top+edge-d.y)/4):d.y>r.bottom-edge?Math.min(9,(d.y-r.bottom+edge)/4):0;host.scrollTop+=delta;}
                 host.querySelectorAll('.ppn-drop-inside,.ppn-drop-invalid,.ppn-root-active').forEach(n=>n.classList.remove('ppn-drop-inside','ppn-drop-invalid','ppn-root-active'));
-                const kind=node.dataset.ppnDrag, candidates=Array.from(host.querySelectorAll('[data-ppn-drag]')).filter(n=>n.dataset.ppnDrag===kind && n.getClientRects().length);
+                const kind=node.dataset.ppnDrag, candidates=Array.from(host.querySelectorAll('[data-ppn-drag]')).filter(n=>n.dataset.ppnDrag===kind && (kind!=='state'||n.dataset.pageId===node.dataset.pageId) && n.getClientRects().length);
                 let closest=null, distance=Infinity, request=null, caption='', inside=false;
                 const rootTarget=kind==='page'&&inPanel?Array.from(host.querySelectorAll('[data-ppn-root]')).find(n=>{const cr=n.getBoundingClientRect();return cr.height&&d.y>=cr.top&&d.y<=cr.bottom;}):null;
                 if(rootTarget){request={kind,id:node.dataset.dragId,targetId:rootTarget.dataset.ppnRoot,position:'root'};closest=rootTarget;caption='移到“'+rootTarget.querySelector('span')?.textContent+'”顶层';}
                 else if(inPanel && d.y>=r.top && d.y<=r.bottom)for(const candidate of candidates){const cr=candidate.getBoundingClientRect(),dist=Math.abs(d.y-(cr.top+cr.height/2));if(dist<distance&&d.y>=cr.top-8&&d.y<=cr.bottom+8){distance=dist;closest=candidate;}}
                 if(closest&&!rootTarget){const cr=closest.getBoundingClientRect(),part=(d.y-cr.top)/cr.height;inside=kind==='page'&&part>.25&&part<.75&&node.dataset.dragGroup!=='__launchers';
-                    const position=inside?'inside':part<.5?'before':'after';request={kind,id:node.dataset.dragId,targetId:closest.dataset.dragId,position};
+                    const position=inside?'inside':part<.5?'before':'after';request={kind,id:node.dataset.dragId,targetId:closest.dataset.dragId,position,...(kind==='state'?{pageId:node.dataset.pageId}:{})};
                     const title=closest.querySelector('.ppn-title')?.textContent || closest.textContent;caption=inside?'移入“'+title+'”':'放在“'+title+'”'+(position==='before'?'之前':'之后');
                 }
                 const error=request?reorderError(options.project,request):'', valid=request&&!error;
@@ -869,10 +911,10 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
                 }
                 const expandId=valid&&inside?request.targetId:'';
                 if(d.expandId!==expandId){clearTimeout(d.expandTimer);d.expandId=expandId;if(expandId&&closedPages.has(expandId))d.expandTimer=setTimeout(()=>{if(!drag||drag.expandId!==expandId)return;closedPages.delete(expandId);const branch=closest.closest('.ppn-branch'),children=branch.querySelector(':scope > .ppn-children'),toggle=branch.querySelector(':scope > .ppn-item-wrap > .ppn-expand');if(children)children.hidden=false;if(toggle){toggle.setAttribute('aria-expanded','true');toggle.setAttribute('aria-label',toggle.getAttribute('aria-label').replace(/^展开/,'收起'));}},650);}
-                const message=error || caption || '中间移入 · 边缘排序 · 最多三级';d.caption.textContent=message;if(d.message!==message){live.textContent=message;d.message=message;}
+                const message=error || caption || (kind==='state'?'仅限当前页面的状态之间排序':'中间移入 · 边缘排序 · 最多三级');d.caption.textContent=message;if(d.message!==message){live.textContent=message;d.message=message;}
                 d.ghost.classList.toggle('ppn-no-drop',!d.drop);if(schedule)d.raf=requestAnimationFrame(tick);
             }
-            const touchHandle=event.target.closest('.ppn-page-icon');
+            const touchHandle=event.target.closest('.ppn-page-icon,.ppn-state-grip');
             if(event.pointerType==='touch'&&!touchHandle) drag.timer=setTimeout(start,300);
             window.addEventListener('pointermove', e=>{if(!drag||e.pointerId!==drag.pointerId)return;drag.x=e.clientX;drag.y=e.clientY;if(!drag.started&&Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>6){if(event.pointerType==='touch'&&!touchHandle){endDrag(true);return;}start();}if(drag?.started)e.preventDefault();},{passive:false,signal:controller.signal});
             window.addEventListener('pointerup',e=>{if(drag&&e.pointerId===drag.pointerId){drag.x=e.clientX;drag.y=e.clientY;if(drag.started)tick(false);endDrag();}},{signal:controller.signal});
@@ -889,12 +931,12 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
             if(!event.altKey||!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)||!options.onReorder)return;
             const node=event.target.closest('[data-ppn-drag]');if(!node)return;event.preventDefault();event.stopImmediatePropagation();
             const kind=node.dataset.ppnDrag,id=node.dataset.dragId,tree=pageTree(options.project),branch=tree.nodes.get(id);
-            const siblings=Array.from(host.querySelectorAll('[data-ppn-drag]')).filter(n=>n.dataset.ppnDrag===kind && (kind==='client'||(n.dataset.dragGroup===node.dataset.dragGroup&&n.dataset.parentId===node.dataset.parentId)));
+            const siblings=Array.from(host.querySelectorAll('[data-ppn-drag]')).filter(n=>n.dataset.ppnDrag===kind && (kind==='state'?n.dataset.pageId===node.dataset.pageId:kind==='client'||(n.dataset.dragGroup===node.dataset.dragGroup&&n.dataset.parentId===node.dataset.parentId)));
             const i=siblings.indexOf(node);let target,position;
             if(event.key==='ArrowLeft'&&kind==='page'){target=branch?.parentId;position='after';}
             else if(event.key==='ArrowRight'&&kind==='page'){target=siblings[i-1]?.dataset.dragId;position='inside';}
             else if(['ArrowUp','ArrowDown'].includes(event.key)){target=siblings[i+(event.key==='ArrowUp'?-1:1)]?.dataset.dragId;position=event.key==='ArrowUp'?'before':'after';}
-            if(target)commit({kind,id,targetId:target,position},node.dataset.ppnKey);
+            if(target)commit({kind,id,targetId:target,position,...(kind==='state'?{pageId:node.dataset.pageId}:{})},node.dataset.ppnKey);
         },true);
         function revealAncestors(pageId){const tree=pageTree(options.project);let node=tree.nodes.get(pageId);while(node?.parentId){closedPages.delete(node.parentId);node=tree.nodes.get(node.parentId);}}
         let revealedPage='';
@@ -921,7 +963,7 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
         canvas.classList.add('ppn-canvas');canvas.classList.toggle('ppn-mobile',type==='mobile');canvas.classList.toggle('ppn-pad',type==='pad');canvas.classList.toggle('ppn-shell',['mobile','pad'].includes(type) && shell);
         if(type==='pad')previewDevices.set(frame,fitDevice(frame,canvas,shell?1220:1180,shell?860:820));
     }
-    window.ProtoProjectNavigation = {mount, defaultPage, applyPreview, fitDevice, createSelect, positionPopup, reorderProject, reorderError, pageTree, subtreePages, updatePageNavigation, createPageTracking};
+    window.ProtoProjectNavigation = {mount, defaultPage, applyPreview, fitDevice, createSelect, positionPopup, reorderProject, reorderError, pageTree, subtreePages, updatePageNavigation, updateStateTitle, orderedStates, createPageTracking};
 })();
 </script>
         <script>/* 工作台和独立评审壳共用页面列表宽度交互。 */
@@ -1008,7 +1050,7 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
                 <div id="page-nav-resizer" class="page-nav-resizer" role="separator" aria-label="页面列表宽度" aria-orientation="vertical" aria-controls="tree" tabindex="0" title="拖动调整页面列表宽度，双击恢复默认"></div>
             </nav>
             <section class="canvas">
-                <iframe id="frame" title="交互原型" sandbox="allow-same-origin allow-scripts allow-popups" hidden></iframe>
+                <iframe id="frame" title="交互原型" sandbox="allow-popups allow-same-origin allow-scripts" hidden></iframe>
                 <div id="empty" class="empty">选择左侧页面查看交互原型。</div>
             </section>
             <aside>
@@ -1025,7 +1067,7 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
             </aside>
         </main>
         <noscript>请开启 JavaScript 查看评审内容（页面树、PRD 与标注气泡均依赖脚本渲染）。</noscript>
-        <script type="application/json" id="review-data">{"name": "学科侧重表", "projectId": "p-477a79e5f342d87c", "revision": 1, "publishedAt": "2026-11-17 11:42:40", "pages": [{"id": "home", "title": "演示学校 · 学情分析 · 班级报告（作业）", "file": "index.html", "states": [{"id": "default", "title": "默认页面", "kind": "default"}]}, {"id": "高三34班_学科侧重报表_最近批改", "title": "高三34班跨学科分析报表（最近批改）", "file": "高三34班_跨学科分析报表_最近批改.html", "states": [{"id": "default", "title": "默认页面", "kind": "default"}]}], "clients": [], "defaultPage": "", "documents": [], "annotations": [], "release": {"schemaVersion": 1, "projectId": "p-477a79e5f342d87c", "releaseId": "rel-6935560f2e3d4f05", "sequence": 9, "contentVersion": "5ee89fcfec47d92c9b523c1845d00a92bb866349e61532b6c6e16b01564f6f29", "publishedAt": "2026-11-17 11:42:40", "mode": "review", "baseReleaseId": "rel-8a5ebeecb4e04ca5", "summary": {"pages": 1, "changes": 2}, "changesUrl": "prototype-changes/rel-6935560f2e3d4f05.json", "snapshotUrl": "prototype-changes/rel-6935560f2e3d4f05.snapshot.json", "prototypeBase": "prototype-versions/5ee89fcfec47d92c9b523c18/", "baselineStatus": "previous"}, "changeLog": {"schemaVersion": 1, "releaseId": "rel-6935560f2e3d4f05", "sequence": 9, "publishedAt": "2026-11-17 11:42:40", "contentVersion": "5ee89fcfec47d92c9b523c1845d00a92bb866349e61532b6c6e16b01564f6f29", "baselineStatus": "previous", "items": [{"kind": "logic", "description": "交互资源更新：js/app.js", "pageTitle": "演示学校 · 学情分析 · 班级报告（作业）", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）"], "id": "change-8f78c487a98434488007"}, {"kind": "runtime", "description": "评审组件更新", "pageTitle": "公共资源", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home", "高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）", "高三34班跨学科分析报表（最近批改）"], "id": "change-72ee2c142f6f55f78211"}]}, "prototypeBase": "prototype-versions/5ee89fcfec47d92c9b523c18/", "prototypeVersions": {"index.html": "6a2573e7f4397a0b6e93", "高三34班_跨学科分析报表_最近批改.html": "ed9fac1b3f311d33d87c"}}</script>
+        <script type="application/json" id="review-data">{"name": "学科侧重表", "projectId": "p-477a79e5f342d87c", "revision": 1, "publishedAt": "2026-11-24 08:55:20", "pages": [{"id": "home", "title": "演示学校 · 学情分析 · 班级报告（作业）", "file": "index.html", "states": [{"id": "default", "title": "默认页面", "kind": "default"}]}, {"id": "高三34班_学科侧重报表_最近批改", "title": "高三34班跨学科分析报表（最近批改）", "file": "高三34班_跨学科分析报表_最近批改.html", "states": [{"id": "default", "title": "默认页面", "kind": "default"}]}], "clients": [], "defaultPage": "", "documents": [], "annotations": [], "release": {"schemaVersion": 1, "projectId": "p-477a79e5f342d87c", "releaseId": "rel-0b2263a16397462c", "sequence": 10, "contentVersion": "af14b9bf7682a96c798765f6b6ba61fa62d13b808ff93891795c40426ad67690", "publishedAt": "2026-11-24 08:55:20", "mode": "review", "baseReleaseId": "rel-6935560f2e3d4f05", "summary": {"pages": 2, "changes": 16}, "changesUrl": "prototype-changes/rel-0b2263a16397462c.json", "snapshotUrl": "prototype-changes/rel-0b2263a16397462c.snapshot.json", "prototypeBase": "prototype-versions/af14b9bf7682a96c798765f6/", "baselineStatus": "previous"}, "changeLog": {"schemaVersion": 1, "releaseId": "rel-0b2263a16397462c", "sequence": 10, "publishedAt": "2026-11-24 08:55:20", "contentVersion": "af14b9bf7682a96c798765f6b6ba61fa62d13b808ff93891795c40426ad67690", "baselineStatus": "previous", "items": [{"kind": "asset", "description": "图片或媒体资源新增：_eval/_shot_gap_axis.png", "pageTitle": "公共资源", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home", "高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）", "高三34班跨学科分析报表（最近批改）"], "id": "change-6cd60c2a3d46334332ff"}, {"kind": "asset", "description": "图片或媒体资源新增：_eval/_shot_heat_head2.png", "pageTitle": "公共资源", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home", "高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）", "高三34班跨学科分析报表（最近批改）"], "id": "change-6cd60c2a3d46334332ff"}, {"kind": "asset", "description": "图片或媒体资源新增：_eval/_shot_num_v2.png", "pageTitle": "公共资源", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home", "高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）", "高三34班跨学科分析报表（最近批改）"], "id": "change-6cd60c2a3d46334332ff"}, {"kind": "asset", "description": "图片或媒体资源新增：_eval/_shot_prd_xk00.png", "pageTitle": "公共资源", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home", "高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）", "高三34班跨学科分析报表（最近批改）"], "id": "change-6cd60c2a3d46334332ff"}, {"kind": "asset", "description": "图片或媒体资源新增：_eval/_shot_table_v3.png", "pageTitle": "公共资源", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home", "高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）", "高三34班跨学科分析报表（最近批改）"], "id": "change-6cd60c2a3d46334332ff"}, {"kind": "logic", "description": "交互资源新增：_eval/离差图对比稿/app.js", "pageTitle": "公共资源", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home", "高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）", "高三34班跨学科分析报表（最近批改）"], "id": "change-f4ba3e075e55f4930d11"}, {"kind": "style", "description": "样式资源新增：_eval/离差图对比稿/styles.css", "pageTitle": "公共资源", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home", "高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）", "高三34班跨学科分析报表（最近批改）"], "id": "change-e288908d5d9bcfe8810e"}, {"kind": "asset", "description": "图片或媒体资源新增：_eval/离差图对比稿/预览-整页.png", "pageTitle": "公共资源", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home", "高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）", "高三34班跨学科分析报表（最近批改）"], "id": "change-6cd60c2a3d46334332ff"}, {"kind": "logic", "description": "交互资源更新：js/app.js", "pageTitle": "演示学校 · 学情分析 · 班级报告（作业）", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）"], "id": "change-8f78c487a98434488007"}, {"kind": "logic", "description": "交互资源更新：js/focus-data.js", "pageTitle": "公共资源", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home", "高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）", "高三34班跨学科分析报表（最近批改）"], "id": "change-f4ba3e075e55f4930d11"}, {"kind": "logic", "description": "交互资源更新：js/prd-viewer.js", "pageTitle": "演示学校 · 学情分析 · 班级报告（作业）", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）"], "id": "change-8f78c487a98434488007"}, {"kind": "style", "description": "样式资源更新：styles/app.css", "pageTitle": "公共资源", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home", "高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）", "高三34班跨学科分析报表（最近批改）"], "id": "change-e288908d5d9bcfe8810e"}, {"kind": "style", "description": "样式资源更新：styles/prd-viewer.css", "pageTitle": "演示学校 · 学情分析 · 班级报告（作业）", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）"], "id": "change-f825d84044b3fc33ecc4"}, {"kind": "style", "description": "样式资源更新：styles/tokens.css", "pageTitle": "公共资源", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home", "高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）", "高三34班跨学科分析报表（最近批改）"], "id": "change-e288908d5d9bcfe8810e"}, {"kind": "text", "description": "文案：“使用说明：本表是「阶段学情分诊」而非长期特质判断——班级侧只列明确短板、相对短板学科，学生侧给出个人补弱方向。本独立报表示例使用未修改时的常…” → “使用说明：本表是「阶段学情分诊」而非长期特质判断——班级侧只列明确短板、相对短板学科，学生侧给出个人补弱方向。本独立报表示例使用未修改时的常…”", "pageTitle": "高三34班跨学科分析报表（最近批改）", "stateTitle": "默认页面", "target": {"pageId": "高三34班_学科侧重报表_最近批改", "stateId": "default", "anchor": {"selector": "html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(1) > p:nth-of-type(1)", "tag": "p"}}, "before": "使用说明：本表是「阶段学情分诊」而非长期特质判断——班级侧只列明确短板、相对短板学科，学生侧给出个人补弱方向。本独立报表示例使用未修改时的常规默认规则；主页面支持按教师、按学科调整。 班级怎么判弱科= 两条通道任一命中即判明确短板：某科班均未达 85%，且最近两次作业都比同卷学科组低至少 5 个百分点； 或全班得分率不到 60% 的学生占比 ≥30%。命中的学科全部列出，只出现一次或只有 1 份作业时标「短板待确认」。 班均未达 85%、低于学科组但未达明确短板条件的科目列为相对短板，与明确短板分组同时展示；某科未交超 30% 先抓提交，不判学科强弱。 术语说明：「明确短板」表示当前作业证据已达到设定阈值，属于阶段性学科表现判断，不代表班级或学生能力定型；「相对短板」的参照为同卷学科组。 学生怎么定补哪一科= 每名有有效成绩的学生都必须有一科个人补弱方向：该生这一科得分率未达 85% 且比班均低 10 个百分点以上， 或得分率直接不到 60% 时，列为重点提升；没有过线学科时，按「（个人 − 班均）÷ 10 个百分点」选出相对最弱的一科。 「优先巩固」只表示个人学习优先级，可能仍高于班均，不等同于薄弱学科；只有 1 份作业时结论暂定。 证据与时效：按该科有效作业份数看，3 份以上结论最稳、2 份次之、只有 1 份时仅给临时建议； 自动排序只用当日或近 3 天的作业，更早的数据仅作趋势参考。 满分区（该科学生得分率 75 分位已达 95%）只作提示，不再跳过判定； 因相对判弱要求本人得分率未达 85%，高分小分差通常不会触发，但其中仍有学生得分率不到 60% 时，照常进个人建议。 缺交 / 未批改显示「—」，不按 0 分参与均分与能力判定。 阈值说明：本页的 85% / 60% / 10pp / 5pp / 30% 均为常规默认值，也是暂无教研校准时的暂行保守值；主页面修改后…", "after": "使用说明：本表是「阶段学情分诊」而非长期特质判断——班级侧只列明确短板、相对短板学科，学生侧给出个人补弱方向。本独立报表示例使用未修改时的常规默认规则；主页面支持按教师、按学科调整。 班级怎么判弱科= 两条通道任一命中即判明确短板：某科班均未达 85%，且最近两次作业都比同卷学科组低至少 5 个百分点； 或全班得分率不到 60% 的学生占比 ≥30%。命中的学科全部列出，只出现一次或只有 1 份作业时标「短板待确认」。 班均未达 85%、低于学科组但未达明确短板条件的科目列为相对短板，与明确短板分组同时展示；某科未交超 30% 先抓提交，不判学科强弱。 术语说明：「明确短板」表示当前作业证据已达到设定阈值，属于阶段性学科表现判断，不代表班级或学生能力定型；「相对短板」的参照为同卷学科组。 学生怎么定补哪一科= 每名有有效成绩的学生都必须有一科个人补弱方向：该生这一科得分率未达 85% 且比班均低 10 个百分点以上， 或得分率直接不到 60% 时，列为重点提升；没有过线学科时，按「（个人 − 班均）÷ 10 个百分点」选出相对最弱的一科。 「优先巩固」只表示个人学习优先级，可能仍高于班均，不等同于薄弱学科；只有 1 份作业时结论暂定。 证据与时效：按该科有效作业份数看，3 份以上结论最稳、2 份次之、只有 1 份时仅给临时建议； 选中范围内（最长 30 天、单科最多 30 份）的作业全部参与判定与排序，不再按作业日期剔除。 满分区（该科学生得分率 75 分位已达 95%）只作提示，不再跳过判定； 因相对判弱要求本人得分率未达 85%，高分小分差通常不会触发，但其中仍有学生得分率不到 60% 时，照常进个人建议。 缺交 / 未批改显示「—」，不按 0 分参与均分与能力判定。 阈值说明：本页的 85% / 60% / 10pp / 5pp / 30% 均为常规默认值，也是暂无教…", "affectedPages": ["高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["高三34班跨学科分析报表（最近批改）"], "id": "change-4b561d8025dba28a17bf"}, {"kind": "runtime", "description": "评审组件更新", "pageTitle": "公共资源", "stateTitle": "默认页面", "target": {"pageId": "home", "stateId": "default"}, "before": "", "after": "", "affectedPages": ["home", "高三34班_学科侧重报表_最近批改"], "affectedPageTitles": ["演示学校 · 学情分析 · 班级报告（作业）", "高三34班跨学科分析报表（最近批改）"], "id": "change-72ee2c142f6f55f78211"}]}, "prototypeBase": "prototype-versions/af14b9bf7682a96c798765f6/", "prototypeVersions": {"_eval/离差图对比稿/index.html": "3e94b03adc3959fb7f11", "index.html": "d3f901d6b4c33de0d46b", "高三34班_跨学科分析报表_最近批改.html": "12b7bdb2e0344f8aa632"}}</script>
         <script>
             'use strict';
             const $ = (id) => document.getElementById(id);
@@ -1099,18 +1141,38 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
                     }
                     if (/^\s*([-*+]|\d+\.)\s+/.test(line)) {
                         flushPara();
-                        const ordered = /^\s*\d+\./.test(line);
-                        const itemRe = ordered ? /^\s*\d+\.\s+(.*)$/ : /^\s*[-*+]\s+(.*)$/;
-                        const items = [];
-                        while (i < lines.length && itemRe.test(lines[i])) {
-                            const t = lines[i].match(itemRe)[1];
+                        const matchItem = text => /^([ \t]*)([-*+]|\d+\.)\s+(.*)$/.exec(text);
+                        const indent = text => text.replace(/\t/g, '    ').length;
+                        const first = matchItem(line), base = indent(first[1]), stack = [], parts = [];
+                        const closeList = () => { const last = stack.pop(); parts.push(`</li></${last.tag}>`); };
+                        while (i < lines.length) {
+                            const item = matchItem(lines[i]);
+                            if (!item) {
+                                if (!lines[i].trim()) {
+                                    let next = i + 1; while (next < lines.length && !lines[next].trim()) next++;
+                                    const nextItem = matchItem(lines[next] || '');
+                                    if (nextItem && indent(nextItem[1]) >= base) { i = next; continue; }
+                                    break;
+                                }
+                                if (stack.length && indent((/^[ \t]*/.exec(lines[i]) || [''])[0]) > stack.at(-1).indent) {
+                                    parts.push('<br>' + inline(lines[i++].trim())); continue;
+                                }
+                                break;
+                            }
+                            const depth = indent(item[1]), tag = /^\d/.test(item[2]) ? 'ol' : 'ul';
+                            if (depth < base) break;
+                            while (stack.length && depth < stack.at(-1).indent) closeList();
+                            if (stack.length && depth === stack.at(-1).indent && tag !== stack.at(-1).tag) closeList();
+                            if (!stack.length || depth > stack.at(-1).indent) {
+                                const start = tag === 'ol' && parseInt(item[2],10) !== 1 ? ` start="${parseInt(item[2],10)}"` : '';
+                                parts.push(`<${tag}${start}>`); stack.push({indent:depth,tag});
+                            } else parts.push('</li>');
+                            const task = item[3].match(/^\[([ xX])\]\s+(.*)$/);
+                            parts.push(task ? `<li class="task"><input type="checkbox" disabled${task[1] !== ' ' ? ' checked' : ''}> ${inline(task[2])}` : `<li>${inline(item[3])}`);
                             i++;
-                            const task = t.match(/^\[([ xX])\]\s+(.*)$/);
-                            items.push(task
-                                ? `<li class="task"><input type="checkbox" disabled${task[1] !== ' ' ? ' checked' : ''}> ${inline(task[2])}</li>`
-                                : `<li>${inline(t)}</li>`);
                         }
-                        out.push(ordered ? `<ol>${items.join('')}</ol>` : `<ul>${items.join('')}</ul>`);
+                        while (stack.length) closeList();
+                        out.push(parts.join(''));
                         continue;
                     }
                     if (!line.trim()) { flushPara(); i++; continue; }
@@ -1241,7 +1303,7 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
                 frameReady = true;
                 // 先按当前页/状态判定 PRD 是否为空，再把真实侧栏开合态下发给 iframe；避免切页瞬间沿用上一页状态。
                 renderAside();
-                post({ type: 'init', notes: pageNotes(), asideOpen: prdAsideOpen(), enterState, selectedNoteId,
+                post({ type: 'init', notes: pageNotes(), pinStyle: data.pinStyle, asideOpen: prdAsideOpen(), enterState, selectedNoteId,
                     hintScopes: (current.page?.states || []).map(state => ({id: state.id, interactionHints: state.interactionHints})) });
                 flushPublicationTarget();
             }
@@ -1367,6 +1429,7 @@ body.page-nav-resizing{user-select:none;cursor:col-resize}body.page-nav-resizing
                     const head = document.createElement('div');
                     head.className = 'note-head';
                     head.append(no);
+                    if (note.title) { const title = document.createElement('strong'); title.className = 'note-title'; title.textContent = note.title; head.append(title); }
                     row.append(head, body);
                     if (!stale) {
                         row.onclick = () => reveal(note);

@@ -105,6 +105,8 @@
 
   /* 预设区间的回诵天数：必须早于 state 初始化（makeScope 要用） */
   var FOCUS_RANGE_DAYS = { today: 0, '3d': 2, '7d': 6, '14d': 13, '30d': 29 };
+  var MAX_RANGE_DAYS = 30;      // 时间范围上限：最近 30 天（含首尾）
+  var MAX_SUBJECT_TASKS = 30;   // 单科作业份数上限
 
   var state = {
     topTab: 'class',      // school | class | track
@@ -535,10 +537,30 @@
     });
   }
 
+  /* 单科作业份数上限：超出时按日期保留最近的 MAX_SUBJECT_TASKS 份，返回被裁掉的份数 */
+  function trimSubjectTasks(tasks, list) {
+    var groups = {};
+    list.forEach(function (hw) {
+      (groups[hw.subject] = groups[hw.subject] || []).push(hw);
+    });
+    var dropped = 0;
+    Object.keys(groups).forEach(function (name) {
+      var picked = groups[name].filter(function (hw) { return tasks[hw.id]; });
+      if (picked.length <= MAX_SUBJECT_TASKS) return;
+      picked.sort(function (a, b) { return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
+      picked.slice(MAX_SUBJECT_TASKS).forEach(function (hw) {
+        tasks[hw.id] = false;
+        dropped++;
+      });
+    });
+    return dropped;
+  }
+
   function initScopeTasks(s) {
     FocusReport.HOMEWORKS.forEach(function (hw) {
       if (!Object.prototype.hasOwnProperty.call(s.tasks, hw.id)) s.tasks[hw.id] = true;
     });
+    trimSubjectTasks(s.tasks, scopeHomeworks(s));
   }
 
   function pickedHomeworks(s) {
@@ -560,7 +582,7 @@
     return Math.max(1, Math.round((b - a) / 86400000) + 1);
   }
 
-  /* 页面只回显：时间 / 学科 / 作业数，其余全在弹窗里调 */
+  /* 页面只回显：时间 / 学科 / 作业数；难度规则在弹窗里调，不再单独成标签 */
   function focusEchoHTML(s) {
     var list = pickedHomeworks(s);
     var names = FocusReport.SUBJECTS.filter(function (sub) {
@@ -571,17 +593,10 @@
     else if (names.length === FocusReport.SUBJECTS.length) subText = names.length + ' 个（全部）';
     else subText = names.length + ' 个（' + names.join('、') + '）';
 
-    var rules = FocusReport.getRules();
-    var changed = names.filter(function (name) { return rules[name].difficulty !== 'normal'; });
-    var ruleText = changed.length
-      ? changed.map(function (name) { return name + FocusReport.difficultyLabel(rules[name]); }).join('、')
-      : '各科常规';
-
     return [
       ['时间', focusEchoTime(s)],
       ['学科', subText],
-      ['作业', list.length + ' 份'],
-      ['规则', ruleText]
+      ['作业', list.length + ' 份']
     ].map(function (it) {
       return '<span class="echo__item"><b>' + it[0] + '</b><span>' + it[1] + '</span></span>';
     }).join('');
@@ -764,9 +779,15 @@
 
     var items = hws.filter(function (hw) { return hw.subject === active; });
     var on = items.filter(function (hw) { return focusDraft.tasks[hw.id]; }).length;
+    var atLimit = on >= MAX_SUBJECT_TASKS;
     var list = items.map(function (hw) {
-      return '<label class="checkbox task-item">' +
-        '<input type="checkbox" data-modal-task="' + hw.id + '"' + (focusDraft.tasks[hw.id] ? ' checked' : '') + ' />' +
+      var used = !!focusDraft.tasks[hw.id];
+      /* 单科已达 30 份时，未选中的作业置灰不可再选 */
+      var locked = !used && atLimit;
+      return '<label class="checkbox task-item' + (locked ? ' is-limit' : '') + '"' +
+        (locked ? ' title="单科最多 ' + MAX_SUBJECT_TASKS + ' 份作业，请先取消一份"' : '') + '>' +
+        '<input type="checkbox" data-modal-task="' + hw.id + '"' +
+          (used ? ' checked' : '') + (locked ? ' disabled' : '') + ' />' +
         '<span class="checkbox__box"></span><span class="task-item__name">' + hw.name + '</span>' +
         '<span class="task-item__meta">满分 ' + hw.full + ' · 已交 ' + hw.handed + '/' + hw.due +
           ' 人 · 批改率 <b class="task-item__rate' + (hw.gradePct != null && hw.gradePct < 100 ? ' is-low' : '') + '">' +
@@ -779,7 +800,8 @@
           '<label class="checkbox checkbox--inline"><input type="checkbox" data-modal-subject="' + active + '"' +
             (on === items.length ? ' checked' : '') + ' /><span class="checkbox__box"></span>' +
             '<span class="task-group__name">' + active + '作业</span></label>' +
-          '<span class="task-group__meta">' + items.length + ' 份 · 已选 ' + on + '/' + items.length + '</span></div>' + list + '</div>' +
+          '<span class="task-group__meta">' + items.length + ' 份 · 已选 ' + on + '/' + items.length +
+            (items.length > MAX_SUBJECT_TASKS ? ' · 单科上限 ' + MAX_SUBJECT_TASKS + ' 份' : '') + '</span></div>' + list + '</div>' +
         subjectRuleSettingsHTML(active, focusDraft.rules[active], rulePanelState(active)) + '</div>';
   }
 
@@ -813,12 +835,42 @@
     badge.style.left = (rect.left + 10) + 'px';
   }
 
+  /* 时间范围闸门：不晚于今天，且跨度不超过 MAX_RANGE_DAYS 天（含首尾）；超出时以结束日期为锚向前收 */
+  function clampDraftRange() {
+    var changed = false;
+    if (focusDraft.end > FocusReport.TODAY) { focusDraft.end = FocusReport.TODAY; changed = true; }
+    if (focusDraft.start > focusDraft.end) { focusDraft.start = focusDraft.end; changed = true; }
+    var minStart = shiftDate(focusDraft.end, -(MAX_RANGE_DAYS - 1));
+    if (focusDraft.start < minStart) { focusDraft.start = minStart; changed = true; }
+    return changed;
+  }
+
+  /* 弹窗草稿：单科作业份数裁剪，返回被裁掉的份数 */
+  function trimDraftTasks() {
+    if (!focusDraft) return 0;
+    return trimSubjectTasks(focusDraft.tasks, draftHomeworks());
+  }
+
+  function syncModalRangeInputs() {
+    var start = $('#modalStart');
+    var end = $('#modalEnd');
+    if (!start || !end) return;
+    start.value = focusDraft.start;
+    end.value = focusDraft.end;
+    start.min = shiftDate(focusDraft.end, -(MAX_RANGE_DAYS - 1));
+    start.max = focusDraft.end;
+    end.min = focusDraft.start;
+    end.max = FocusReport.TODAY;
+  }
+
   function openFocusModal(scopeKey) {
     var f = scopeOf(scopeKey);
     focusDraft = { scopeKey: scopeKey, range: f.range, start: f.start, end: f.end, tasks: {},
       rules: FocusReport.getRules(), activeSubject: null, rulePanels: {} };
     initScopeTasks(f);
     Object.keys(f.tasks).forEach(function (k) { focusDraft.tasks[k] = f.tasks[k]; });
+    clampDraftRange();
+    trimDraftTasks();
     ensureDraftSubject();
 
     var presets = FOCUS_PRESETS.map(function (p) {
@@ -828,13 +880,15 @@
     $('#focusModalTitle').textContent = '调整时间、作业与判弱规则';
     $('.modal__desc', $('#focusModal')).textContent = '当前账号 ' + teacherAccount() + ' · 各学科独立设置并保存教师使用习惯';
     $('#focusModalBody').innerHTML =
-      '<div class="modal__section"><h3 class="modal__subtitle">时间范围</h3><div class="modal__range">' +
+      '<div class="modal__section"><h3 class="modal__subtitle">时间范围<span class="modal__subtitle-note">（最长 ' + MAX_RANGE_DAYS + ' 天，不晚于今天）</span></h3><div class="modal__range">' +
         '<div class="chips" id="modalRange">' + presets + '</div><div class="date-range date-range--input">' +
-          '<input class="date-input" type="date" id="modalStart" value="' + focusDraft.start + '" aria-label="开始日期" />' +
-          '<span class="date-range__sep">~</span><input class="date-input" type="date" id="modalEnd" value="' + focusDraft.end + '" aria-label="结束日期" />' +
+          '<input class="date-input" type="date" id="modalStart" value="' + focusDraft.start +
+            '" min="' + shiftDate(focusDraft.end, -(MAX_RANGE_DAYS - 1)) + '" max="' + focusDraft.end + '" aria-label="开始日期" />' +
+          '<span class="date-range__sep">~</span><input class="date-input" type="date" id="modalEnd" value="' + focusDraft.end +
+            '" min="' + focusDraft.start + '" max="' + FocusReport.TODAY + '" aria-label="结束日期" />' +
         '</div></div></div>' +
       '<div class="modal__section"><div class="modal__subtitle-row">' +
-        '<h3 class="modal__subtitle">分学科设置<span class="modal__subtitle-note">（切换 Tab 分别选作业、设难度与指标）</span></h3>' +
+        '<h3 class="modal__subtitle">分学科设置<span class="modal__subtitle-note">（切换 Tab 分别选作业、设难度与指标；单科最多 ' + MAX_SUBJECT_TASKS + ' 份）</span></h3>' +
         '<div class="modal__bulk"><button class="link" type="button" data-modal-bulk="all">全部全选</button>' +
           '<button class="link" type="button" data-modal-bulk="none">全部清空</button></div></div>' +
         '<div id="focusModalTasks"></div></div>';
@@ -857,6 +911,8 @@
   }
 
   function applyFocusModal() {
+    clampDraftRange();
+    trimDraftTasks();
     var picked = draftHomeworks().filter(function (hw) { return focusDraft.tasks[hw.id]; });
     var error = draftRuleError();
     if (!picked.length || error) { toast(error || '至少保留一份作业'); return; }
@@ -967,7 +1023,7 @@
     }
     var rows = FocusReport.exportRows(hws.map(function (hw) { return hw.id; }));
     rows.unshift(['跨学科分析 · 班级报表 · ' + f.clazz, focusEchoTime(f),
-      hws.length + ' 份作业 · 学科得分率 = 得分合计 ÷ 满分合计 · 当日/近3天证据 · 仅 1 份作业时只作临时建议']);
+      hws.length + ' 份作业 · 学科得分率 = 得分合计 ÷ 满分合计 · 选中范围内作业均参与判定 · 仅 1 份作业时只作临时建议']);
     downloadCsv(rows, '跨学科分析_' + f.clazz + '_' + f.start +
       (f.start === f.end ? '' : '_' + f.end));
   }
@@ -982,7 +1038,7 @@
     }
     var rows = FocusReport.exportStudentRows(hws.map(function (hw) { return hw.id; }));
     rows.unshift(['跨学科分析 · 学生各科得分与班均对比 · ' + f.clazz, focusEchoTime(f),
-      hws.length + ' 份作业 · 单元格上排=个人−班均(百分点)、下排=个人得分率 · 首列★=已关注 · 仅 1 份作业时标「暂定」']);
+      hws.length + ' 份作业 · 单元格上排=个人−班均(百分点)、下排=个人得分率 · 首列★=已关注 · 仅 1 份作业时标「重点提升·暂定」或「优先巩固·暂定」']);
     downloadCsv(rows, '学生各科得分对比_' + f.clazz + '_' + f.start +
       (f.start === f.end ? '' : '_' + f.end));
   }
@@ -1137,7 +1193,13 @@
     }
     var win = window.open('', '_blank');
     if (!win) {
-      toast('浏览器拦截了弹出窗口，请允许本站弹窗后重试');
+      /* 嵌入发布/评审壳（沙箱 iframe 缺 allow-popups）时 window.open 恒返回 null，
+         与浏览器弹窗拦截无关，允许本站弹窗亦无效；壳与原型同源时改由顶层窗口代开，
+         体验不变；顶层跨源或同样受限时再提示 */
+      try { win = window.top.open('', '_blank'); } catch (err) { win = null; }
+    }
+    if (!win) {
+      toast('嵌入环境禁止弹出窗口，请用浏览器直接打开本原型后再导出');
       return;
     }
 
@@ -1195,6 +1257,12 @@
       '  .focus-section { padding: 10px 16px 12px; margin-bottom: 10px; }',
       '  .focus-section__head { margin-bottom: 8px; }',
       '  .bar-list { min-height: 0; gap: 4px; }',
+      '  /* 离差条：去掉行间空隙让零点连成一条轴，行内不叠加内外边距 */',
+      '  .bar-list--dev, .dv-rows { gap: 0; }',
+      '  .dv-row { padding: 0; }',
+      '  .dv-row__num { line-height: 1.15; }',
+      '  /* 离差主数字在 A4 横向里略收一号，既保住突出感，又给第一节留出首页同页的余量 */',
+      '  .dv-row__num b.dv-row__delta { font-size: 20px; }',
       '  .bar-legend { margin-top: 8px; }',
       '  .data-table--compact thead tr:first-child th { height: 30px; }',
       '  .data-table--compact tbody tr { height: 30px; }',
@@ -1530,11 +1598,13 @@
         if (FOCUS_RANGE_DAYS[focusDraft.range] !== undefined) {
           focusDraft.end = FocusReport.TODAY;
           focusDraft.start = shiftDate(FocusReport.TODAY, -FOCUS_RANGE_DAYS[focusDraft.range]);
-          $('#modalStart').value = focusDraft.start;
-          $('#modalEnd').value = focusDraft.end;
+          syncModalRangeInputs();
         }
+        /* 区间变化后作业集合会变，单科份数需重新收紧到 30 份 */
+        var trimmed = trimDraftTasks();
         syncModalRangeChips();
         renderModalTasks();
+        if (trimmed) toast('单科最多 ' + MAX_SUBJECT_TASKS + ' 份作业，已按日期保留最近的 ' + MAX_SUBJECT_TASKS + ' 份');
         return;
       }
 
@@ -1567,7 +1637,9 @@
       if (bulk) {
         var on = bulk.dataset.modalBulk === 'all';
         draftHomeworks().forEach(function (hw) { focusDraft.tasks[hw.id] = on; });
+        var bulkTrimmed = on ? trimDraftTasks() : 0;
         renderModalTasks();
+        if (bulkTrimmed) toast('单科最多 ' + MAX_SUBJECT_TASKS + ' 份作业，已按日期保留最近的 ' + MAX_SUBJECT_TASKS + ' 份');
       }
     });
 
@@ -1582,9 +1654,15 @@
           focusDraft.end = tmp;
         }
         focusDraft.range = 'custom';
-        $('#modalStart').value = focusDraft.start;
-        $('#modalEnd').value = focusDraft.end;
+        var clamped = clampDraftRange();
+        syncModalRangeInputs();
         syncModalRangeChips();
+        var rangeTrimmed = trimDraftTasks();
+        if (clamped) {
+          toast('时间范围最长 ' + MAX_RANGE_DAYS + ' 天，已收至 ' + focusDraft.start + ' ~ ' + focusDraft.end);
+        } else if (rangeTrimmed) {
+          toast('单科最多 ' + MAX_SUBJECT_TASKS + ' 份作业，已按日期保留最近的 ' + MAX_SUBJECT_TASKS + ' 份');
+        }
         renderModalTasks();
         return;
       }
@@ -1606,13 +1684,25 @@
         draftHomeworks().forEach(function (hw) {
           if (hw.subject === name) focusDraft.tasks[hw.id] = on;
         });
+        var subTrimmed = on ? trimDraftTasks() : 0;
         renderModalTasks();
+        if (subTrimmed) toast('单科最多 ' + MAX_SUBJECT_TASKS + ' 份作业，已按日期保留最近的 ' + MAX_SUBJECT_TASKS + ' 份');
         return;
       }
 
       var item = e.target.closest('input[data-modal-task]');
       if (item) {
-        focusDraft.tasks[item.dataset.modalTask] = item.checked;
+        var taskId = item.dataset.modalTask;
+        var target = draftHomeworks().filter(function (hw) { return hw.id === taskId; })[0];
+        var pickedSame = target ? draftHomeworks().filter(function (hw) {
+          return hw.subject === target.subject && focusDraft.tasks[hw.id];
+        }).length : 0;
+        if (item.checked && target && pickedSame >= MAX_SUBJECT_TASKS) {
+          toast(target.subject + '最多选 ' + MAX_SUBJECT_TASKS + ' 份作业，请先取消一份');
+          renderModalTasks();
+          return;
+        }
+        focusDraft.tasks[taskId] = item.checked;
         renderModalTasks();
       }
     });

@@ -459,11 +459,11 @@
     或得分率直接不到 60% 时，列为重点提升；没有过线学科时，按「（个人 − 班均）÷ 10 个百分点」选出相对最弱的一科。
     「优先巩固」只表示个人学习优先级，可能仍高于班均，不等同于薄弱学科；只有 1 份作业时结论暂定。
     <br /><b>证据与时效</b>：按该科有效作业份数看，3 份以上结论最稳、2 份次之、只有 1 份时仅给临时建议；
-    自动排序只用当日或近 3 天的作业，更早的数据仅作趋势参考。
+    选中范围内（最长 30 天、单科最多 30 份）的作业全部参与判定与排序，不再按作业日期剔除。
     <br /><b>满分区</b>（该科学生得分率 75 分位已达 95%）只作提示，不再跳过判定；
     因相对判弱要求本人得分率未达 85%，高分小分差通常不会触发，但其中仍有学生得分率不到 60% 时，照常进个人建议。
     缺交 / 未批改显示「—」，不按 0 分参与均分与能力判定。
-    <br /><b>阈值说明</b>：本页的 85% / 60% / 10pp / 5pp / 30% 均为常规默认值，也是暂无教研校准时的暂行保守值；主页面修改后按逐学科实际规则计算。标准差只作「学生分化」展示，不参与判定。
+    <br /><b>阈值说明</b>：本页的 85% / 60% / 10pp / 5pp / 30% 均为常规默认值，也是暂无教研校准时的暂行保守值；主页面修改后按逐学科实际规则计算。标准差只作「得分分散程度」展示，不参与判定。
   </p>
 
   <div id="reportRoot"></div>
@@ -506,13 +506,30 @@
         const color = String(note?.color || '').toLowerCase();
         return PIN_COLORS.some(([hex]) => hex === color) || LEGACY_PIN_COLORS.includes(color) ? color : DEFAULT_PIN;
     }
-    function applyPin(element, note) {
-        const color = pinColor(note), custom = color !== DEFAULT_PIN;
-        element.style.setProperty('--pin-fill', color);
-        element.style.setProperty('--pin-ink', custom ? INK : ON_BLUE);
-        element.style.setProperty('--pin-stroke', custom ? STROKE : ON_BLUE);
+    function pinStyle(value) {
+        const style = value && typeof value === 'object' ? value : {};
+        return { size: Number.isInteger(style.size) && style.size >= 24 && style.size <= 56 ? style.size : 36,
+            ...(/^#[0-9a-f]{6}$/i.test(style.color || '') ? { color: style.color.toLowerCase() } : {}) };
     }
-    window.ProtoAppearance = { TEXT_COLORS, PIN_COLORS, DEFAULT_PIN, pinColor, applyPin };
+    function applyPin(element, note, value) {
+        const global = pinStyle(value), color = global.color || pinColor(note), custom = color !== DEFAULT_PIN;
+        let ink = custom ? INK : ON_BLUE, stroke = custom ? STROKE : ON_BLUE;
+        if (global.color) {
+            const rgb = [1,3,5].map(i => parseInt(color.slice(i,i+2),16)/255).map(v => v <= .04045 ? v/12.92 : ((v+.055)/1.055)**2.4);
+            const lum = rgb[0]*.2126 + rgb[1]*.7152 + rgb[2]*.0722;
+            ink = lum > .179 ? '#000000' : '#ffffff'; stroke = ink;
+        }
+        element.style.setProperty('--pin-fill', color);
+        element.style.setProperty('--pin-ink', ink);
+        element.style.setProperty('--pin-stroke', stroke);
+    }
+    function applyPinSize(element, value) {
+        const {size} = pinStyle(value);
+        element.style.setProperty('--pin-size', size + 'px');
+        element.style.setProperty('--pin-font', Math.round(size*13/36) + 'px');
+        element.style.setProperty('--pin-padding', Math.round(size*8/36) + 'px');
+    }
+    window.ProtoAppearance = { TEXT_COLORS, PIN_COLORS, DEFAULT_PIN, pinColor, pinStyle, applyPin, applyPinSize };
 })();
 
 </script>
@@ -1465,6 +1482,7 @@
                 window.ProtoHotspots?.hide();
                 document.documentElement.dataset.protoHost = 'review';
                 window.__REVIEW__.notes = Array.isArray(m.notes) ? m.notes : [];
+                window.__REVIEW__.pinStyle = m.pinStyle;
                 window.__REVIEW__.selectedNoteId = m.selectedNoteId || null;
                 window.__reviewSelectNote?.(window.__REVIEW__.selectedNoteId);
                 asideOpen = m.asideOpen !== false;
@@ -1521,7 +1539,7 @@
     const style = document.createElement('style');
     style.setAttribute('data-prototype-owned', '');
     style.textContent = `
-.__review_pin{position:absolute;display:grid;place-items:center;min-width:36px;height:36px;padding:0 8px;border:3px solid #fff;border-radius:50% 50% 50% 2px;background:#2563eb;color:#fff;font:600 13px/1 "PingFang SC","Microsoft YaHei UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 8px 24px rgba(16,24,40,.24);transform:translateY(-100%);cursor:pointer;pointer-events:auto;}
+.__review_pin{position:absolute;box-sizing:border-box;display:grid;place-items:center;min-width:var(--pin-size,36px);height:var(--pin-size,36px);padding:0 var(--pin-padding,8px);border:3px solid #fff;border-radius:50% 50% 50% 2px;background:#2563eb;color:#fff;font:600 var(--pin-font,13px)/1 "PingFang SC","Microsoft YaHei UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 8px 24px rgba(16,24,40,.24);transform:translateY(-100%);cursor:pointer;pointer-events:auto;}
 .__review_pin:hover{background:#1d4ed8;}
 .__review_pin:not(.__stale){background:var(--pin-fill);color:var(--pin-ink);border-color:var(--pin-stroke);}
 .__review_pin:not(.__stale):hover{background:var(--pin-fill);filter:brightness(.96);}
@@ -1545,6 +1563,8 @@
 .__review_pop p{margin:0 0 10px;overflow-wrap:anywhere;}
 .__review_pop img{display:block;max-width:100%;height:auto;margin:8px 0;border-radius:6px;}
 .__review_pop h1{font-size:18px;}.__review_pop h2{font-size:16px;}.__review_pop h3,.__review_pop h4{font-size:14px;}
+.__review_pop ol{list-style-type:decimal;}.__review_pop ol ol{list-style-type:lower-alpha;}.__review_pop ol ol ol{list-style-type:lower-roman;}
+.__review_pop_title{display:block;font-weight:700;margin:0 0 8px;overflow-wrap:anywhere;}
 .__review_pop ul,.__review_pop ol{padding-left:20px;margin:6px 0 10px;}.__review_pop li.task{list-style:none;margin-left:-18px;}
 .__review_pop code{font-family:ui-monospace,Consolas,monospace;font-size:13px;background:rgba(127,127,127,.16);padding:1px 5px;border-radius:4px;}
 .__review_pop pre{background:rgba(127,127,127,.14);padding:10px;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere;}.__review_pop pre code{background:none;padding:0;}
@@ -1727,6 +1747,7 @@
         popNoteId = note.id;
         pin.setAttribute('aria-expanded', 'true');
         popBody.innerHTML = R.renderBody ? R.renderBody(note) : (note.body || '');
+        if (note.title) { const title = document.createElement('strong'); title.className = '__review_pop_title'; title.textContent = note.title; popBody.prepend(title); }
         popBody.scrollTop = 0;
         pop.style.display = 'block';
         pop.style.visibility = 'hidden';
@@ -1795,11 +1816,12 @@
                 pinsById.set(n.id, pin);
                 layer.appendChild(pin);
             }
-            window.ProtoAppearance?.applyPin(pin, n);
+            window.ProtoAppearance?.applyPin(pin, n, R.pinStyle);
+            window.ProtoAppearance?.applyPinSize?.(pin, R.pinStyle);
             pin.classList.toggle('__review_selected', n.id === selectedNoteId);
             pin.setAttribute('aria-current', String(n.id === selectedNoteId));
             if (pin.textContent !== String(n.displayNumber)) pin.textContent = n.displayNumber;
-            pin.setAttribute('aria-label', `标注 ${n.displayNumber}`);
+            pin.setAttribute('aria-label', `标注 ${n.displayNumber}${n.title ? '：' + n.title : ''}`);
             pin.setAttribute('aria-haspopup', 'dialog');
             pin.setAttribute('aria-controls', '__review_popover');
             pin.setAttribute('aria-expanded', String(popNoteId === n.id && pop?.style.display === 'block'));

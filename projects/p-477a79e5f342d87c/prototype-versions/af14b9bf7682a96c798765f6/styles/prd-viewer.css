@@ -348,6 +348,17 @@ body.prd-resizing * {
     overflow-x: auto;
 }
 
+/* XK-00 使用对象表：「使用对象 / 菜单管理」这类四字短标签不能被全文挤成逐字竖排 */
+#prd-sec-XK-00 table:first-of-type {
+    min-width: 300px;
+}
+
+#prd-sec-XK-00 table:first-of-type th:nth-child(1),
+#prd-sec-XK-00 table:first-of-type td:nth-child(1) {
+    width: 76px;
+    white-space: nowrap;
+}
+
 #prd-sec-XK-00 table:last-of-type {
     table-layout: fixed;
     min-width: 360px;
