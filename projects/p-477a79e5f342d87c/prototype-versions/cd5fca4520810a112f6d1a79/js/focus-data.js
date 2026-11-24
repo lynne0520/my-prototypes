@@ -364,7 +364,7 @@
   }
 
   /* 模块内 UI 状态（两处引用各自独立，互不影响） */
-  var ui = { weakOnly: false, watched: loadWatched() };
+  var ui = { weakOnly: false, watchedOnly: false, watched: loadWatched() };
   var lastRender = null;
 
   /* ==================== 2. 工具函数 ==================== */
@@ -1287,7 +1287,9 @@
           '<span><b>基本持平</b>相差 1 个百分点以内。</span>' +
           '<span><b>判弱线</b>向左越过橙色短竖线即班级明确短板候选；阈值可逐科设定，六科相同时只画一条，满分区用斜纹标出。</span>' +
           '<span><b>标准差</b>数值越大，说明这一科学生之间的分差拉得越开。</span>' +
-          '<span><b>短板待确认</b>已达到明确短板条件，但只有 1 份作业，或班均差的连续同向次数未达本科设置（默认 2 次）。</span>') +
+          '<span><b>班级明确短板</b>（红）两条任一命中即算：①班均未达本科达标线（默认 85%），且最近连续 2 次同卷作业都比学科组低至少 5 个百分点（逐科可调）；②低于本科低分线（默认 60%）的学生占比达到低分面阈值（默认 30%）。两条可同时命中。</span>' +
+          '<span><b>短板待确认</b>已达到明确短板条件，但只有 1 份作业，或班均差的连续同向次数未达本科设置（默认 2 次）。</span>' +
+          '<span><b>班级相对短板</b>（橙）只有全班既无明确短板、也无待确认时才出现：在未交率未超闸门且有同卷学科组均的科目里，取「班均 − 学科组」差距最小的一科；六科都比学科组高时就是高得最少的那一科，差距并列则并列标出。它只说明本班六科里相对最弱，不读达标线与判弱线，不代表弱科。</span>') +
       '</div>' +
       '<div class="focus-split focus-split--full">' +
         '<div>' +
@@ -1351,11 +1353,20 @@
       'title="' + (on ? '取消关注' : '关注该生') + '">' + STAR_SVG + '</button>';
   }
 
+  /* 两个「只看」开关共用的过滤条件：重点提升 = 非优先巩固的建议；关注 = 姓名前星标已点亮 */
+  function passStudentFilter(r) {
+    if (ui.weakOnly && !(r.priority && !r.priority.relative)) return false;
+    if (ui.watchedOnly && !ui.watched[r.stu.id]) return false;
+    return true;
+  }
+
   function sectionTwo(shown, weakInfo) {
-    var list = weakInfo.rows.slice();
-    if (ui.weakOnly) {
-      list = list.filter(function (r) { return r.priority && !r.priority.relative; });
-    }
+    var watchedTotal = 0;
+    weakInfo.rows.forEach(function (r) { if (ui.watched[r.stu.id]) watchedTotal++; });
+    /* 关注名单被清空时自动关闭「只看关注学生」，避免停在一张永远空白的表上 */
+    if (ui.watchedOnly && !watchedTotal) ui.watchedOnly = false;
+
+    var list = weakInfo.rows.filter(passStudentFilter);
     list.sort(compareStudentRows);
 
     var head = '<tr><th>学号</th><th>姓名</th>' +
@@ -1416,7 +1427,10 @@
 
     var empty = list.length ? '' :
       '<tr><td colspan="' + (shown.length + 5) + '"><div class="empty-state">' +
-      '当前筛选下没有符合条件的学生</div></td></tr>';
+      (ui.weakOnly && ui.watchedOnly
+        ? '「只看重点提升」与「只看关注学生」同时生效，当前没有同时命中的学生，可取消其中一个开关'
+        : '当前筛选下没有符合条件的学生') +
+      '</div></td></tr>';
 
     return '<section class="focus-section" id="focusStudentSection">' +
       '<span class="prd-badge" data-prd="XK-08" title="查看 PRD XK-08：学生各科得分热力表">XK-08</span>' +
@@ -1428,10 +1442,23 @@
           '<span><b>重点提升</b>低于本科低分线，或未达达标线且低于班均达到本科学生差距线；<b>优先巩固</b>其余学科里「（个人 − 班均）÷ 本科学生差距线」最小的一科，只表示个人优先级，不等同于薄弱学科。</span>' +
           '<span><b>暂定</b>本科只有 1 份作业时结论标「暂定」；未交率超过本科闸门的科目先抓提交，先补交再判强弱。</span>') +
         '<div class="focus-section__actions">' +
-          '<label class="checkbox checkbox--inline">' +
-            '<input type="checkbox" data-focus-weak' + (ui.weakOnly ? ' checked' : '') + ' />' +
-            '<span class="checkbox__box"></span><span>只看重点提升学生（' + weakInfo.priorityTotal + ' 人）</span>' +
-          '</label>' +
+          '<div class="focus-filter-bar" data-focus-filters>' +
+            '<label class="checkbox checkbox--inline" title="勾选后本表只留重点提升学生' +
+              '（含「重点提升·暂定」），共 ' + weakInfo.priorityTotal + ' 人">' +
+              '<input type="checkbox" data-focus-weak' + (ui.weakOnly ? ' checked' : '') + ' />' +
+              '<span class="checkbox__box"></span><span>只看重点提升</span>' +
+              '<em class="checkbox__num">' + weakInfo.priorityTotal + ' 人</em>' +
+            '</label>' +
+            '<label class="checkbox checkbox--inline' + (watchedTotal ? '' : ' is-disabled') + '" ' +
+              'title="' + (watchedTotal
+                ? '勾选后本表只留已关注学生，共 ' + watchedTotal + ' 人；与「只看重点提升」同时勾选时取交集'
+                : '还没有关注的学生，点姓名前的星星即可关注') + '">' +
+              '<input type="checkbox" data-focus-watched' +
+                (ui.watchedOnly ? ' checked' : '') + (watchedTotal ? '' : ' disabled') + ' />' +
+              '<span class="checkbox__box"></span><span>只看关注学生</span>' +
+              '<em class="checkbox__num">' + watchedTotal + ' 人</em>' +
+            '</label>' +
+          '</div>' +
           '<button type="button" class="btn btn--ghost btn--sm focus-export-stu" data-focus-export-stu ' +
             'title="把本表（学生各科得分与班均对比）单独导出为 CSV">' +
             '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" ' +
@@ -1555,11 +1582,16 @@
     root.innerHTML = html;
   }
 
-  /* 热力表「只看需要提升的学生」开关：模块内自管理，两处引用均生效 */
+  /* 热力表两个「只看」开关：模块内自管理，两处引用均生效；同时勾选取交集 */
   document.addEventListener('change', function (e) {
-    var input = e.target && e.target.closest ? e.target.closest('[data-focus-weak]') : null;
+    var input = e.target && e.target.closest
+      ? e.target.closest('[data-focus-weak],[data-focus-watched]') : null;
     if (!input || !lastRender) return;
-    ui.weakOnly = input.checked;
+    if (input.hasAttribute('data-focus-weak')) {
+      ui.weakOnly = input.checked;
+    } else {
+      ui.watchedOnly = input.checked;
+    }
     render(lastRender.root, lastRender.opts);
   });
 
@@ -1576,6 +1608,8 @@
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     btn.title = on ? '取消关注' : '关注该生';
     saveWatched(ui.watched);
+    /* 「只看关注学生」生效时，关注态就是可见性：整表重渲染，同步行与人数（含空态） */
+    if (ui.watchedOnly && lastRender) render(lastRender.root, lastRender.opts);
   });
 
   /* KPI 卡下钻：点「学生个人建议」直达下方学生名单，落点闪一次供定位 */
@@ -1685,17 +1719,23 @@
   function exportStudentRows(ids) {
     var all = computeAll(ids);
     var info = weakestOf(all);
+    /* 导出随页面筛选：所见即所得，首行写明已应用的开关，避免复核时误判缺行 */
+    var only = [];
+    if (ui.weakOnly) only.push('「只看重点提升」');
+    if (ui.watchedOnly) only.push('「只看关注学生」');
+    var onlyNote = only.length ? '；本表已按' + only.join(' + ') + '筛选' : '';
     var rows = [[
       '跨学科分析 · 学生各科得分与班均对比 · ' + TODAY,
       '单元格上排 = 个人得分率 − 班均（百分点），下排 = 个人得分率；色阶、低分线、达标线与提醒线均按各学科本次设置；' +
-        '「优先巩固」只表示学习优先级，不等同于薄弱学科；仅 1 份作业标「重点提升·暂定」或「优先巩固·暂定」'
+        '「优先巩固」只表示学习优先级，不等同于薄弱学科；仅 1 份作业标「重点提升·暂定」或「优先巩固·暂定」' +
+        onlyNote
     ]];
     var header = ['关注', '学号', '姓名'];
     all.forEach(function (s) { header.push(s.name + '得分率'); });
     all.forEach(function (s) { header.push(s.name + '较班均'); });
     header = header.concat(['建议学科', '建议原因', '该科得分率', '该科班均', '建议类型', '一句话建议']);
     rows.push(header);
-    info.rows.slice().sort(compareStudentRows).forEach(function (r) {
+    info.rows.filter(passStudentFilter).sort(compareStudentRows).forEach(function (r) {
       var p = r.priority;
       var line = [ui.watched[r.stu.id] ? '★' : '', r.stu.id, r.stu.name];
       r.cells.forEach(function (c) { line.push(isNum(c.v) ? f1(c.v) : '—'); });

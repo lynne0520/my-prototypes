@@ -1170,9 +1170,9 @@
     }
     $$('.prd-badge', clone).forEach(function (el) { el.parentNode.removeChild(el); });
     $$('[data-focus-export-stu]', clone).forEach(function (el) { el.parentNode.removeChild(el); });
-    $$('[data-focus-weak]', clone).forEach(function (input) {
-      var label = input.closest('label');
-      if (label && label.parentNode) label.parentNode.removeChild(label);
+    /* 两个「只看」筛选开关整块移除：导出页是静态快照，筛选态由导出时的数据体现 */
+    $$('[data-focus-filters]', clone).forEach(function (el) {
+      if (el.parentNode) el.parentNode.removeChild(el);
     });
     $$('.watch-star', clone).forEach(function (btn) {
       var span = document.createElement('span');
@@ -1365,7 +1365,7 @@
         '<div id="reportRoot">' + reportHtml + '</div>\n' +
         '<p class="report__foot">本报表含学生姓名与学号，仅限校内使用，请勿外传。' +
           '缺交 / 未批改显示「—」，不按 0 分参与均分与能力判定；仅 1 份作业的结论为临时建议。' +
-          '本页为导出快照，筛选与「只看重点提升学生」状态以导出时页面为准。</p>\n' +
+          '本页为导出快照，筛选与「只看重点提升」「只看关注学生」状态以导出时页面为准。</p>\n' +
       '</div>\n' + script + '\n</body>\n</html>';
 
     win.document.open();

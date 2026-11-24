@@ -1130,6 +1130,15 @@ button {
   right: 0;
 }
 
+/* 条目较多的小问号（如离差图的判弱口径）：限高内滚，避免整条气泡超出视口 */
+.focus-section__head .q-tip__bubble {
+  max-width: 380px;
+  max-height: min(68vh, 520px);
+  overflow-y: auto;
+  pointer-events: auto;
+  overscroll-behavior: contain;
+}
+
 /* 口径条 */
 .focus-hint {
   display: flex;
@@ -1362,6 +1371,32 @@ button {
   display: flex;
   align-items: center;
   gap: var(--pr-space-4);
+}
+
+/* 学生热力表两个「只看」开关：并排，人数作次要信息跟在名称后，窄屏换行不挤压按钮 */
+.focus-filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--pr-space-4);
+}
+
+.checkbox__num {
+  margin-left: 2px;
+  font-style: normal;
+  font-size: var(--pr-fs-sm);
+  color: var(--color-text-muted);
+}
+
+/* 关注名单为空时「只看关注学生」不可勾选，避免点了只能得到空表 */
+.checkbox.is-disabled {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.checkbox input:disabled + .checkbox__box {
+  background: var(--pr-gray-100);
+  border-color: var(--color-border-default);
 }
 
 .focus-section__foot {
