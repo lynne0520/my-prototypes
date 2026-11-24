@@ -1130,6 +1130,15 @@ button {
   right: 0;
 }
 
+/* 条目较多的小问号（如离差图的判弱口径）：限高内滚，避免整条气泡超出视口 */
+.focus-section__head .q-tip__bubble {
+  max-width: 380px;
+  max-height: min(68vh, 520px);
+  overflow-y: auto;
+  pointer-events: auto;
+  overscroll-behavior: contain;
+}
+
 /* 口径条 */
 .focus-hint {
   display: flex;
@@ -2669,6 +2678,56 @@ body.is-modal-open {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--pr-space-3) var(--pr-space-5);
   margin-top: var(--pr-space-4);
+}
+
+/* 规则字段按作用层分组：两层共用 / 班级明确短板 / 学生个人建议 */
+.rule-scope-note {
+  margin: var(--pr-space-3) 0 0;
+  padding: var(--pr-space-2) var(--pr-space-3);
+  border-radius: var(--pr-radius-sm);
+  background: var(--color-bg-brand-soft);
+  font-size: var(--pr-fs-xs);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.rule-scope-note b {
+  font-weight: var(--pr-fw-medium);
+  color: var(--color-text-brand);
+}
+
+.rule-group {
+  margin-top: var(--pr-space-4);
+  padding-top: var(--pr-space-3);
+  border-top: 1px dashed var(--color-border-default);
+}
+
+.rule-group__head {
+  display: flex;
+  align-items: center;
+  gap: var(--pr-space-2);
+  font-size: var(--pr-fs-xs);
+  font-weight: var(--pr-fw-medium);
+  color: var(--color-text-brand);
+}
+
+.rule-group__head::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--color-brand-solid);
+}
+
+.rule-group .rule-grid {
+  margin-top: var(--pr-space-3);
+}
+
+.rule-group__note {
+  margin: var(--pr-space-2) 0 0;
+  font-size: var(--pr-fs-xs);
+  line-height: 1.6;
+  color: var(--color-text-muted);
 }
 
 .rule-field {

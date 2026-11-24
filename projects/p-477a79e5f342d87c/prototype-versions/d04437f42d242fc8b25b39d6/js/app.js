@@ -725,25 +725,41 @@
 
     return '<div class="subject-rules">' +
       '<div class="subject-rules__head"><div><h4>该科判弱规则</h4>' +
-        '<p>只影响判定，不修改原始成绩；预设值仅可查看，自定义可修改全部指标。</p></div>' +
+        '<p>只影响判定，不修改原始成绩；预设值仅可查看，自定义可修改全部指标。面板内阈值只作用于明确短板与学生个人建议——没有明确短板时，班级弱科固定取离差最小的一科，与这些阈值无关。</p></div>' +
         '<button type="button" class="link" data-rule-reset="' + subject + '">恢复常规</button></div>' +
       '<details class="rule-disclosure rule-difficulty" data-rule-panel="difficulty" data-rule-subject="' + subject + '"' + difficultyOpen + '>' +
         '<summary><span>难度设置</span><small>' + FocusReport.difficultyLabel(rule) + '</small></summary>' +
         '<div class="rule-disclosure__body">' +
           '<div class="difficulty-row"><span>本次整体难度</span><div class="difficulty-group">' + buttons + '</div></div>' +
-          '<div class="rule-grid">' +
-            ruleField(subject, 'targetLine', '基本达标线', rule.targetLine, '%', 1, 100, 1, '班均或个人未达此线，才进入相对判弱', locked) +
-            ruleField(subject, 'lowLine', '学生低分线', rule.lowLine, '%', 1, 69, 1, '低于此线直接列为重点提升', locked) +
-            ruleField(subject, 'classGap', '班级差距线', rule.classGap, '个百分点', 1, 30, 1, '班均低于同学科组达到此差距', locked) +
-            ruleField(subject, 'studentGap', '学生差距线', rule.studentGap, '个百分点', 1, 30, 1, '个人低于班均达到此差距即判相对偏低；报表中「提醒线」列即此值', locked) +
-            ruleField(subject, 'lowShare', '低分人数占比', rule.lowShare, '%', 1, 100, 1, '达到此比例判为班级低分面短板', locked) +
+          '<p class="rule-scope-note">难度预设只改「基本达标线」与「学生低分线」：影响学生个人建议与明确短板候选，<b>不改变相对短板</b>。</p>' +
+          '<div class="rule-group">' +
+            '<div class="rule-group__head">两层共用</div>' +
+            '<div class="rule-grid">' +
+              ruleField(subject, 'targetLine', '基本达标线', rule.targetLine, '%', 1, 100, 1, '班均未达此线且连续差额达标才判明确短板；个人未达此线才判相对偏低', locked) +
+              ruleField(subject, 'lowLine', '学生低分线', rule.lowLine, '%', 1, 69, 1, '低于此线直接列为重点提升；同时用于统计低分人数占比', locked) +
+            '</div>' +
+          '</div>' +
+          '<div class="rule-group">' +
+            '<div class="rule-group__head">班级明确短板</div>' +
+            '<div class="rule-grid">' +
+              ruleField(subject, 'classGap', '班级差距线', rule.classGap, '个百分点', 1, 30, 1, '班均未达达标线、且低于同学科组达到此差距，才判明确短板', locked) +
+              ruleField(subject, 'lowShare', '低分人数占比', rule.lowShare, '%', 1, 100, 1, '低于低分线的人数占比达到此比例，直接判明确短板（不看班均是否达标）', locked) +
+            '</div>' +
+            '<p class="rule-group__note">这组阈值只决定是否出现明确短板；一旦命中，班级弱科就固定是命中的学科，不再输出相对短板。</p>' +
+          '</div>' +
+          '<div class="rule-group">' +
+            '<div class="rule-group__head">学生个人建议</div>' +
+            '<div class="rule-grid">' +
+              ruleField(subject, 'studentGap', '学生差距线', rule.studentGap, '个百分点', 1, 30, 1, '个人低于班均达到此差距即判相对偏低；报表中「提醒线」列即此值', locked) +
+            '</div>' +
+            '<p class="rule-group__note">只影响学生个人建议与热力色阶，不参与班级判定。</p>' +
           '</div>' +
         '</div></details>' +
       '<details class="rule-disclosure rule-advanced" data-rule-panel="advanced" data-rule-subject="' + subject + '"' + advancedOpen + '>' +
         '<summary><span>高级设置</span><small>数据有效性与证据要求</small></summary>' +
         '<div class="rule-disclosure__body"><div class="rule-grid">' +
-          ruleField(subject, 'missingRate', '未交率闸门', rule.missingRate, '%', 0, 100, 1, '超过此比例先抓提交，不判强弱', locked) +
-          ruleField(subject, 'confirmTimes', '连续确认次数', rule.confirmTimes, '次', 1, 5, 1, '班均差连续达到此次数才确认', locked) +
+          ruleField(subject, 'missingRate', '未交率闸门', rule.missingRate, '%', 0, 100, 1, '超过此比例先抓提交，不判强弱；相对短板同样要求该科未交率未超此闸门', locked) +
+          ruleField(subject, 'confirmTimes', '连续确认次数', rule.confirmTimes, '次', 1, 5, 1, '班均差连续达到此次数才确认明确短板；低分面通道不受此限', locked) +
         '</div></div></details>' +
       '<div class="rule-error" id="focusRuleError"></div></div>';
   }

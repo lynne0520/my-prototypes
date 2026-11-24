@@ -727,12 +727,6 @@
       return b.lowShare - a.lowShare;
     });
 
-    /* 班级相对短板：未达明确短板条件，但班均未达本科达标线且低于学科组。 */
-    var relative = eligible.filter(function (s) {
-      return candidates.indexOf(s) < 0 && s.avg < s.targetLine &&
-        s.diff < 0 && isNum(s.actionRatio);
-    }).sort(function (a, b) { return b.actionRatio - a.actionRatio; });
-
     /* 整体水平：六科「班均 − 学科组」的平均，教师可心算，只作文案修饰，不触发动作 */
     var diffs = shown.filter(function (s) { return isNum(s.diff); }).map(function (s) { return s.diff; });
     var meanDiff = diffs.length ? diffs.reduce(function (a, v) { return a + v; }, 0) / diffs.length : null;
@@ -741,7 +735,7 @@
       证据是否足以坐实明确短板：
         · 低分面通道：至少 2 份作业即可确认；
         · 班均差通道：最近连续同向次数须达到本科设置，否则标「待确认」。
-      明确短板与相对短板都是清单，不再只取一科。
+      明确短板是清单，不再只取一科。
     */
     var absolute = [];
     var pending = [];
@@ -750,6 +744,27 @@
         (classGapHit(s) && s.lowShare < s.lowShareMin && !s.actionConfirmed);
       (unconfirmed ? pending : absolute).push(s);
     });
+
+    /*
+      班级相对短板：只在「既无明确短板、也无待确认」时给出，不与明确短板同屏，
+      避免同一张卡里橙色相对短板的数值反而高于红色明确短板。
+      不设达标线与正负闸门——只要该科有同卷学科组均、未交率未超闸门，
+      就按「班均 − 学科组」离差最小取一科；好班六科都高于学科组时，
+      给出高得最少的那一科（本班相对差异，不代表弱科）。
+      离差按展示精度（0.1pp）相等时并列全部显示，避免四舍五入后数字一样却只标一科。
+    */
+    var relative = [];
+    if (!absolute.length && !pending.length) {
+      eligible.forEach(function (s) {
+        if (!isNum(s.diff)) return;
+        if (!relative.length) { relative.push(s); return; }
+        var lead = round1(relative[0].diff);
+        var cur = round1(s.diff);
+        if (cur < lead) relative = [s];
+        else if (cur === lead) relative.push(s);
+      });
+      relative.sort(function (a, b) { return a.diff - b.diff; });
+    }
 
     return {
       pool: pool, submitWarn: submitWarn, candidates: candidates,
@@ -1005,23 +1020,27 @@
       }).join('<span class="kpi-name__sep">、</span>');
     };
 
+    /* 相对短板只在无明确短板时出现，因此它可能仍高于学科组（好班或离差全为正），文案必须标注 */
+    var relAllAbove = relative.length > 0 && relative.every(function (s) { return s.diff >= 0; });
+
     var weakValue, weakSub;
     if (absolute.length) {
       weakValue = subNames(absolute, 'danger') +
         (pending.length ? '<span class="kpi-name__sep">、</span>' + subNames(pending, 'pending') : '') +
         '<small>' + absolute.length + ' 科明确短板</small>';
       weakSub = '已命中本科判弱条件，优先讲评' +
-        (pending.length ? ' · 另有 ' + pending.length + ' 科待确认' : '') +
-        (relative.length ? ' · 相对短板：' + relative.map(function (s) { return s.name; }).join('、') : '');
+        (pending.length ? ' · 另有 ' + pending.length + ' 科待确认' : '');
     } else if (pending.length) {
       weakValue = subNames(pending, 'pending') + '<small>' + pending.length + ' 科待确认</small>';
       weakSub = '已达短板条件但证据不足 · 看学科表「班级判定」列';
     } else if (relative.length) {
       weakValue = subNames(relative, 'relative') + '<small>' + relative.length + ' 科相对短板</small>';
-      weakSub = '无明确短板 · 相对短板按低于学科组程度排序';
+      weakSub = '无明确短板 · 取较学科组离差最低的一科' +
+        (relative.length > 1 ? '（离差并列）' : '') +
+        (relAllAbove ? '，该科仍高于学科组，仅是本班相对最低' : '');
     } else {
-      weakValue = '<span class="kpi-name kpi-name--none">—</span><small>无明显短板</small>';
-      weakSub = '六科均未命中本科判弱条件';
+      weakValue = '<span class="kpi-name kpi-name--none">—</span><small>无可比学科</small>';
+      weakSub = '六科均缺同卷学科组均，或未交率均超闸门';
     }
 
     var card = function (label, value, sub, opts) {
@@ -1268,7 +1287,9 @@
           '<span><b>基本持平</b>相差 1 个百分点以内。</span>' +
           '<span><b>判弱线</b>向左越过橙色短竖线即班级明确短板候选；阈值可逐科设定，六科相同时只画一条，满分区用斜纹标出。</span>' +
           '<span><b>标准差</b>数值越大，说明这一科学生之间的分差拉得越开。</span>' +
-          '<span><b>短板待确认</b>已达到明确短板条件，但只有 1 份作业，或班均差的连续同向次数未达本科设置（默认 2 次）。</span>') +
+          '<span><b>班级明确短板</b>（红）两条任一命中即算：①班均未达本科达标线（默认 85%），且最近连续 2 次同卷作业都比学科组低至少 5 个百分点（逐科可调）；②低于本科低分线（默认 60%）的学生占比达到低分面阈值（默认 30%）。两条可同时命中。</span>' +
+          '<span><b>短板待确认</b>已达到明确短板条件，但只有 1 份作业，或班均差的连续同向次数未达本科设置（默认 2 次）。</span>' +
+          '<span><b>班级相对短板</b>（橙）只有全班既无明确短板、也无待确认时才出现：在未交率未超闸门且有同卷学科组均的科目里，取「班均 − 学科组」差距最小的一科；六科都比学科组高时就是高得最少的那一科，差距并列则并列标出。它只说明本班六科里相对最弱，不读达标线与判弱线，不代表弱科。</span>') +
       '</div>' +
       '<div class="focus-split focus-split--full">' +
         '<div>' +
@@ -1287,7 +1308,7 @@
               '<th title="这一科所有作业的得分合计 ÷ 满分合计">班均得分率</th><th title="同一套作业的学科组得分率">学科组得分率</th><th title="班级 − 学科组，单位：个百分点；低于学科组标红，达到或高于标绿">较学科组</th>' +
               '<th title="把全班得分率从低到高排，正中间那个数">中位数</th><th title="标准差：越大说明学生之间分数拉得越开">标准差</th><th>最高</th><th>最低</th>' +
               bandHeads +
-              '<th title="明确短板 / 相对短板为阶段性学科判定；先抓提交为数据状态">班级判定</th>' +
+              '<th title="明确短板 / 相对短板为阶段性学科判定；相对短板固定为较学科组离差最小的一科，可能仍高于学科组；先抓提交为数据状态">班级判定</th>' +
             '</tr></thead>' +
             '<tbody>' + trs + '</tbody>' +
           '</table>' +
@@ -1593,13 +1614,17 @@
     var all = computeAll(ids);
     var decision = decideClass(all);
     var allWeak = decision.absolute.concat(decision.pending);
+    /* 相对短板可能仍高于学科组，导出说明同步标注，避免复核时误读 */
+    var relAbove = decision.relative.length > 0 &&
+      decision.relative.every(function (s) { return s.diff >= 0; });
     var classSummary = (allWeak.length
       ? '明确短板：' + allWeak.map(function (s) {
           return s.name + (decision.pending.indexOf(s) >= 0 ? '(待确认)' : '');
         }).join('、')
       : '无明确短板') +
       (decision.relative.length
-        ? '；相对短板：' + decision.relative.map(function (s) { return s.name; }).join('、')
+        ? '；相对短板：' + decision.relative.map(function (s) { return s.name; }).join('、') +
+          (relAbove ? '(仍高于学科组)' : '')
         : '');
     var rows = [[
       '跨学科分析 · 班级报表 · ' + TODAY,

@@ -24,8 +24,18 @@
     var PRD_EXPORT_NAME = '跨学科分析表PRD';               // 导出 Markdown 文件名前缀（最终 <前缀>-YYYYMMDD-HHmm.md）
     var PRD_DRAWER_MIN_W = 420;                    // 抽屉拖动最小宽度 px
     var PRD_DRAWER_MAX_W = 1200;                   // 抽屉拖动最大宽度 px（同时受 CSS max-width: 94vw 限制）
-    var PRD_DRAWER_WIDTH_KEY = 'xkFocusPrdWidth_v1'; // 抽屉宽度本地记忆 key
+    var PRD_DRAWER_WIDTH_KEY = 'xkFocusPrdWidth_v1'; // 抽屉宽度本地记忆 key：存 { demo, dev } 两形态各自的宽度
     var PRD_FAB_POS_KEY = 'xkFocusPrdFabPos_v1';     // 悬浮按钮位置记忆 key
+    // 视图形态（两形态共用一个抽屉，差别只在「抽屉与页面的关系」）：
+    //   'demo' 评审版（演示版）——抽屉悬浮于页面之上，收起后页面完全恢复，适合评审与汇报；
+    //   'dev'  开发版——抽屉停靠右侧，页面让出同宽空间并排显示，适合开发逐条对照。
+    var PRD_VIEW_MODE = 'demo';                     // 首次打开用的形态；用户点胶囊后以本地记忆为准
+    var PRD_MODE_KEY = 'xkFocusPrdMode_v1';         // 形态记忆 key：带项目标识 + 版本后缀
+    var PRD_MODE_SWITCH = true;                     // 是否显示头部「评审版 / 开发版」切换胶囊（固定版式设 false）
+    var PRD_DRAWER_DEFAULT_W = { demo: 640, dev: 720 }; // 两形态各自的默认宽度（双击手柄恢复到这个值）
+    var PRD_DOCK_MIN_PAGE_W = 560;                  // 开发版下抽屉优先腾出的页面宽度下限（页面自身更大时以页面为准）
+    var PRD_DOCK_FLOOR_PAGE_W = 720;                // 开发版停靠的最后底线：连这么多页面宽度都留不出（视口 < 1140）才退回浮层
+    var PRD_DOCK_PAGE_FLOOR_W = 1100;               // 开发版拖宽抽屉时给页面保留的最小宽度（再窄报表就变形了）
     // 有其他浮层打开时 Esc 让行：跨学科分析的时间与作业筛选弹窗
     function prdAnyOverlayOpen() {
         var m = document.getElementById('focusModal');
@@ -65,7 +75,7 @@
                 '| 班级 · 明确短板（班均差） | 班均未达本科达标线（默认 85%），且最近连续 N 次（默认 2 次）作业均未达该线并低于同卷学科组至少本科班级差距线（默认 5pp） | 明确短板 |',
                 '| 班级 · 明确短板（低分面） | 得分率低于本科低分线（默认 60%）的学生占比达到本科低分面阈值（默认 30%） | 明确短板 |',
                 '| 班级 · 证据待确认 | 达到明确短板条件但只有 1 份作业；或仅班均差通道命中且连续次数不足 N | 短板待确认 |',
-                '| 班级 · 相对短板 | 班均未达本科达标线、低于学科组，但未达明确短板条件 | 相对短板 |',
+                '| 班级 · 相对短板 | 仅当既无明确短板、也无短板待确认时启用；在有同卷学科组均且未交率未超闸门的科目中，取「班均 − 学科组」离差最小的一科，不设达标线与正负闸门（六科都高于学科组时取高得最少的一科）；离差相等时并列全部列出 | 相对短板 |',
                 '| 学生 · 数据闸门 | 该生该科未交率超过本科闸门；或无有效成绩 | 先抓提交；待补数据 |',
                 '| 学生 · 绝对低分 | 得分率低于本科低分线 | 重点提升 |',
                 '| 学生 · 相对偏低 | 得分率未达本科达标线，且低于班均至少本科学生差距线（默认 10pp） | 重点提升 |',
@@ -74,7 +84,7 @@
                 '',
                 '**判定顺序**：数据闸门 ＞ 绝对低分 ＞ 未达本科达标线且相对差距过线 ＞ 相对最弱（兜底）。',
                 '',
-                '- **班级侧**：明确短板两条通道可并列，命中的学科全部列出；明确短板（含待确认）与相对短板也可同时出现。',
+                '- **班级侧**：明确短板两条通道可并列，命中的学科全部列出；相对短板是明确短板（含待确认）为空时的兜底，二者互斥、不同屏——只要有一科明确短板或待确认，就不再输出相对短板，避免橙色科目数值反而高于红色短板。相对短板不铺全量清单、也不设达标线闸门：在同时满足「未交率未超闸门、有同卷学科组均」的学科里取离差最小的一科，因此六科都高于学科组时仍会给出高得最少的一科（表达本班相对差异，不代表弱科）；离差按页面展示精度（一位小数、0.1pp）相等时并列全部列出。',
                 '- **学生侧**：每人只保留一个主建议；多科同时触发时先取低分科，再分别按「距本科低分线 ÷ 本科学生差距线」「低于班均 ÷ 本科学生差距线」比较，避免不同学科阈值造成排序偏斜。',
                 '- **学生差距线取值影响**：本科学生差距线（即学生差距线）可在 1–30pp 区间调整，取值越小，「优先巩固」的相对分 d ÷ 学生差距线 放大越明显、该科更容易被选中。同一 −3pp 的离均差，差距线 10pp 时相对分为 −0.3，调到 2pp 时变为 −1.5。',
                 '- **兜底档语义**：「学生 · 无触发兜底」只在没有任何重点提升项时启用，输出的是学习优先级标签「优先巩固／优先巩固·暂定」，不构成薄弱学科判定；即使该生各科都高于班均，也仍会选出一科作为巩固方向。',
@@ -121,8 +131,9 @@
                 '| 时间 | 预设：今天/近3天/近7天/近14天/近30天/自定义 + 起止日期；最长选最近 30 天（含首尾），结束日期不晚于今天，超出时以结束日期为锚向前收至 30 天并 toast 提示；「近3天」= 今天向前推 2 天，起止颠倒时自动对调并落为「自定义」 |',
                 '| 学科 Tab | 只列当前时间范围内有作业的学科；每科显示难度与已选作业数/总数。Tab 面板同时承载本科作业清单和规则，不同学科互不覆盖 |',
                 '| 作业清单 | 每科含「全选/清空」与逐份勾选，每份标满分、已交/应交人数与批改率；单科最多 30 份，超出时按日期保留最近 30 份并提示，已达上限时未选作业置灰不可点；勾选变化实时提示已选份数与覆盖学科数 |',
-                '| 难度预设 | 常规 = 达标线 85% / 低分线 60%；偏难 = 75% / 50%；偏易 = 90% / 65%。切换难度只改这两条线，其余指标保留；手动改任一数值后标「自定义」 |',
-                '| 核心指标 | 每科独立设置达标线、低分线、班级差距线、学生差距线、低分人数占比；高级设置含未交率闸门与连续确认次数 |',
+                '| 难度预设 | 常规 = 达标线 85% / 低分线 60%；偏难 = 75% / 50%；偏易 = 90% / 65%。切换难度只改这两条线，其余指标保留；手动改任一数值后标「自定义」。预设说明与字段注释均明示：这些线只影响学生个人建议与班级明确短板候选，不改变相对短板 |',
+                '| 字段分组 | 面板按作用层分三组：①两层共用——基本达标线（班均差通道与连续确认的逐份判定、学生相对偏低闸门）、学生低分线（低分面计数、学生绝对低分、统计表分档）；②班级明确短板——班级差距线、低分人数占比；③学生个人建议——学生差距线。高级设置含未交率闸门与连续确认次数 |',
+                '| 阈值与相对短板 | 面板顶部（规则说明）与难度段内均有提示：没有明确短板时，班级弱科固定取「班均与学科组离差最小」的一科，与这些阈值无关；未交率闸门是相对短板唯一的参与条件（超闸门的科不参与），连续确认次数只管班均差通道、低分面通道不受其限 |',
                 '| 恢复常规 | 将当前学科全部七项指标恢复为常规默认值：85%、60%、5pp、10pp、30%、30%、2 次，不影响其他学科 |',
                 '| 教师持久化 | 点「保存并应用」后按当前教师账号写入 `xkFocusSubjectRules_v1:<账号>`；刷新后读取本账号规则，未修改学科回退常规默认，其他账号不读取该规则。存储失败时本次仍应用，但 toast 明确说明未持久保存 |',
                 '| 取消与校验 | 点遮罩、取消或 Esc 只关闭弹窗，不保存草稿；数字为空、超出范围、低分线不低于达标线、确认次数非 1～5 整数时禁用保存并给出具体原因 |',
@@ -142,9 +153,9 @@
                 '| 证据等级 | 按作业份数：≥3 份 = A（3 份以上）、2 份 = B、1 份 = C；C 级只给临时建议 |',
                 '| 数据时效 | 判定使用选中范围内的全部作业（时间最长 30 天、单科最多 30 份），不再按作业日期做时效剔除；导出表的「数据时效」列仅标注当日 / 区间含当日 / 区间不含当日 |',
                 '| 满分区 | 某科学生得分率 P75 ≥95% 时标为满分区，不豁免判弱；热力色阶按本科学生差距线分档，绝对低分仍照常进入个人建议 |',
-                '| 班级判弱线 | 使用本科班级差距线（常规默认 5pp），只用于明确短板 / 相对短板判定与排序，不由学生差距线派生 |',
+                '| 班级判弱线 | 使用本科班级差距线（常规默认 5pp），只用于明确短板「班均差」通道判定与离差图判弱线，不由学生差距线派生；相对短板不读该线，也不读达标线 |',
                 '| 班级明确短板 | 两条通道任一命中：①班均未达本科达标线，且最近连续 N 次作业均未达该线并比同卷学科组低至少本科班级差距线；②低于本科低分线的学生占比达到本科低分面阈值。两通道可并列；仅 1 份作业或班均差连续次数不足 N 时标「短板待确认」。未交率超过本科闸门先抓提交 |',
-                '| 班级相对短板 | 班均未达本科达标线、低于学科组但未达明确短板条件时，按「低于学科组的量 ÷ 本科班级差距线」排序，在 KPI 与学科统计表中全部列出 |',
+                '| 班级相对短板 | 仅在既无明确短板也无待确认时计算：在未交率未超闸门且有同卷学科组均的科目中，取「班均 − 学科组」离差最小的一科（不再全部列出，也不再要求低于学科组与达标线）；六科都高于学科组时给出高得最少的一科，KPI 副行标注「该科仍高于学科组，仅是本班相对最低」；离差按展示精度（一位小数、0.1pp）相等时并列全部列出 |',
                 '| 学生差距线 | 即本科学生差距线（设置面板字段「学生差距线」，`rule.studentGap`，常规默认 10pp，可在 1–30pp 区间调整）；仅当个人得分率未达本科达标线时用于相对判弱，同时作为本科热力色阶与跨科优先级归一化刻度。取值越小，相对分 d ÷ 学生差距线 放大越明显，该科越容易被选为「优先巩固」 |',
                 '| 学生重点提升 | 得分率低于本科低分线，或未达本科达标线且比班均低至少本科学生差距线，任一即触发；多科过线时先比是否低分，再用本科学生差距线归一化严重度取一科 |',
                 '| 学生优先巩固 | 无重点提升项时必选一科：相对分 =（个人 − 班均）÷ 本科学生差距线，取最小者；输出学习优先级标签「优先巩固」，仅 1 份作业时「优先巩固·暂定」，不是薄弱学科判定；即使各科都高于班均也照选相对最弱一科 |',
@@ -167,14 +178,14 @@
                 '| 班级弱科 | 主值直接列科目名并标色：明确短板红、待确认橙，无明确短板时改列相对短板（橙）；数量降为末尾小字「x 科明确短板 / x 科待确认 / x 科相对短板」；副行文案按班级判定结果四态取，见下表 |',
                 '| 学生个人建议 | 主值「n 人重点提升 · m 人优先巩固」，不显示班级总人数；副行「优先巩固含 k 人各科都高于班均 ·（先抓提交 j 人）· 查看名单」；点卡片下钻到学生热力表并闪烁定位 |',
                 '',
-                '**班级弱科副行（.kpi-card__sub）文案规则**：与主值同源判定，四态互斥、不并列堆叠；副行只写状态与下一步，不重复主值已列出的科目名（唯一例外是有明确短板时附带的相对短板名单）。',
+                '**班级弱科副行（.kpi-card__sub）文案规则**：与主值同源判定，四态互斥、不并列堆叠；副行只写状态与下一步，不重复主值已列出的科目名。',
                 '',
                 '| 班级判定状态 | 副行文案 |',
                 '| --- | --- |',
-                '| 有明确短板 | 已命中本科判弱条件，优先讲评；有待确认科追加「· 另有 n 科待确认」，有相对短板科追加「· 相对短板：学科名」 |',
+                '| 有明确短板 | 已命中本科判弱条件，优先讲评；有待确认科追加「· 另有 n 科待确认」；此态不输出相对短板，副行不出现相对短板字样 |',
                 '| 仅待确认（无明确短板） | 已达短板条件但证据不足 · 看学科表「班级判定」列 |',
-                '| 仅相对短板 | 无明确短板 · 相对短板按低于学科组程度排序 |',
-                '| 均无 | 六科均未命中本科判弱条件 |',
+                '| 仅相对短板 | 无明确短板 · 取较学科组离差最低的一科；多科离差并列时追加「（离差并列）」，该科仍高于学科组时追加「，该科仍高于学科组，仅是本班相对最低」 |',
+                '| 均无 | 无可比学科：六科均缺同卷学科组均，或未交率均超闸门（有组均数据且未超闸门时不会出现该态，此时必有一科相对短板） |',
                 '',
                 '视觉：品牌卡边框 #BED3FF、底色 #EEF4FF；主值由 26px 数字改为 22px 文字体的科目名（明确短板红、待确认与相对短板橙、顿号与「—」用次要灰），数量降为末尾小字；副行 12px 次要灰，只写状态与下一步。'
             ].join('\n')
@@ -188,6 +199,7 @@
                 '| --- | --- |',
                 '| 离差条形图 | 按离差从小到大排（越低于学科组越靠前，无同卷学科组均的科目排最后）；条长 = 班均得分率 − 学科组均得分率，单位 pp（个百分点），零点 = 各科自己的学科组均：向左低于学科组、向右高于学科组；顶端为统一刻度轴（0 居中，刻度按本次最大离差与判弱线自适应） |',
                 '| 条长口径 | 条长只回答「比自己的学科组高还是低、高多少」；六科共用同一把「百分点」尺，可横向比较 |',
+                '| 悬停说明（标题行小问号） | 依次解释条长、零点、基本持平、判弱线、标准差、班级明确短板、短板待确认、班级相对短板；其中明确短板写明两条通道（①班均未达达标线且连续 N 次低于学科组至少班级差距线；②低于低分线人数占比达阈值）可同时命中，相对短板写明仅有二者皆无时命中、取离差最小一科且不读达标线与差距线；条目较多，气泡限高 min(68vh, 520px) 内滚 |',
                 '| 绝对水平 | 条形图右侧数字组分两行：主行 = 离差（班均 − 学科组均，pp），字号最大、加粗，<0 红 / ≥ 0 绿，是这一行的结论数字；下排并列「班均 xx.x%」与「组均 xx.x%」，同字号中性灰，只作绝对水平参照；条形图不显示优/良/中/低分等级标签，也不显示证据等级；证据等级仍在统计表「作业份数」列保留 |',
                 '| 基本持平 | 离差绝对值 < 1pp 记为「基本持平」：条改为以零点居中的中性灰条，学科名后加「基本持平」标签；该阈值只控制「条与标签」，不再约束数字着色：右侧数字与统计表「较学科组」列一律按正负着色（<0 红、≥ 0 绿） |',
                 '| 判弱线 | 各科判弱线 = 本科班级差距线（常规默认 5pp，逐科可调），因此不以一条全局线表达：按阈值去重后，在标尺刻度数字下方各画一条橙色短竖线，六科阈值相同则只有一条，不同则几条并列（x 位置差 = 阈值差）；行内每行另画同 x 的橙色虚线表明该科自己的阈值；越过判弱线且班均未达本科达标线，才进入明确短板候选 |',
@@ -195,7 +207,7 @@
                 '| 统计表列 | 学科 · 作业份数 · 提交 · 未交率 · 班均得分率 · 学科组得分率 · 较学科组（<0 红 / ≥ 0 绿）· 中位数 · 标准差(σ，仅展示) · 最高 · 最低 · 优/良/中/低分四档（只给人数，不显示占比）· 班级判定；已去除「可提升空间」与「提醒线」两列 |',
                 '| 排序（统计表） | 明确短板学科（含待确认）置顶，其余按较学科组升序（越低于学科组越靠前） |',
                 '| 等级分档（按得分率） | 优 ≥85% / 良 70%～<85% / 中 本科低分线～<70% / 低分 < 本科低分线；低分线常规默认 60%，可按学科调整。仅用于统计表四档人数与班级判定，不用于条形图 |',
-                '| 班级判定列取值 | 明确短板（红）· 短板待确认（橙）· 相对短板（橙）· 正常（灰）；数据状态单独标：先抓提交；满分区标在学科名单元格，不占判定列 |',
+                '| 班级判定列取值 | 明确短板（红）· 短板待确认（橙）· 相对短板（橙）· 正常（灰）；相对短板仅在无明确短板且无待确认时才出现（与二者互斥），固定为班内离差最小的一科（不要求低于学科组，六科都高于组均时取高得最少的一科），不读达标线与班级差距线；数据状态单独标：先抓提交；满分区标在学科名单元格，不占判定列 |',
                 '',
                 '视觉：低于学科组 #E5484D · 高于学科组 #18A058 · 基本持平 #9AA5B6；±1pp 持平带底 #F1F5FF、边线 #DCE8FF；判弱线虚线 #E08A1E（行内虚线与标尺刻度下方的短竖线同色）；满分区斜纹为 45° 白色细线；轨道底 #F6F8FB；表头底 #F9FAFE、表格行线 #E1EBFF。黑白打印版：负向 #3C4757、正向 #9AA5B6、持平 #78849A，越深越低于学科组。'
             ].join('\n')
@@ -460,43 +472,169 @@
     var prdContent = document.getElementById('prdContent');
     if (!prdFab || !prdDrawer || !prdToc || !prdContent) return;
 
-    /* ---------- 抽屉宽度拖动调节（左缘手柄：范围钳制 + 本地记忆） ---------- */
+    /* ---------- 视图形态与抽屉宽度：评审版（浮于页面之上）/ 开发版（停靠 + 页面让位并排） ----------
+       两形态共用同一抽屉与同一套交互，差别只在「抽屉与页面的关系」：
+         评审版 = 抽屉悬浮，页面不动；收起后页面完全恢复，适合评审汇报；
+         开发版 = 抽屉停靠右侧，页面按 --prd-dock-w 收缩让位，两边并排对照。
+       形态存在本地（PRD_MODE_KEY），代码里的 PRD_VIEW_MODE 只是首次打开时的默认值。 */
+    var prdModeBtn = document.getElementById('prdModeBtn');
+    var prdMode = prdLoadMode();
+    var prdWidthMap = prdLoadWidthMap(); // { demo: 640, dev: 720 } 两形态各自记忆的宽度
+    var prdModeTimer = null;
+
+    function prdRoot() { return document.documentElement; }
+
+    function prdLoadMode() {
+        // 固定版式（PRD_MODE_SWITCH = false）：以配置为准，忽略本地残留的形态记忆
+        if (!PRD_MODE_SWITCH) return PRD_VIEW_MODE === 'dev' ? 'dev' : 'demo';
+        try {
+            var m = localStorage.getItem(PRD_MODE_KEY);
+            if (m === 'demo' || m === 'dev') return m;
+        } catch (err) { /* 读取失败静默 */ }
+        return PRD_VIEW_MODE === 'dev' ? 'dev' : 'demo';
+    }
+
+    function prdLoadWidthMap() {
+        var map = {}, raw = null;
+        try { raw = localStorage.getItem(PRD_DRAWER_WIDTH_KEY); } catch (err) { /* 读取失败静默 */ }
+        if (!raw) return map;
+        try {
+            var obj = JSON.parse(raw);
+            if (obj && typeof obj === 'object') return obj;
+        } catch (err) { /* 不是 JSON：按旧版单值处理 */ }
+        var n = parseFloat(raw);
+        if (isFinite(n)) map.demo = n;
+        return map;
+    }
+
+    /* ---------- 抽屉宽度拖动调节（左缘手柄：范围钳制 + 按形态分别记忆 + 双击恢复默认） ---------- */
     var prdResizeHandle = document.getElementById('prdResize');
+    var prdWidthTip = document.getElementById('prdWidthTip');
     var prdDrag = null;
 
-    function prdClampWidth(w) {
+    // 页面声明的最小宽度（本桌面版原型为 1440px）：只在启动时读一次并缓存。
+    // 开发版收缩时会给 body 覆盖 min-width: 0，若现读会读到 0，导致收缩判定反复翻转。
+    // 另外：body 的 min-width 不是页面真正的不可压缩宽度——顶栏导航是 nowrap 的一排菜单，
+    // 1440 版心下它还差 50 多像素，会把右侧用户信息挤出 body，被抽屉压住。
+    // 所以这里把顶栏的自然宽（各项自然宽 + 间距）一并量进去，取两者较大值。
+    var PRD_PAGE_MIN_DECL = (function () {
+        var mw = parseFloat(getComputedStyle(document.body).minWidth);
+        if (!isFinite(mw) || mw < 0) mw = 0;
+        var bar = document.querySelector('.topnav');
+        if (!bar) return mw;
+        var cs = getComputedStyle(bar);
+        var need = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+        for (var i = 0; i < bar.children.length; i++) {
+            var k = bar.children[i];
+            var kcs = getComputedStyle(k);
+            need += (parseFloat(kcs.marginLeft) || 0) + (parseFloat(kcs.marginRight) || 0);
+            if (k.classList.contains('topnav__nav')) {
+                // 导航是 flex:1，实际宽度会被拉伸，只能累加它内部各项的自然宽与间距
+                var gap = parseFloat(kcs.columnGap) || 0;
+                var inner = 0;
+                for (var j = 0; j < k.children.length; j++) inner += k.children[j].offsetWidth;
+                need += inner + gap * Math.max(0, k.children.length - 1);
+            } else {
+                need += k.offsetWidth;
+            }
+        }
+        return Math.max(mw, Math.ceil(need));
+    })();
+
+    function prdPageMinWidth() {
+        return Math.max(PRD_DOCK_MIN_PAGE_W, PRD_PAGE_MIN_DECL);
+    }
+
+    // 开发版默认宽度：优先正好腾出页面自然宽度（如 1920 屏下 1920−1494 = 426），腾不出时用抽屉最小宽，
+    // 绝不让抽屉一开始就压住页面。用户把抽屉再拖宽是显式意图，那时候交给 .prd-squeeze 挤压页面。
+    function prdFitWidth() {
+        if (prdMode !== 'dev') return PRD_DRAWER_MAX_W;
+        var vw = window.innerWidth;
+        return Math.max(PRD_DRAWER_MIN_W, Math.min(prdMaxWidth(), vw - prdPageMinWidth()));
+    }
+
+    // 抽屉宽度硬上限：开发版拖到极限时也给页面留出 PRD_DOCK_PAGE_FLOOR_W（否则页面会被挤成一条）
+    function prdMaxWidth() {
         var vw = window.innerWidth;
         var max = Math.min(PRD_DRAWER_MAX_W, vw * 0.94); // 与 CSS max-width: 94vw 保持一致
+        if (prdMode === 'dev') {
+            max = Math.min(max, Math.max(PRD_DRAWER_MIN_W, vw - PRD_DOCK_PAGE_FLOOR_W));
+        }
+        return max;
+    }
+
+    function prdClampWidth(w) {
+        var max = prdMaxWidth();
         var min = Math.min(PRD_DRAWER_MIN_W, max);
         return Math.min(max, Math.max(min, w));
     }
 
-    function prdApplyWidth(w) {
-        prdDrawer.style.width = prdClampWidth(w) + 'px';
+    // 页面让位宽度：开发版打开抽屉就停靠并让位（抽屉已按页面宽度自动收窄）；
+    // 只有视口窄到连 PRD_DOCK_FLOOR_PAGE_W 都留不出时才退回浮层覆盖
+    function prdDockWidth() {
+        if (prdMode !== 'dev' || !prdDrawer.classList.contains('open')) return 0;
+        var w = prdDrawer.offsetWidth || 0;
+        var floor = Math.min(prdPageMinWidth(), PRD_DOCK_FLOOR_PAGE_W);
+        return (window.innerWidth - w) >= floor ? w : 0;
     }
 
-    // 恢复上次拖动记忆的宽度；读取失败时保持 CSS 默认
-    (function prdInitWidth() {
-        try {
-            var saved = parseFloat(localStorage.getItem(PRD_DRAWER_WIDTH_KEY));
-            if (isFinite(saved)) prdApplyWidth(saved);
-        } catch (err) { /* 读取失败静默 */ }
-    })();
+    // 页面让位：开发版展开抽屉时给 body 写内联 margin-right（与抽屉同宽），收起时还原 body 原本的内联值。
+    // 该原型 body 有 min-width: 1440px（桌面固定版心），外边距挤不动它，所以当视口宽不足
+    // 「页面最小宽 + 抽屉宽」时给 html 加 .prd-squeeze 解除该最小宽，让页面真正收窄并排（与窗口变窄同理）；
+    // 视口够宽时不加该类，页面保持 1440 原样。
+    var prdBodyMR0 = null; // 原型 body 原本的内联 margin-right，收起时还原；首次真正让位时捕获
+
+    function prdSyncDock() {
+        var w = prdDockWidth();
+        var root = prdRoot();
+        root.style.setProperty('--prd-dock-w', w + 'px');
+        // 只在真的要让位时才捕获原值：初始化阶段 w=0，此时捕获会把原型后改的样式当成原值
+        if (w > 0 && prdBodyMR0 === null) prdBodyMR0 = document.body.style.marginRight || '';
+        if (prdBodyMR0 !== null) document.body.style.marginRight = w > 0 ? w + 'px' : prdBodyMR0;
+        // 可用宽度放不下页面最小宽时，允许页面收窄（否则页面会被抽屉压住）
+        root.classList.toggle('prd-squeeze', w > 0 && (window.innerWidth - w) < prdPageMinWidth());
+    }
+
+    function prdApplyWidth(w) {
+        var px = prdClampWidth(w);
+        prdDrawer.style.width = px + 'px';
+        // 抽屉窄时目录跟着收窄，避免目录把正文挤得每行只剩几个字
+        prdDrawer.classList.toggle('prd-compact', px < 560);
+        prdSyncDock(); // 开发版：页面让位宽度跟随抽屉宽度
+        if (prdWidthTip) prdWidthTip.textContent = Math.round(px) + 'px';
+        return px;
+    }
+
+    function prdPersistWidth(px) {
+        prdWidthMap[prdMode] = Math.round(px);
+        try { localStorage.setItem(PRD_DRAWER_WIDTH_KEY, JSON.stringify(prdWidthMap)); } catch (err) { /* 存储受限时静默 */ }
+    }
+
+    // 恢复当前形态记忆的宽度；无记忆用该形态默认宽度（读取失败时保持 CSS 默认）。
+    // 默认宽度再叠一道「不压住页面」的上限（记着 720 但窗口只够放下 426 时按 426 开）；
+    // 用户自己拖过的宽度不降级，那是显式选定的，只要不超过硬上限就原样恢复
+    function prdRestoreWidth() {
+        var w = prdWidthMap[prdMode];
+        if (!isFinite(w)) w = Math.min(PRD_DRAWER_DEFAULT_W[prdMode] || 640, prdFitWidth());
+        return prdApplyWidth(w);
+    }
 
     function prdEndDrag() {
         if (!prdDrag) return;
         prdDrag = null;
         document.body.classList.remove('prd-resizing');
-        var w = prdDrawer.style.width;
-        if (w) {
-            try { localStorage.setItem(PRD_DRAWER_WIDTH_KEY, String(parseFloat(w))); } catch (err) { /* 存储受限时静默 */ }
-        }
+        if (prdWidthTip) prdWidthTip.classList.remove('show');
+        prdPersistWidth(prdDrawer.offsetWidth);
     }
 
     if (prdResizeHandle) {
         prdResizeHandle.addEventListener('pointerdown', function (e) {
             prdDrag = { startX: e.clientX, startW: prdDrawer.offsetWidth };
             document.body.classList.add('prd-resizing');
+            if (prdWidthTip) {
+                prdWidthTip.textContent = Math.round(prdDrawer.offsetWidth) + 'px';
+                prdWidthTip.classList.add('show');
+            }
             if (prdResizeHandle.setPointerCapture) prdResizeHandle.setPointerCapture(e.pointerId);
             e.preventDefault();
         });
@@ -507,7 +645,73 @@
         });
         prdResizeHandle.addEventListener('pointerup', prdEndDrag);
         prdResizeHandle.addEventListener('pointercancel', prdEndDrag);
+        // 双击手柄：回到当前形态的默认宽度
+        prdResizeHandle.addEventListener('dblclick', function () {
+            var px = prdApplyWidth(PRD_DRAWER_DEFAULT_W[prdMode] || 640);
+            prdPersistWidth(px);
+            prdToast('已恢复' + (prdMode === 'dev' ? '开发版' : '评审版') + '默认宽度 ' + Math.round(px) + 'px');
+        });
     }
+
+    /* ---------- 形态切换（评审版 ⇄ 开发版） ---------- */
+    function prdApplyMode(persist) {
+        var isDev = prdMode === 'dev';
+        var root = prdRoot();
+        clearTimeout(prdModeTimer);
+        prdDrawer.classList.toggle('prd-dev', isDev);
+        if (isDev) {
+            root.classList.add('prd-dock');
+        } else if (root.classList.contains('prd-dock')) {
+            // 离开开发版：先把让位变量归零（类还在，宽度过渡生效），过渡结束再摘类
+            root.style.setProperty('--prd-dock-w', '0px');
+            prdModeTimer = setTimeout(function () { root.classList.remove('prd-dock'); }, 300);
+        }
+        if (prdModeBtn) {
+            prdModeBtn.setAttribute('data-mode', prdMode);
+            prdModeBtn.textContent = isDev ? '开发版' : '评审版';
+            prdModeBtn.title = isDev
+                ? '当前：开发版（抽屉停靠、页面让位并排）。点击切换为评审版'
+                : '当前：评审版（抽屉浮于页面之上，收起后不影响页面）。点击切换为开发版';
+        }
+        prdSyncDock();
+        if (persist) {
+            try { localStorage.setItem(PRD_MODE_KEY, prdMode); } catch (err) { /* 存储受限时静默 */ }
+        }
+    }
+
+    function prdSetMode(mode) {
+        if ((mode !== 'demo' && mode !== 'dev') || mode === prdMode) return;
+        // 切形态时不把当前宽度写进记忆：那个值可能只是「因窗口不够而被钳小」的结果，
+        // 记下来会让开发版在大屏上也永远停在那个小宽度。只记用户亲手拖出来的宽度
+        prdMode = mode;
+        prdApplyMode(true);
+        prdRestoreWidth();
+        if (mode === 'dev') {
+            if (prdDockWidth() === 0) {
+                prdToast('已切换到开发版：窗口过窄，暂按浮层显示；放大窗口后自动并排');
+            } else if (document.documentElement.classList.contains('prd-squeeze')) {
+                prdToast('已切换到开发版：窗口不足，页面已收窄至 ' + Math.round(window.innerWidth - prdDrawer.offsetWidth)
+                    + 'px 与抽屉并排（页面最小宽 ' + Math.round(prdPageMinWidth()) + 'px）');
+            } else {
+                prdToast('已切换到开发版：页面让出抽屉宽度并排显示，拖动左缘可调宽、双击恢复默认');
+            }
+        } else {
+            prdToast('已切换到评审版：抽屉浮于页面之上，关闭后页面不受影响');
+        }
+    }
+
+    if (prdModeBtn) {
+        prdModeBtn.addEventListener('click', function () {
+            prdSetMode(prdMode === 'dev' ? 'demo' : 'dev');
+        });
+    }
+
+    // 初始化：按记忆/配置落形态，再恢复该形态宽度（首帧即正确，不闪一下）
+    (function prdInitMode() {
+        if (prdModeBtn && !PRD_MODE_SWITCH) prdModeBtn.style.display = 'none';
+        prdApplyMode(false);
+        prdRestoreWidth();
+    })();
 
     /* ---------- 悬浮按钮拖拽 + 吸边（任意拖动，松手吸附最近左右边缘，位置本地记忆） ---------- */
     var PRD_FAB_MARGIN = 12;          // 吸边与钳制时距视口边缘的最小间距
@@ -545,10 +749,11 @@
         if (pos) prdFabApply(pos.side, pos.y);
     })();
 
-    // 视口尺寸变化后按记忆重新吸边钳制，避免 fab 跑出屏幕
+    // 视口尺寸变化：fab 按记忆重新吸边钳制；抽屉宽度与让位宽度重新钳制（避免视口变窄时吃掉整个页面）
     window.addEventListener('resize', function () {
         var pos = prdFabReadPos();
         if (pos) prdFabApply(pos.side, pos.y);
+        prdRestoreWidth();
     });
 
     prdFab.addEventListener('pointerdown', function (e) {
@@ -990,6 +1195,12 @@
 
     function prdOpen(id) {
         prdDrawer.classList.add('open');
+        prdRoot().classList.add('prd-drawer-open'); // 抽屉展开期间收起浮动入口，避免压在抽屉内容上
+        prdSyncDock(); // 开发版：页面让出抽屉宽度并排显示
+        // 开发版但窗口过窄、连底线页面宽度都留不出时（浮层回调）给一次提示
+        if (prdMode === 'dev' && prdDockWidth() === 0 && !id) {
+            prdToast('开发版暂时按浮层显示：窗口过窄，放大窗口后自动并排');
+        }
         if (id) {
             prdLocate(id);
         } else if (!prdToc.querySelector('.prd-toc-item.active')) {
@@ -999,6 +1210,8 @@
 
     function prdCloseDrawer() {
         prdDrawer.classList.remove('open');
+        prdRoot().classList.remove('prd-drawer-open');
+        prdSyncDock(); // 收起后页面恢复全宽（还原 body 原本的 margin-right）
         prdSearchFold(); // 抽屉收起时一并收起结果浮层，重开不遮挡正文（关键词与高亮保留）
     }
 

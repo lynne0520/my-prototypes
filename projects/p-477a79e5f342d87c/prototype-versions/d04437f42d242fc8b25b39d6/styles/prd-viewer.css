@@ -75,7 +75,7 @@
     user-select: none;
     -webkit-user-select: none;
     box-shadow: 0 6px 20px rgba(0, 68, 255, .4);
-    transition: transform .15s, box-shadow .15s;
+    transition: transform .15s, box-shadow .15s, opacity .18s;
 }
 
 .prd-fab:hover {
@@ -96,7 +96,20 @@
     line-height: 1;
 }
 
-/* ===== 右侧抽屉（无全屏遮罩，原型与 PRD 可同时查看操作） ===== */
+/* 抽屉展开期间收起浮动入口：入口只负责「打开」，关闭统一用头部 ✕ 或 Esc，两形态一致；
+   避免入口压在抽屉内容上（隐藏后不可点、不进 Tab 顺序） */
+html.prd-drawer-open .prd-fab {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: scale(.92);
+    transition: opacity .18s, visibility 0s .18s;
+}
+
+/* ===== 右侧抽屉（无全屏遮罩，原型与 PRD 可同时查看操作） =====
+   两种形态共用同一抽屉，差异只在「抽屉与页面的关系」：
+   评审版 = 悬浮面板（左缘圆角 + 外阴影），浮在页面之上，收起后页面完全恢复；
+   开发版 = 停靠栏（无圆角 + 左缘实线边框），页面让出同宽空间并排显示。 */
 .prd-drawer {
     position: fixed;
     top: 0;
@@ -108,13 +121,62 @@
     background: #fff;
     box-shadow: -12px 0 40px rgba(15, 23, 42, .18);
     transform: translateX(102%);
-    transition: transform .28s cubic-bezier(.4, 0, .2, 1);
+    transition: transform .28s cubic-bezier(.4, 0, .2, 1), box-shadow .28s, border-radius .28s;
     display: flex;
     flex-direction: column;
+    border-radius: 14px 0 0 14px;
 }
 
 .prd-drawer.open {
     transform: translateX(0);
+}
+
+/* 开发版：抽屉停靠，去掉悬浮观感，左缘用 1px 实线把页面与 PRD 分开 */
+.prd-drawer.prd-dev {
+    border-radius: 0;
+    border-left: 1px solid #e5e9f2;
+    box-shadow: -6px 0 18px rgba(15, 23, 42, .06);
+}
+
+/* ===== 视图模式：开发版页面让位（与抽屉并排） =====
+   JS 在开发版展开抽屉时给 body 写内联 margin-right = 抽屉宽（收起时还原原值），内容区随之收窄。
+   本原型 body 声明了 min-width: 1440px（桌面固定版心），外边距挤不动 min-width——
+   所以只当视口宽不足「页面最小宽 + 抽屉宽」时，JS 会给 html 加 .prd-squeeze 解除该 min-width，
+   让页面真正缩到抽屉左侧、自适应重排（与浏览器窗口变窄同一机制）；
+   视口够宽（如 1920 以上）时不加该类，页面完整保持 1440 原样。
+   拖动抽屉左缘改宽时 body 带 .prd-resizing，此时关闭过渡避免掉帧。 */
+html.prd-dock body {
+    transition: margin-right .28s cubic-bezier(.4, 0, .2, 1);
+}
+
+html.prd-dock body.prd-resizing {
+    transition: none;
+}
+
+/* 仅在视口放不下时解除页面最小宽度，让页面跟着让位收窄（不覆盖 width/居中/内边距） */
+html.prd-dock.prd-squeeze body {
+    min-width: 0 !important;
+}
+
+/* 停靠态：顶栏导航是 nowrap 的一排菜单，页面被抽屉收窄时它会溢出到抽屉下面被切断。
+   允许它收缩并在区内滑动（滚动条隐形），保证右侧用户区不被挤出页面；
+   导航本身是右对齐，溢出落在左侧并可滚动，当前菜单项与用户信息始终可见 */
+html.prd-dock .topnav__nav {
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+html.prd-dock .topnav__nav::-webkit-scrollbar {
+    display: none;
+}
+
+/* 开发版：整宽固定定位元素（顶栏 / 右侧浮层 / 右下角浮球）跟随让位。
+   这类元素不受 body 宽度影响，需手动加 .prd-dock-shrink；仅对以 right 定位的元素有效 */
+html.prd-dock .prd-dock-shrink {
+    right: var(--prd-dock-w, 0px);
+    transition: right .28s cubic-bezier(.4, 0, .2, 1);
 }
 
 /* ===== 左缘拖拽手柄（拖动调节抽屉宽度，范围见 viewer.js 配置区） ===== */
@@ -147,6 +209,32 @@
     background: #0044ff;
 }
 
+/* 拖宽时浮在手柄旁的像素宽度气泡 */
+.prd-width-tip {
+    position: absolute;
+    top: 12px;
+    left: -62px;
+    z-index: 4;
+    min-width: 48px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    background: rgba(15, 23, 42, .84);
+    border-radius: 6px;
+    text-align: center;
+    opacity: 0;
+    transform: translateY(-2px);
+    transition: opacity .15s, transform .15s;
+    pointer-events: none;
+}
+
+.prd-width-tip.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
 /* 拖动调宽期间：全局 col-resize 光标 + 禁选文字，避免拖拽抖动 */
 body.prd-resizing,
 body.prd-resizing * {
@@ -159,25 +247,82 @@ body.prd-resizing * {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 10px;
     padding: 14px 18px;
     border-bottom: 1px solid #e5e9f2;
     background: #f8faff;
 }
 
+/* 抽屉较窄时标题不顶掉右侧按钮：标题弹性收缩，副标题省略号 */
 .prd-drawer-title {
+    flex: 1;
+    min-width: 0;
     font-size: 15px;
     font-weight: 700;
     color: #1e293b;
     display: flex;
     align-items: center;
     gap: 8px;
+    white-space: nowrap;
+}
+
+/* 形态切换胶囊：圆点表示当前形态（评审版=灰蓝，开发版=绿） */
+.prd-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    height: 24px;
+    padding: 0 10px;
+    border: 1px solid #dbe3f5;
+    border-radius: 999px;
+    background: #fff;
+    color: #0044ff;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color .15s, background .15s, color .15s;
+}
+
+.prd-mode-btn::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #94a3b8;
+}
+
+.prd-mode-btn:hover {
+    background: #eef2ff;
+    border-color: #c7d2fe;
+}
+
+.prd-mode-btn[data-mode="dev"] {
+    color: #15803d;
+    border-color: #c7e9d2;
+    background: #f2fdf6;
+}
+
+.prd-mode-btn[data-mode="dev"]::before {
+    background: #22c55e;
+}
+
+.prd-mode-btn[data-mode="dev"]:hover {
+    background: #e7faee;
+    border-color: #a7dfbb;
 }
 
 .prd-drawer-title .prd-title-ico {
+    flex-shrink: 0;
     color: #0044ff;
 }
 
 .prd-drawer-sub {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 11px;
     font-weight: 500;
     color: #94a3b8;
@@ -211,6 +356,59 @@ body.prd-resizing * {
     border-right: 1px solid #eef1f7;
     padding: 10px 8px 24px;
     background: #fbfcff;
+}
+
+/* 抽屉较窄（开发版给页面让位后被收窄）时：左侧目录改成顶部横向滚动条，正文独占整宽。
+   420px 抽屉若仍竖排 168px 目录，正文只剩约 200px，表格与段落每行都挤碎。 */
+.prd-drawer.prd-compact .prd-drawer-body {
+    flex-direction: column;
+}
+
+.prd-drawer.prd-compact .prd-toc {
+    width: auto;
+    flex: 0 0 auto;
+    display: flex;
+    gap: 6px;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px 10px;
+    border-right: 0;
+    border-bottom: 1px solid #eef1f7;
+    scrollbar-width: none;
+}
+
+.prd-drawer.prd-compact .prd-toc::-webkit-scrollbar {
+    display: none;
+}
+
+/* 横排里分组标题没有意义，隐藏后章节之间靠编号自带分界 */
+.prd-drawer.prd-compact .prd-toc-group {
+    display: none;
+}
+
+.prd-drawer.prd-compact .prd-toc-item {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 5px 9px;
+    background: #f1f5fc;
+}
+
+.prd-drawer.prd-compact .prd-toc-item:hover {
+    background: #e4ecff;
+}
+
+.prd-drawer.prd-compact .prd-toc-item.active {
+    background: #0044ff;
+}
+
+.prd-drawer.prd-compact .prd-content {
+    padding: 14px 16px 48px;
+}
+
+/* 窄抽屉里标题副文本只占地方，让给标题与形态胶囊 */
+.prd-drawer.prd-compact .prd-drawer-sub {
+    display: none;
 }
 
 .prd-toc-group {
