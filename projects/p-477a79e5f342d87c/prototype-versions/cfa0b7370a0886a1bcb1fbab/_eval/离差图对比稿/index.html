@@ -1,132 +1,10 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>高三34班 · 跨学科分析诊断报表（2026-11-05）</title>
-<link rel="stylesheet" href="styles/tokens.css" />
-<link rel="stylesheet" href="styles/app.css" />
-<style>
-  /* 独立报表外壳：复用 tokens/app 组件令牌，只补页头与打印规则 */
-  body {
-    min-width: 0;
-    background: var(--color-bg-app);
-  }
-
-  .report {
-    width: 100%;
-    max-width: 1320px;
-    margin: 0 auto;
-    padding: var(--pr-space-8) var(--pr-space-7) var(--pr-space-13);
-  }
-
-  .report__head {
-    padding: var(--pr-space-5) var(--pr-space-6);
-    border: 1px solid var(--focus-card-border);
-    border-left: 5px solid var(--color-brand);
-    border-radius: var(--pr-radius-md);
-    background: var(--color-bg-surface);
-    box-shadow: var(--shadow-raised);
-    margin-bottom: var(--pr-space-4);
-  }
-
-  .report__title {
-    display: flex;
-    align-items: center;
-    gap: var(--pr-space-3);
-    margin: 0 0 var(--pr-space-2);
-    font-size: 26px;
-    font-weight: var(--pr-fw-bold);
-    color: var(--color-text-title);
-  }
-
-  .report__meta {
-    margin: 0;
-    font-size: var(--pr-fs-sm);
-    line-height: 1.9;
-    color: var(--color-text-secondary);
-  }
-
-  .report__meta b {
-    color: var(--color-text-body);
-    font-weight: var(--pr-fw-medium);
-  }
-
-  .report__note {
-    margin: 0 0 var(--pr-space-5);
-    padding: 10px var(--pr-space-4);
-    border: 1px solid var(--pr-blue-75);
-    border-radius: var(--pr-radius-sm);
-    background: var(--pr-blue-25);
-    font-size: var(--pr-fs-sm);
-    line-height: 1.8;
-    color: var(--color-text-secondary);
-  }
-
-  .report__note b {
-    color: var(--color-text-title);
-  }
-
-  .report__foot {
-    margin-top: var(--pr-space-4);
-    font-size: var(--pr-fs-xs);
-    line-height: 1.9;
-    color: var(--color-text-muted);
-  }
-
-  @media (max-width: 1100px) {
-    .focus-split {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .kpi-row {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 720px) {
-    .report {
-      padding: var(--pr-space-4) var(--pr-space-3) var(--pr-space-10);
-    }
-
-    .kpi-row {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .report__title {
-      flex-wrap: wrap;
-      font-size: 22px;
-    }
-  }
-
-  @media print {
-    body {
-      min-width: auto;
-      background: #fff;
-    }
-
-    .report {
-      max-width: none;
-      padding: 0;
-    }
-
-    .report__head,
-    .focus-section,
-    .kpi-card {
-      box-shadow: none;
-    }
-
-    .heat-scroll,
-    .table-scroll {
-      max-height: none;
-      overflow: visible;
-    }
-
-    .focus-section {
-      break-inside: avoid;
-    }
-  }
-</style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>各学科得分率条形图 · 旧/新读法对比稿（待确认）</title>
+<link rel="stylesheet" href="styles.css">
 <script data-prototype-owned data-proto-hotspot-bootstrap data-proto-review="hotspots">
 /* 点击空白时短暂提示本次需求范围内的真实交互；未声明范围时不扫描整页。 */
 (() => {
@@ -436,56 +314,239 @@
 </script>
 </head>
 <body>
-<div class="report">
 
-  <header class="report__head">
-    <h1 class="report__title">
-      高三34班 · 跨学科分析诊断报表
-      <span class="focus-scope">当日诊断 · 2026-11-05</span>
-    </h1>
-    <p class="report__meta">
-      班级：<b>高三34班（物化生）</b>　·　学年：<b>2026-2027学年</b>　·　有效人数：<b>37 人</b>　·　数据来源：新教育平台学情分析（作业批改）<br />
-      数据口径：<b>2026-11-05 当日已批改作业（9 份 / 6 学科）</b>，同一学科多份作业无主次，学科得分率 = 该科所有作业得分合计 ÷ 满分合计（满分大的作业占比重大）；学科组得分率按同一套作业、同一权重计算。生成时间：2026-11-05 22:10
+<header class="page-head">
+  <div class="page-head__tag">静态对比稿 · 仅确认形式，不是上线版本</div>
+  <h1>各学科得分率条形图：旧读法 vs 新读法</h1>
+  <p class="page-head__sub">
+    数据口径：高三34班 · 2026-11-05 · 6 科 11 份作业 · 得分率 = Σ（得分率 × 满分）÷ Σ满分，缺交不进分母 ·
+    与线上「跨学科分析」页取数同源（FocusReport.computeAll 直接算得，未手工调整）
+  </p>
+  <p class="page-head__ask">
+    本页只回答一个问题：条形长度应该表达 <b>「绝对得分率」</b> 还是 <b>「相对学科组均的离差」</b>。
+    两种画法用同一份数据并排，其余一切（色系、字号、行高、表格）都不动。
+  </p>
+</header>
+
+<section class="compare">
+
+  <!-- ================= 方案 A：现行 ================= -->
+  <article class="panel panel--old">
+    <header class="panel__head">
+      <span class="panel__badge panel__badge--gray">方案 A · 现行</span>
+      <h2>条长 = 班均得分率</h2>
+      <p class="panel__note">
+        六科共用一条 0–100% 绝对轴；每行的竖线是<b>该科自己的</b>学科组均，位置各不相同。
+        条长本身没有统一参照，读者会不自觉把它当成六科之间的水平排名。
+      </p>
+
+      <div class="seg">
+        <span class="seg__label">行序：</span>
+        <span class="chip" title="线上现有渲染按班均得分率从低到高排">线上原为「按班均升序」</span>
+        <span class="chip" title="为了只变一个变量，本稿把左图行序也改成与右图相同">本稿改为「按离差升序」，便于逐行对读</span>
+      </div>
+    </header>
+
+    <div class="chart-cap"></div>
+    <div id="oldChart"></div>
+
+    <div class="legend">
+      <span><i></i>班均得分率</span>
+      <span><i class="sw--mark"></i>该科学科组均</span>
+      <span>右端：较学科组的百分点</span>
+    </div>
+
+    <p class="panel__read">
+      <b>它读出来的意思：</b>条形从化学 68.7% 一路升到英语 92.9%，看着像一条六科的“水平阶梯”；
+      但走到生物（81.3%）→ 物理（77.8%）时条长居然是往下掉的——而这两科的离差只差 0.1pp，物理还略高一点。
+      下降完全是绝对分在指使，不是学科差异。
     </p>
-  </header>
+  </article>
 
-  <p class="report__note">
-    <b>使用说明：</b>本表是「阶段学情分诊」而非长期特质判断——班级侧只列明确短板、相对短板学科，学生侧给出个人补弱方向。本独立报表示例使用未修改时的常规默认规则；主页面支持按教师、按学科调整。
-    <br /><b>班级怎么判弱科</b>= 两条通道任一命中即判明确短板：某科班均未达 85%，且最近两次作业都比同卷学科组低至少 5 个百分点；
-    或全班得分率不到 60% 的学生占比 ≥30%。命中的学科全部列出，只出现一次或只有 1 份作业时标「短板待确认」。
-    班均未达 85%、低于学科组但未达明确短板条件的科目列为相对短板，与明确短板分组同时展示；某科未交超 30% 先抓提交，不判学科强弱。
-    <br /><b>术语说明</b>：「明确短板」表示当前作业证据已达到设定阈值，属于阶段性学科表现判断，不代表班级或学生能力定型；「相对短板」的参照为同卷学科组。
-    <br /><b>学生怎么定补哪一科</b>= 每名有有效成绩的学生都必须有一科个人补弱方向：该生这一科得分率未达 85% 且比班均低 10 个百分点以上，
-    或得分率直接不到 60% 时，列为重点提升；没有过线学科时，按「（个人 − 班均）÷ 10 个百分点」选出相对最弱的一科。
-    「优先巩固」只表示个人学习优先级，可能仍高于班均，不等同于薄弱学科；只有 1 份作业时结论暂定。
-    <br /><b>证据与时效</b>：按该科有效作业份数看，3 份以上结论最稳、2 份次之、只有 1 份时仅给临时建议；
-    自动排序只用当日或近 3 天的作业，更早的数据仅作趋势参考。
-    <br /><b>满分区</b>（该科学生得分率 75 分位已达 95%）只作提示，不再跳过判定；
-    因相对判弱要求本人得分率未达 85%，高分小分差通常不会触发，但其中仍有学生得分率不到 60% 时，照常进个人建议。
-    缺交 / 未批改显示「—」，不按 0 分参与均分与能力判定。
-    <br /><b>阈值说明</b>：本页的 85% / 60% / 10pp / 5pp / 30% 均为常规默认值，也是暂无教研校准时的暂行保守值；主页面修改后按逐学科实际规则计算。标准差只作「学生分化」展示，不参与判定。
+  <!-- ================= 方案 B：提议 ================= -->
+  <article class="panel panel--new">
+    <header class="panel__head">
+      <span class="panel__badge">方案 B · 提议</span>
+      <h2>条长 = 班均 − 学科组均</h2>
+      <p class="panel__note">
+        零点 = <b>该科自己的</b>学科组均；向左低于组均、向右高于组均。长度单位统一为「个百分点」，
+        六科共用一把尺，这才是能横着比的量。
+      </p>
+
+      <div class="seg" id="absMode">
+        <span class="seg__label">绝对水平怎么留：</span>
+        <button type="button" data-mode="pill" class="is-on">等级标签</button>
+        <button type="button" data-mode="mini">迷你水平条</button>
+        <button type="button" data-mode="none">不显示</button>
+      </div>
+    </header>
+
+    <div id="newChart"></div>
+
+    <div class="legend">
+      <span><i class="sw--neg"></i>低于学科组（向左）</span>
+      <span><i class="sw--pos"></i>高于学科组（向右）</span>
+      <span><i class="sw--band"></i>±1pp 基本持平</span>
+      <span title="低于学科组 5 个百分点即触到班级判弱线（按学科可配）"><i class="sw--gap"></i>判弱线 −5pp</span>
+      <span title="满分区：学生得分率 P75 ≥ 95%，差值主要来自赋分颗粒度"><i class="sw--hatch"></i>满分区斜纹</span>
+    </div>
+
+    <p class="panel__read">
+      <b>它读出来的意思：</b>化学 −2.5、数学 −1.9、语文 −1.5 三科低于学科组，
+      生物 +3.3、物理 +3.4、英语 +4.9 高于；<b>没有任何一科触到 −5pp 的判弱线</b>；
+      生物与物理只差 0.1pp，实为持平，不存在谁更好的问题。
+    </p>
+  </article>
+
+</section>
+
+<!-- ================= 同一份数据，两种读法的差别 ================= -->
+<section class="block">
+  <h2>同一份数据，两种读法的差别</h2>
+  <p class="block__sub">
+    下表逐行比较“相邻两科之间”读者感知到的差距：旧图看条长差，新图看离差差。倍数 = 旧图条长差 ÷ 新图离差差。
   </p>
 
-  <div id="reportRoot"></div>
+  <table>
+    <thead>
+      <tr>
+        <th>学科</th>
+        <th>班均 · 学科组均</th>
+        <th>离差（pp）</th>
+        <th>旧图：比上一行条长</th>
+        <th>新图：比上一行离差</th>
+        <th>结论</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="strong">化学 <span class="tag tag--soft">证据 C</span></td>
+        <td class="num">68.7% · 71.2%</td>
+        <td class="num delta--down">−2.5</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+        <td><span class="tag tag--soft">基准行</span></td>
+      </tr>
+      <tr>
+        <td class="strong">数学 <span class="tag tag--soft">证据 B</span></td>
+        <td class="num">73.9% · 75.8%</td>
+        <td class="num delta--down">−1.9</td>
+        <td class="num">+5.2pp</td>
+        <td class="num">+0.6pp</td>
+        <td><span class="tag tag--warn">旧图放大 8.7 倍</span></td>
+      </tr>
+      <tr>
+        <td class="strong">语文 <span class="tag tag--soft">证据 B</span></td>
+        <td class="num">77.0% · 78.5%</td>
+        <td class="num delta--down">−1.5</td>
+        <td class="num">+3.1pp</td>
+        <td class="num">+0.4pp</td>
+        <td><span class="tag tag--warn">旧图放大 7.8 倍</span></td>
+      </tr>
+      <tr>
+        <td class="strong">生物 <span class="tag tag--soft">证据 C</span></td>
+        <td class="num">81.3% · 78.0%</td>
+        <td class="num delta--up">+3.3</td>
+        <td class="num">+4.3pp</td>
+        <td class="num">+4.8pp</td>
+        <td><span class="tag tag--ok">这一处旧图反而压小了差异</span></td>
+      </tr>
+      <tr>
+        <td class="strong">物理 <span class="tag tag--soft">证据 C</span></td>
+        <td class="num">77.8% · 74.4%</td>
+        <td class="num delta--up">+3.4</td>
+        <td class="num">−3.5pp</td>
+        <td class="num">+0.1pp</td>
+        <td><span class="tag tag--warn">旧图方向反了：把 0.1pp 的持平画成 3.5pp 的胜负</span></td>
+      </tr>
+      <tr>
+        <td class="strong">英语 <span class="tag tag--soft">满分区</span></td>
+        <td class="num">92.9% · 88.0%</td>
+        <td class="num delta--up">+4.9</td>
+        <td class="num">+15.1pp</td>
+        <td class="num">+1.5pp</td>
+        <td><span class="tag tag--warn">旧图放大 10.1 倍</span></td>
+      </tr>
+    </tbody>
+  </table>
 
-  <p class="report__foot">
-    本报表含学生姓名与学号，仅限校内使用，请勿外传。同一学科若当日存在多份作业，作业之间无主次，
-    学科得分率 = 该科所有作业得分合计 ÷ 满分合计（按满分加权：语文 2 份满分 40 与 20，权重 40 : 20，不再等权）；
-    学科组得分率按同一套作业、同一权重计算，改筛选时班级侧与学科组侧同步重算。
-    逐作业得分率当前为演示数据（由学科基准率拆分得出），非真实观测。
+  <p class="footnote">
+    说明一：旧图里“化学最差、英语最强”的<b>大方向</b>没错，错在<b>幅度与分寸</b>——语文和数学在旧图上差 3.1pp，
+    真实只差 0.4pp；生物和物理旧图上差 3.5pp 且先后倒置，真实只差 0.1pp。<br>
+    说明二：英语属满分区（学生得分率 P75 ≥ 95%，计分已碰到满分上限），+4.9pp 主要来自赋分颗粒度，
+    新图用斜纹标出，避免它成为最长的那根条被误读为“英语最该表扬”。<br>
+    说明三：物理、化学、生物本次仅 1 份作业（证据 C 级），离差本身波动较大，新图用 C 角标提示需复核，
+    这一信息在旧图里完全没有位置放。
   </p>
-</div>
+</section>
 
-<script src="js/focus-data.js"></script>
-<script>
-  (function () {
-    var root = document.getElementById('reportRoot');
-    FocusReport.render(root, {
-      homeworks: FocusReport.HOMEWORKS.map(function (hw) { return hw.id; }),
-      dateLabel: '2026-11-05（今天）'
-    });
-  })();
-</script>
+<!-- ================= 待确认 ================= -->
+<section class="block decide">
+  <h2>需要拍板的五件事</h2>
+  <p class="block__sub">前两条是方向性的，后三条是细节；不确定的可以只定方向，细节我给两版再比。</p>
+
+  <ol>
+    <li>
+      <b>条长换不换。</b>
+      <span class="opt opt--rec">换：条长 = 离差（推荐）</span>
+      <span class="opt">不换：维持条长 = 班均得分率</span>
+      <span class="opt">都要：上下两张图</span><br>
+      代价说明：换成离差后，<b>“哪科绝对水平高”不再由条长回答</b>，改由右侧数字 + 等级标签（或迷你水平条）回答。
+    </li>
+    <li>
+      <b>排序按什么。</b>
+      <span class="opt opt--rec">按离差从小到大（推荐）</span>
+      <span class="opt">按班均得分率从小到大（现状）</span><br>
+      理由：表格里已经定的口径是“明确短板置顶、其余按较学科组升序”；条形图按班均排，
+      两者在本次数据里已经在生物/物理上打架，老师看两张图会得到不同结论。
+    </li>
+    <li>
+      <b>“基本持平”要不要显式标出来，多宽算持平。</b>
+      <span class="opt opt--rec">标，±1 个百分点（推荐）</span>
+      <span class="opt">标，±0.5 个百分点</span>
+      <span class="opt">不标，只靠数字</span><br>
+      说明：学科组均本身有抽样波动，1pp 以内的差不足以支撑任何教学结论。
+      <b>判弱线 5pp 不新设</b>，沿用现有“班级差距线”规则（本次六科均为 5pp）。
+    </li>
+    <li>
+      <b>绝对水平放哪里。</b>本页右上角可现场切换三种：
+      <span class="opt opt--rec">等级标签（优/良/中/低分）</span>
+      <span class="opt">迷你水平条（含 85% 达标线刻度）</span>
+      <span class="opt">不显示</span><br>
+      我的观察：本次 6 科有 4 科落在“良”，等级标签信息量偏低；若老师觉得还是想一眼看到“英语 92.9% 很高”，
+      建议选迷你水平条。
+    </li>
+    <li>
+      <b>满分区与证据不足的标记方式。</b>
+      <span class="opt opt--rec">斜纹 + C 角标（推荐）</span>
+      <span class="opt">只在文字里说明，图上不标</span><br>
+      两个都是“这条差值不能当结论用”的信号，藏在表格里等于没有。
+    </li>
+  </ol>
+
+  <details>
+    <summary>老师可能会问的三句话，先答在这里</summary>
+    <dl>
+      <dt>“不按得分率排，弱科还看得出来吗？”</dt>
+      <dd>看得出，而且更准：低于学科组的条全部在上半部且向左，最长的那根就是最该抓的。旧图里弱科可能被“这科卷子本来就难”掩盖。</dd>
+
+      <dt>“两根柱并排（班均 / 组均）不也能看出差吗？”</dt>
+      <dd>能看出差，但两根柱的绝对高度又回到了不可比的 0–100% 轴，6 科 12 根柱读起来更慢，
+        而且柱高差要读者自己做减法。离差条等于把减法提前做完了。</dd>
+
+      <dt>“为什么不用雷达图 / 每科一根独立轴的迷你图？”</dt>
+      <dd>雷达图把得分率当成闭合轮廓，面积比较是公认的误用，且各科满分不同、半径没有共同意义；
+        每科独立轴最诚实，但就彻底不能横着比了，与“想知道哪科差距最大”的诉求相反。</dd>
+    </dl>
+  </details>
+</section>
+
+<footer>
+  静态对比稿 · 数据与线上页同源（FocusReport.computeAll，高三34班 2026-11-05）· 未接入真实业务逻辑，确认形式后我再落到
+  js/focus-data.js、styles/app.css 与 PRD（XK-07 / prd-viewer.js 双载体同文）。
+</footer>
+
+<script src="app.js"></script>
 <!-- proto-review-bundle -->
 <script data-proto-review="appearance">
 /* PRD 内容色板与序号外观；编辑、导出和发布共用。 */
@@ -506,13 +567,30 @@
         const color = String(note?.color || '').toLowerCase();
         return PIN_COLORS.some(([hex]) => hex === color) || LEGACY_PIN_COLORS.includes(color) ? color : DEFAULT_PIN;
     }
-    function applyPin(element, note) {
-        const color = pinColor(note), custom = color !== DEFAULT_PIN;
-        element.style.setProperty('--pin-fill', color);
-        element.style.setProperty('--pin-ink', custom ? INK : ON_BLUE);
-        element.style.setProperty('--pin-stroke', custom ? STROKE : ON_BLUE);
+    function pinStyle(value) {
+        const style = value && typeof value === 'object' ? value : {};
+        return { size: Number.isInteger(style.size) && style.size >= 24 && style.size <= 56 ? style.size : 36,
+            ...(/^#[0-9a-f]{6}$/i.test(style.color || '') ? { color: style.color.toLowerCase() } : {}) };
     }
-    window.ProtoAppearance = { TEXT_COLORS, PIN_COLORS, DEFAULT_PIN, pinColor, applyPin };
+    function applyPin(element, note, value) {
+        const global = pinStyle(value), color = global.color || pinColor(note), custom = color !== DEFAULT_PIN;
+        let ink = custom ? INK : ON_BLUE, stroke = custom ? STROKE : ON_BLUE;
+        if (global.color) {
+            const rgb = [1,3,5].map(i => parseInt(color.slice(i,i+2),16)/255).map(v => v <= .04045 ? v/12.92 : ((v+.055)/1.055)**2.4);
+            const lum = rgb[0]*.2126 + rgb[1]*.7152 + rgb[2]*.0722;
+            ink = lum > .179 ? '#000000' : '#ffffff'; stroke = ink;
+        }
+        element.style.setProperty('--pin-fill', color);
+        element.style.setProperty('--pin-ink', ink);
+        element.style.setProperty('--pin-stroke', stroke);
+    }
+    function applyPinSize(element, value) {
+        const {size} = pinStyle(value);
+        element.style.setProperty('--pin-size', size + 'px');
+        element.style.setProperty('--pin-font', Math.round(size*13/36) + 'px');
+        element.style.setProperty('--pin-padding', Math.round(size*8/36) + 'px');
+    }
+    window.ProtoAppearance = { TEXT_COLORS, PIN_COLORS, DEFAULT_PIN, pinColor, pinStyle, applyPin, applyPinSize };
 })();
 
 </script>
@@ -1465,6 +1543,7 @@
                 window.ProtoHotspots?.hide();
                 document.documentElement.dataset.protoHost = 'review';
                 window.__REVIEW__.notes = Array.isArray(m.notes) ? m.notes : [];
+                window.__REVIEW__.pinStyle = m.pinStyle;
                 window.__REVIEW__.selectedNoteId = m.selectedNoteId || null;
                 window.__reviewSelectNote?.(window.__REVIEW__.selectedNoteId);
                 asideOpen = m.asideOpen !== false;
@@ -1521,7 +1600,7 @@
     const style = document.createElement('style');
     style.setAttribute('data-prototype-owned', '');
     style.textContent = `
-.__review_pin{position:absolute;display:grid;place-items:center;min-width:36px;height:36px;padding:0 8px;border:3px solid #fff;border-radius:50% 50% 50% 2px;background:#2563eb;color:#fff;font:600 13px/1 "PingFang SC","Microsoft YaHei UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 8px 24px rgba(16,24,40,.24);transform:translateY(-100%);cursor:pointer;pointer-events:auto;}
+.__review_pin{position:absolute;box-sizing:border-box;display:grid;place-items:center;min-width:var(--pin-size,36px);height:var(--pin-size,36px);padding:0 var(--pin-padding,8px);border:3px solid #fff;border-radius:50% 50% 50% 2px;background:#2563eb;color:#fff;font:600 var(--pin-font,13px)/1 "PingFang SC","Microsoft YaHei UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 8px 24px rgba(16,24,40,.24);transform:translateY(-100%);cursor:pointer;pointer-events:auto;}
 .__review_pin:hover{background:#1d4ed8;}
 .__review_pin:not(.__stale){background:var(--pin-fill);color:var(--pin-ink);border-color:var(--pin-stroke);}
 .__review_pin:not(.__stale):hover{background:var(--pin-fill);filter:brightness(.96);}
@@ -1545,6 +1624,8 @@
 .__review_pop p{margin:0 0 10px;overflow-wrap:anywhere;}
 .__review_pop img{display:block;max-width:100%;height:auto;margin:8px 0;border-radius:6px;}
 .__review_pop h1{font-size:18px;}.__review_pop h2{font-size:16px;}.__review_pop h3,.__review_pop h4{font-size:14px;}
+.__review_pop ol{list-style-type:decimal;}.__review_pop ol ol{list-style-type:lower-alpha;}.__review_pop ol ol ol{list-style-type:lower-roman;}
+.__review_pop_title{display:block;font-weight:700;margin:0 0 8px;overflow-wrap:anywhere;}
 .__review_pop ul,.__review_pop ol{padding-left:20px;margin:6px 0 10px;}.__review_pop li.task{list-style:none;margin-left:-18px;}
 .__review_pop code{font-family:ui-monospace,Consolas,monospace;font-size:13px;background:rgba(127,127,127,.16);padding:1px 5px;border-radius:4px;}
 .__review_pop pre{background:rgba(127,127,127,.14);padding:10px;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere;}.__review_pop pre code{background:none;padding:0;}
@@ -1727,6 +1808,7 @@
         popNoteId = note.id;
         pin.setAttribute('aria-expanded', 'true');
         popBody.innerHTML = R.renderBody ? R.renderBody(note) : (note.body || '');
+        if (note.title) { const title = document.createElement('strong'); title.className = '__review_pop_title'; title.textContent = note.title; popBody.prepend(title); }
         popBody.scrollTop = 0;
         pop.style.display = 'block';
         pop.style.visibility = 'hidden';
@@ -1795,11 +1877,12 @@
                 pinsById.set(n.id, pin);
                 layer.appendChild(pin);
             }
-            window.ProtoAppearance?.applyPin(pin, n);
+            window.ProtoAppearance?.applyPin(pin, n, R.pinStyle);
+            window.ProtoAppearance?.applyPinSize?.(pin, R.pinStyle);
             pin.classList.toggle('__review_selected', n.id === selectedNoteId);
             pin.setAttribute('aria-current', String(n.id === selectedNoteId));
             if (pin.textContent !== String(n.displayNumber)) pin.textContent = n.displayNumber;
-            pin.setAttribute('aria-label', `标注 ${n.displayNumber}`);
+            pin.setAttribute('aria-label', `标注 ${n.displayNumber}${n.title ? '：' + n.title : ''}`);
             pin.setAttribute('aria-haspopup', 'dialog');
             pin.setAttribute('aria-controls', '__review_popover');
             pin.setAttribute('aria-expanded', String(popNoteId === n.id && pop?.style.display === 'block'));

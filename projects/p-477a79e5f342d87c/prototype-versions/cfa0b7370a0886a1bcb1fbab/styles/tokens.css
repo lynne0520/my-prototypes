@@ -221,6 +221,22 @@
   --bar-mark: var(--color-text-muted);
   --bar-height: 14px;
 
+  /* 跨学科分析 · 离差条形图（条长 = 班均 − 学科组均，六科共用一把百分点尺） */
+  --dv-track-bg: var(--pr-gray-50);
+  --dv-band-bg: var(--pr-blue-20);
+  --dv-band-border: var(--pr-blue-100);
+  --dv-zero: var(--color-text-muted);
+  --dv-gap: var(--color-warning);
+  --dv-neg: var(--color-danger);
+  --dv-pos: var(--color-success);
+  --dv-flat: var(--color-text-muted);
+  --dv-hatch: var(--pr-white);
+
+  /* 较学科组差值的字色：低于 0 红、达到或高于 0 绿、无值中性（表格与条形图数字组共用） */
+  --delta-down-fg: var(--color-danger);
+  --delta-up-fg: var(--color-success);
+  --delta-flat-fg: var(--color-text-muted);
+
   /* 跨学科分析 · 卡片与紧凑表格 */
   --focus-card-border: var(--pr-blue-75);
   --focus-cell-pad: var(--pr-space-2);
