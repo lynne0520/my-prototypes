@@ -4618,43 +4618,23 @@ body {
     white-space: nowrap;
 }
 
-.kg-rel-tag {
-    font-size: 10.5px;
-    color: var(--text-muted);
-    background: #f1f5f9;
-    padding: 1px 6px;
-    border-radius: 4px;
-    flex-shrink: 0;
-}
-
-.kg-rel-count {
-    font-size: 10.5px;
-    color: var(--text-muted);
-    flex-shrink: 0;
-}
-
-/* 关联均值：非知识点关联对象（能力 / 题型 / 方法 / 易错点）的派生画像——关联知识点本期得分率的
-   算术平均。胶囊底纹 + 「关联均」前缀，与左侧知识点掌握度（裸文加粗）在视觉与口径上双重区分 */
-.kg-rel-avg {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 1px 5px;
-    border-radius: 4px;
-    flex-shrink: 0;
-    white-space: nowrap;
-}
-
-.kg-rel-avg.none {
+/* 无得分率占位：本期无作答证据 / 未学 / 仅有周期外历史证据时，得分率位恒显示「-」。
+   不再用「未检测」长文案挤占 300px 面板，也不得补 0 冒充数值（未知 ≠ 未掌握） */
+.kg-rel-rate-none {
+    font-size: 11px;
     color: #94a3b8;
-    background: #f1f5f9;
-    font-weight: 400;
+    flex-shrink: 0;
+    min-width: 32px;
+    text-align: right;
 }
 
-/* 掌握度徽标：前置 / 后续知识行尾部的小型百分比，颜色随档位 */
+/* 得分率位右对齐成列：知识点名左侧伸展，分数统一靠右，去除标签后行尾保持整齐 */
 .kg-rel-mastery {
     font-size: 10.5px;
     font-weight: 700;
     flex-shrink: 0;
+    min-width: 32px;
+    text-align: right;
 }
 
 /* 断层链警示：前置行命中（当前节点 <60 且前置 <70）红底 + 断层 chip */
@@ -9282,6 +9262,46 @@ body.prd-resizing {
 #prd-sec-XK-12 .prd-sec-body > .prd-table-scroll:first-child th:first-child,
 #prd-sec-XK-12 .prd-sec-body > .prd-table-scroll:first-child td:first-child {
     width: 112px;
+}
+
+/* XK-08 错因结构分析：自动列宽会把「首次占比 / 基本稳定」这类词拆成两行，
+   改为定宽布局：首列不拆行，第二列定宽，末列吃掉剩余宽度。
+   四张表都是三列，按 .prd-table-scroll 的出现顺序（只数 div，故用 nth-of-type）给变量：
+   1 取数、2 分拣、3 方向短语、4 处置句。靠变量而非 nth-child 选列，增删段落不影响。 */
+#prd-sec-XK-08 .prd-table-scroll table {
+    table-layout: fixed;
+    min-width: 340px;
+}
+
+#prd-sec-XK-08 .prd-table-scroll th:first-child,
+#prd-sec-XK-08 .prd-table-scroll td:first-child {
+    width: var(--xk8-c1, 88px);
+    white-space: nowrap;
+}
+
+#prd-sec-XK-08 .prd-table-scroll th:nth-child(2),
+#prd-sec-XK-08 .prd-table-scroll td:nth-child(2) {
+    width: var(--xk8-c2, 100px);
+}
+
+#prd-sec-XK-08 .prd-sec-body > .prd-table-scroll:nth-of-type(1) {
+    --xk8-c1: 88px;
+    --xk8-c2: 148px;
+}
+
+#prd-sec-XK-08 .prd-sec-body > .prd-table-scroll:nth-of-type(2) {
+    --xk8-c1: 88px;
+    --xk8-c2: 96px;
+}
+
+#prd-sec-XK-08 .prd-sec-body > .prd-table-scroll:nth-of-type(3) {
+    --xk8-c1: 48px;
+    --xk8-c2: 92px;
+}
+
+#prd-sec-XK-08 .prd-sec-body > .prd-table-scroll:nth-of-type(4) {
+    --xk8-c1: 88px;
+    --xk8-c2: 88px;
 }
 
 /* XK-06 热力结论规则表：自动列宽会按内容比例分配，「触发条件」列被压到 38px、表头逐字竖排；

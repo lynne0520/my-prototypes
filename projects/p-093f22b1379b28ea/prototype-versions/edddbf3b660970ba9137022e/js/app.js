@@ -861,8 +861,8 @@ const KP_RELATION_DEFS = {
 };
 
 // 关联节点池（能力 / 题型 / 方法 / 易错点）：形状与颜色定义
-// 【现仅作类型元数据】四类非知识点节点已不在画布渲染（不再占节点、不再连边），
-// 仅在知识点详情面板的分类清单中可见；画布上的颜色只表达掌握程度
+// 【现仅作类型元数据】这四类关联节点已不在画布渲染（不再占节点、不再连边），仅在知识点详情面板的
+// 分类清单中可见；其中能力是另一个维度的考核单元（自身有周期得分率），题型 / 方法 / 易错点是题库标签
 const KG_EXTRA_NODE_DEFS = {
     ability: { kindLabel: '能力', symbol: 'roundRect', size: [46, 22], color: '#6366f1', rels: ['examAbility', 'requireAbility'] },
     question: { kindLabel: '题型', symbol: 'rect', size: [34, 17], color: '#10b981', rels: ['questionType'] },
@@ -1629,7 +1629,53 @@ function kgBuildIndex() {
     });
 }
 
+// 能力索引：能力是另一个维度的知识点——同样可被题目挂接、同样有周期得分率、同样分末级与父节点；
+// 与知识点维度的差别仅在挂接方式（题目上的能力素养标签而非知识点标签），不是「标签 vs 考核单元」的差别
+const kgAbilityIndex = { byName: {}, built: false };
+
+function kgBuildAbilityIndex() {
+    if (kgAbilityIndex.built) return;
+    kgAbilityIndex.built = true;
+    const root = AppData.abilityTree;
+    const walk = (n, module, path) => {
+        if (n.level > 0) kgAbilityIndex.byName[n.name] = { node: n, module: n.level === 1 ? n.name : module, path: path.join(' / '), level: n.level };
+        const nextPath = n.level === 0 ? [root.name] : path.concat(n.name);
+        (n.children || []).forEach(c => walk(c, n.level === 1 ? n.name : module, nextPath));
+    };
+    walk(root, null, []);
+}
+
+// 能力证据状态：derived=true 才是本周期由题目能力标签派生的值；未覆盖子树保留的是静态基线，
+// 不能当本期得分率用（未知 ≠ 掌握 / 未掌握）。父节点由有值子节点回算，同样以 derived 为准
+function abilityEvidenceOf(name) {
+    ensurePeriodModel();
+    if (!kgAbilityIndex.built) kgBuildAbilityIndex();
+    const info = kgAbilityIndex.byName[name];
+    if (!info) return { state: 'none', rate: null };
+    return info.node.derived ? { state: 'period', rate: masteryOf(info.node) } : { state: 'none', rate: null };
+}
+
+// 能力反向引用：哪些知识点把该能力列为考查 / 依赖能力。能力既然是知识点，
+// 点开它就要能回答「谁挂接了我」——这是知识点面板的反向视角，不是另一套语义
+const kgAbilityRefs = { byAbility: {}, built: false };
+
+function kgBuildAbilityRefs() {
+    if (kgAbilityRefs.built) return;
+    kgAbilityRefs.built = true;
+    const push = (ability, kind, kp) => {
+        const rec = kgAbilityRefs.byAbility[ability] || (kgAbilityRefs.byAbility[ability] = { exam: [], require: [] });
+        if (rec[kind].indexOf(kp) < 0) rec[kind].push(kp);
+    };
+    Object.keys(kpRelations).forEach(kp => {
+        const e = kpRelations[kp] || {};
+        (e.examAbility || []).forEach(a => push(a, 'exam', kp));
+        (e.requireAbility || []).forEach(a => push(a, 'require', kp));
+    });
+}
+
 // 聚合关系（供一级 / 二级知识点详情面板）：汇总子树内所有知识点的关联，剔除模块内部自关联
+// 每个分组的 value = 引用该对端节点的知识点集合；渲染层只用它的 keys（关系清单），不再用它算派生均值
+// （对端都是独立知识点，各自出自己的分）；保留 value 供题库按标签维度回传后定位引用来源
 function kgAggEntry(name) {
     const node = kgIndex.byName[name].node;
     const subtree = new Set(flattenTree(node, false).map(n => n.name));
@@ -1692,7 +1738,7 @@ function kgVisibleKpNodes(ignoreModules) {
 }
 
 // 收集指定知识点集合的关联边：只收知识点 ↔ 知识点（前置 / 易混淆），
-// 能力 / 题型 / 方法 / 易错点属关联节点池，不进画布（只看详情面板），避免非知识点节点抢占视觉焦点
+// 能力 / 题型 / 方法 / 易错点属关联节点池，不进画布（只看详情面板），避免跨维度节点抢占视觉焦点
 function kgCollectEdges(kpSet) {
     const edges = [];
     Object.keys(kpRelations).forEach(name => {
@@ -1920,7 +1966,7 @@ function kgRender() {
         series: [series]
     }, true);
 
-    if (kgState.selected) kgChart.dispatchAction({ type: 'highlight', seriesIndex: 0, name: kgState.selected });
+    if (kgState.selected && kgIndex.byName[kgState.selected]) kgChart.dispatchAction({ type: 'highlight', seriesIndex: 0, name: kgState.selected });
 }
 
 // 选中知识点：图谱高亮 + 详情面板
@@ -1937,6 +1983,12 @@ function kgSelectNode(name) {
 function kgRenderDetail(name) {
     const panel = document.getElementById('kgDetailPanel');
     if (!panel) return;
+    if (!kgAbilityIndex.built) kgBuildAbilityIndex();
+    // 能力同属知识点维度：点开能力行进能力详情，不再当成「图谱里不存在的节点」静默忽略
+    if (name && !kgIndex.byName[name] && kgAbilityIndex.byName[name]) {
+        kgRenderAbilityDetail(name, panel);
+        return;
+    }
     if (!name || !kgIndex.byName[name]) {
         panel.innerHTML = `<div class="kg-detail-empty"><i class="fas fa-hand-pointer"></i><p>点击图谱中的节点<br>查看知识点关联详情</p></div>`;
         return;
@@ -1956,40 +2008,52 @@ function kgRenderDetail(name) {
         { key: 'prerequisite', title: '前置知识', color: KP_RELATION_DEFS.prerequisite.color, kp: true },
         { key: 'followUps', title: '后续知识', color: KP_RELATION_DEFS.prerequisite.color, kp: true },
         { key: 'confusable', title: '易混淆知识点', color: KP_RELATION_DEFS.confusable.color, kp: true },
-        { key: 'examAbility', title: '考查能力', color: KP_RELATION_DEFS.examAbility.color, tag: '能力' },
-        { key: 'requireAbility', title: '依赖能力', color: KP_RELATION_DEFS.requireAbility.color, tag: '能力' },
-        { key: 'questionType', title: '考查题型', color: KP_RELATION_DEFS.questionType.color, tag: '题型' },
-        { key: 'methods', title: '常用方法', color: KP_RELATION_DEFS.method.color, tag: '方法' },
-        { key: 'errorPoints', title: '易错点', color: KP_RELATION_DEFS.errorPoint.color, tag: '易错点' }
+        { key: 'examAbility', title: '考查能力', color: KP_RELATION_DEFS.examAbility.color },
+        { key: 'requireAbility', title: '依赖能力', color: KP_RELATION_DEFS.requireAbility.color },
+        { key: 'questionType', title: '考查题型', color: KP_RELATION_DEFS.questionType.color },
+        { key: 'methods', title: '常用方法', color: KP_RELATION_DEFS.method.color },
+        { key: 'errorPoints', title: '易错点', color: KP_RELATION_DEFS.errorPoint.color }
     ];
 
-    // 关联均值：非知识点关联对象（能力 / 题型 / 方法 / 易错点）自身没有掌握度——题目只挂接到末级知识点与
-    // 能力末级节点上，这三类是标签而不是考核单元，所以不可能有「它自己的得分率」。可比的是派生画像：
-    // 引用它的知识点本期得分率的算术平均（对齐 PRD 方法聚合 / 能力聚合口径：不按关系度加权）。
-    // 仅统计本期有作答证据的关联点；全无证据时不得出数字（未知 ≠ 掌握/未掌握）
-    const relAvgOf = (srcKps) => {
-        const rates = [];
-        (srcKps || []).forEach(nm => {
-            const ev = evidenceStateOf(nm);
-            if (ev.state === 'period' && ev.rate !== null && ev.rate !== undefined) rates.push(ev.rate);
-        });
-        if (!rates.length) return { avg: null, n: 0, total: (srcKps || []).length };
-        return { avg: rates.reduce((a, b) => a + b, 0) / rates.length, n: rates.length, total: (srcKps || []).length };
+    // 关联对端得分率：所有关联关系的对端都是一个知识点，只是分属不同维度——前置/后续/易混淆/子节点在
+    // 知识点树，考查/依赖能力在能力树，题型/方法/易错点在题库标签维度。行尾一律取「对端自己的周期得分率」，
+    // 取不到就出「-」；禁止用引用它的知识点均分冒充（那是别的维度的分，不是这个节点的表现）
+    // 接入点：题型 / 方法 / 易错点目前无自己的挂接数据（题库只回传 atoms / abilities 两个标签字段），
+    // 待题库按对应维度回传标签后在此处接上派生掌握度即可，不必改渲染层
+    const relatedRateOf = (name) => {
+        if (!kgAbilityIndex.built) kgBuildAbilityIndex();
+        if (kgAbilityIndex.byName[name]) {                 // 能力维度
+            const ev = abilityEvidenceOf(name);
+            const rate = (ev.state === 'period' && ev.rate !== null && ev.rate !== undefined) ? ev.rate : null;
+            return {
+                rate,
+                title: rate !== null ? '能力维度周期内得分率（按该能力标签挂接题目分值加权）'
+                    : '本期无题目挂接该能力，无得分率（未知 ≠ 未掌握）'
+            };
+        }
+        // 题型 / 方法 / 易错点维度：题库未回传这三类标签的作答挂接，无对端自己的分
+        return { rate: null, title: '该维度本期无题库挂接数据，无自身得分率（未知 ≠ 未掌握）' };
     };
 
-    // relRow：一条关联清单行。非知识点行尾部只挂一个胶囊（数量 + 关联均值）——300px 面板容不下
-    // 「N 个知识点引用」+「关联均 X%」两段独立文字，合并后知识点名才不会被截成两个字
-    // 叶子知识点的直接关系只有它自己一个引用者：计数恒为 1、均值等于头部已有掌握度，都属重复信息，不出
-    const relRow = (target, tag, dotColor, count, kMastery, brokenRow, relAvg) => `
-        <div class="kg-rel-row${brokenRow ? ' kg-rel-broken' : ''}" data-target="${escapeHTML(target)}">
+    // relRow：一条关联清单行 = 名称 + 周期内得分率。行身份（一级/二级/三级知识点、能力、题型、方法、易错点）
+    // 由所属分组标题表达，不再逐行挂标签胶囊——300px 面板里标签占了两个字的宽度，知识点名反被截断。
+    // 得分率位只有两种结果：本期有作答证据 → 数字；本期无证据 / 未学 / 仅有周期外历史证据 → 「-」。
+    // 禁止把「未检测」写成一格文字或补 0 冒充数值（未知 ≠ 未掌握）
+    const relRow = (target, dotColor, rate, opts) => {
+        const o = opts || {};
+        const tip = escapeHTML(o.title || '周期内得分率');
+        const hasRate = rate !== null && rate !== undefined;
+        const rateHtml = hasRate
+            ? `<span class="kg-rel-mastery" style="color:${statusOf(rate).color}" title="${tip}">${rate.toFixed(0)}%</span>`
+            : `<span class="kg-rel-rate-none" title="${tip}">-</span>`;
+        return `
+        <div class="kg-rel-row${o.broken ? ' kg-rel-broken' : ''}" data-target="${escapeHTML(target)}">
             <span class="kg-rel-dot" style="background:${dotColor}"></span>
             <span class="kg-rel-name">${escapeHTML(target)}</span>
-            <span class="kg-rel-tag">${tag}</span>
-            ${kMastery !== null && kMastery !== undefined ? `<span class="kg-rel-mastery" style="color:${statusOf(kMastery).color}" title="班级掌握度">${kMastery.toFixed(0)}%</span>` : ''}
-            ${relAvg && relAvg.avg !== null ? `<span class="kg-rel-avg" style="color:${statusOf(relAvg.avg).color};background:${statusOf(relAvg.avg).hexColor}14" title="关联 ${relAvg.total} 个知识点，其中 ${relAvg.n} 个本期有作答证据，得分率算术平均 ${relAvg.avg.toFixed(1)}%；这是关联知识点的画像，不是该${tag}自身的掌握度">${count} 点 · 均 ${relAvg.avg.toFixed(0)}%</span>` : ''}
-            ${relAvg && relAvg.avg === null ? `<span class="kg-rel-avg none" title="关联 ${relAvg.total} 个知识点，本期均无作答证据，不能给出该${tag}的得分率画像（未知 ≠ 掌握 / 未掌握）">${count} 点 · 未检测</span>` : ''}
-            ${brokenRow ? '<span class="kg-rel-break">断层</span>' : ''}
+            ${rateHtml}
+            ${o.broken ? '<span class="kg-rel-break">断层</span>' : ''}
         </div>`;
+    };
 
     let relHtml = '';
     let relTotal = 0;
@@ -2002,25 +2066,28 @@ function kgRenderDetail(name) {
         relHtml += `<div class="kg-rel-group">
             <div class="kg-rel-title" style="color:${g.color}">${g.title} <span>${keys.length}</span></div>` +
             shown.map(k => {
-                const tag = g.kp
-                    ? (kgIndex.byName[k] ? ['一级', '二级', '三级'][kgIndex.byName[k].level - 1] + '知识点' : '知识点')
-                    : g.tag;
-                // 掌握度徽标：kp 行且在索引内且有证据时展示（无证据前置不显示，未知 ≠ 未掌握）；
+                // 知识点行：掌握度只在索引内且有证据时才有值（无证据前置不出，未知 ≠ 未掌握）；
                 // 前置行命中断层链（当前节点未掌握 <60 且前置 <70）红底警示
                 const kInfo = g.kp ? kgIndex.byName[k] : null;
                 const kEv = kInfo ? evidenceStateOf(k) : null;
                 const kNoEv = kEv && (kEv.state === 'none' || kEv.state === 'unlearned');
                 const kMastery = (kInfo && !kNoEv) ? (kEv.state === 'history' ? kEv.rate : masteryOf(kInfo.node)) : null;
                 const brokenRow = g.key === 'prerequisite' && !noEv && kMastery !== null && shownMastery < 60 && kMastery < 70;
-                // 行首色点 = 目标知识点自身的掌握情况（无证据灰）；非知识点（能力/题型/方法/易错点）仍按类型区分色
-                const dotColor = g.kp ? (kMastery === null ? '#94a3b8' : statusOf(kMastery).hexColor) : g.color;
-                // 非知识点行：引用集只有自身（叶子直接关系）时不出计数与均值，否则出引用计数 + 关联均值
-                // （一级 / 二级节点为子树聚合，即使只 1 个外部引用，也是另一个知识点的分，不能隐）
-                const srcKps = g.kp ? [] : (map[k] || []);
-                const selfOnly = srcKps.length === 1 && srcKps[0] === name;
-                const relCount = (g.kp || selfOnly) ? 0 : srcKps.length;
-                const relAvg = relCount ? relAvgOf(srcKps) : null;
-                return relRow(k, tag, dotColor, relCount, kMastery, brokenRow, relAvg);
+                // 展示口径：只认周期内证据，unlearned / 本期未检测 / 仅有周期外历史证据一律「-」
+                const kRate = (kEv && kEv.state === 'period' && kEv.rate !== null && kEv.rate !== undefined) ? kEv.rate : null;
+                if (g.kp) {
+                    // 行首色点 = 目标知识点自身掌握情况（无证据灰，历史证据仍按掌握度取色，与图谱同口径）
+                    const dotColor = kMastery === null ? '#94a3b8' : statusOf(kMastery).hexColor;
+                    return relRow(k, dotColor, kRate, {
+                        broken: brokenRow,
+                        title: kRate !== null ? '周期内得分率'
+                            : (kEv && kEv.state === 'history' ? '本期未考查，仅有周期外历史证据，不出本期得分率'
+                                : '本期无作答证据，无得分率（未知 ≠ 未掌握）')
+                    });
+                }
+                // 其余分组（能力 / 题型 / 方法 / 易错点）：对端同样是知识点，取它自己所在维度的周期得分率
+                const r = relatedRateOf(k);
+                return relRow(k, r.rate === null ? '#94a3b8' : statusOf(r.rate).hexColor, r.rate, { title: r.title });
             }).join('') +
             (keys.length > 8 ? `<div class="kg-rel-more">… 及另外 ${keys.length - 8} 项</div>` : '') +
             `</div>`;
@@ -2028,15 +2095,19 @@ function kgRenderDetail(name) {
 
     const childRows = children.map(child => {
         const childName = child.name;
-        const childInfo = kgIndex.byName[childName];
         const childEv = evidenceStateOf(childName);
         const childNoEv = childEv.state === 'none' || childEv.state === 'unlearned';
         const childMastery = childNoEv
             ? null
             : (childEv.state === 'history' ? childEv.rate : masteryOf(child));
-        const tag = ['一级', '二级', '三级'][childInfo.level - 1] + '知识点';
         const dotColor = childMastery === null ? '#94a3b8' : statusOf(childMastery).hexColor;
-        return relRow(childName, tag, dotColor, 0, childMastery, false);
+        // 子节点行同样只出周期内得分率（层级已由标题与路径表达，不再挂「x级知识点」标签）
+        const childRate = (childEv.state === 'period' && childEv.rate !== null && childEv.rate !== undefined) ? childEv.rate : null;
+        return relRow(childName, dotColor, childRate, {
+            title: childRate !== null ? '周期内得分率'
+                : (childEv.state === 'history' ? '本期未考查，仅有周期外历史证据，不出本期得分率'
+                    : '本期无作答证据，无得分率（未知 ≠ 未掌握）')
+        });
     }).join('');
     const childrenHtml = `<div class="kg-rel-group">
         <div class="kg-rel-title" style="color:var(--primary)">直接子节点 <span>${children.length}</span></div>
@@ -2075,11 +2146,12 @@ function kgRenderDetail(name) {
         };
     });
 
-    // 点击关系行 → 跳转选中目标知识点 / 高亮关联节点
+    // 点击关系行 → 跳转选中目标。考查 / 依赖能力的对端也是知识点（能力树节点），同样进详情；
+    // 能力不在画布上，所以不走图谱高亮，只换面板
     panel.querySelectorAll('.kg-rel-row').forEach(row => {
         row.onclick = () => {
             const t = row.dataset.target;
-            if (kgIndex.byName[t]) {
+            if (kgIndex.byName[t] || kgAbilityIndex.byName[t]) {
                 kgSelectNode(t);
             } else if (kgChart) {
                 kgChart.dispatchAction({ type: 'downplay', seriesIndex: 0 });
@@ -2092,6 +2164,94 @@ function kgRenderDetail(name) {
     const diagBtn = document.getElementById('kgDetailDiagBtn');
     if (diagBtn) diagBtn.onclick = () => openRelDiagDrawer(name);
 
+}
+
+// 能力详情面板：能力同属知识点维度，只是树不同、挂接标签不同。
+// 结构与知识点面板一致：头部（层级 + 周期得分率）+ 反向引用清单（哪些知识点挂它为考查 / 依赖能力）+ 子能力。
+// 行尾仍只出对端自己的周期得分率（这里对端是知识点，取知识点分），不出现任何派生均值。
+// 能力不上图，所以不提供前后序关联诊断入口。
+function kgRenderAbilityDetail(name, panel) {
+    const info = kgAbilityIndex.byName[name];
+    if (!info) return;
+    kgBuildAbilityRefs();
+    const node = info.node;
+    const ev = abilityEvidenceOf(name);
+    const rate = (ev.state === 'period' && ev.rate !== null && ev.rate !== undefined) ? ev.rate : null;
+    const st = rate === null ? null : statusOf(rate);
+    const children = node.children || [];
+    const refs = kgAbilityRefs.byAbility[name] || { exam: [], require: [] };
+    // 同一知识点可能同时挂考查与依赖（规则 6 只计一次），计数去重，两个分组仍按关系类型分列
+    const refCount = new Set(refs.exam.concat(refs.require)).size;
+    const activeTab = kgState.detailTab === 'children' ? 'children' : 'relations';
+
+    // 引用方是知识点，行尾取该知识点自己的周期得分率；无证据出「-」
+    const kpRow = (kp) => {
+        const e = evidenceStateOf(kp);
+        const r = (e.state === 'period' && e.rate !== null && e.rate !== undefined) ? e.rate : null;
+        const tip = r === null
+            ? (e.state === 'history' ? '本期未考查，仅有周期外历史证据，不出本期得分率' : '本期无作答证据，无得分率（未知 ≠ 未掌握）')
+            : '该知识点周期内得分率';
+        const dot = r === null ? '#94a3b8' : statusOf(r).hexColor;
+        return `<div class="kg-rel-row" data-target="${escapeHTML(kp)}">
+            <span class="kg-rel-dot" style="background:${dot}"></span>
+            <span class="kg-rel-name">${escapeHTML(kp)}</span>
+            ${r === null
+                ? `<span class="kg-rel-rate-none" title="${escapeHTML(tip)}">-</span>`
+                : `<span class="kg-rel-mastery" style="color:${statusOf(r).color}" title="${escapeHTML(tip)}">${r.toFixed(0)}%</span>`}
+        </div>`;
+    };
+    const groupHtml = (title, color, list, emptyText) => `<div class="kg-rel-group">
+        <div class="kg-rel-title" style="color:${color}">${title} <span>${list.length}</span></div>
+        ${list.length ? list.map(kpRow).join('') : `<div class="kg-detail-none">${emptyText}</div>`}
+    </div>`;
+
+    const relHtml = groupHtml('挂接为考查能力的知识点', KP_RELATION_DEFS.examAbility.color, refs.exam, '暂无知识点把该能力列为考查能力')
+        + groupHtml('挂接为依赖能力的知识点', KP_RELATION_DEFS.requireAbility.color, refs.require, '暂无知识点把该能力列为依赖能力');
+    const childrenHtml = children.length
+        ? `<div class="kg-rel-group">
+            <div class="kg-rel-title" style="color:var(--primary)">子能力 <span>${children.length}</span></div>
+            ${children.map(c => {
+                const cev = abilityEvidenceOf(c.name);
+                const cr = (cev.state === 'period' && cev.rate !== null && cev.rate !== undefined) ? cev.rate : null;
+                const tip = cr === null ? '本期无题目挂接该能力，无得分率（未知 ≠ 未掌握）' : '能力维度周期内得分率';
+                const dot = cr === null ? '#94a3b8' : statusOf(cr).hexColor;
+                return `<div class="kg-rel-row" data-target="${escapeHTML(c.name)}">
+                    <span class="kg-rel-dot" style="background:${dot}"></span>
+                    <span class="kg-rel-name">${escapeHTML(c.name)}</span>
+                    ${cr === null
+                        ? `<span class="kg-rel-rate-none" title="${escapeHTML(tip)}">-</span>`
+                        : `<span class="kg-rel-mastery" style="color:${statusOf(cr).color}" title="${escapeHTML(tip)}">${cr.toFixed(0)}%</span>`}
+                </div>`;
+            }).join('')}
+        </div>`
+        : '<div class="kg-detail-none">该能力暂无子能力</div>';
+
+    panel.innerHTML = `
+        <div class="kg-detail-head">
+            <span class="kg-detail-level">${['', '一级', '二级', '三级'][info.level]}能力</span>
+            ${rate === null
+                ? `<span class="kg-detail-mastery" style="color:#94a3b8" title="本期无题目挂接该能力标签（未知 ≠ 未掌握）">未检测</span>`
+                : `<span class="kg-detail-mastery" style="color:${st.color}">${rate.toFixed(1)}%</span>`}
+        </div>
+        <h4 class="kg-detail-title">${escapeHTML(name)}</h4>
+        <div class="kg-detail-path">${escapeHTML(info.path)}</div>
+        <div class="kg-detail-stats" aria-label="能力详情列表切换">
+            <button type="button" class="${activeTab === 'relations' ? 'active' : ''}" data-detail-tab="relations" aria-pressed="${activeTab === 'relations'}">关联知识点<b>${refCount}</b></button>
+            <button type="button" class="${activeTab === 'children' ? 'active' : ''}" data-detail-tab="children" aria-pressed="${activeTab === 'children'}">子能力<b>${children.length}</b></button>
+        </div>
+        <div class="kg-detail-scroll">${activeTab === 'children' ? childrenHtml : relHtml}</div>`;
+
+    panel.querySelectorAll('[data-detail-tab]').forEach(btn => {
+        btn.onclick = () => {
+            if (btn.dataset.detailTab === activeTab) return;
+            kgState.detailTab = btn.dataset.detailTab;
+            kgRenderAbilityDetail(name, panel);
+        };
+    });
+    // 两类清单里的行都是知识点名（引用方 / 子能力），直接进对应详情
+    panel.querySelectorAll('.kg-rel-row').forEach(row => {
+        row.onclick = () => kgSelectNode(row.dataset.target);
+    });
 }
 
 // ── 统一目录（四视图共用）：按维度与视图渲染一级节点过滤器，图谱视图固定知识点模块 ──
@@ -3363,7 +3523,7 @@ function kgClassifyPathology(kpName, opts) {
         return kgPathologyOf('basic', '近端前置「' + worst.name + '」掌握 ' + worst.rate + '%（第 ' + worst.depth + ' 层，<' + KG_PATHOLOGY_PARAMS.basicThreshold + '%）', { pres: weakPres });
     }
 
-    // ③ 方法型：关联方法中至少 1 个命中「方法薄弱」（规则 6：关联点 ≥2 且薄弱占比 ≥50% 或方法掌握 <65%）
+    // ③ 方法型：关联方法中至少 1 个命中「方法薄弱」（病型·方法型口径，二期保留，本期无调用点）
     const methods = (rel.methods || []).filter(Boolean);
     if (methods.length) {
         const badSet = (opts && opts.badSet) || kgBuildBadSet();
@@ -3601,32 +3761,45 @@ function renderKgEvidenceOverview() {
 
 // 子模块 6：已达标与进步（正向展示——存量认可 + 增量可见；达标线随「设置掌握程度」档位联动，统计为全量不受目录筛选影响）
 const KG_ACH_RISE_PP = 8;   // 明显进步判定：首末有效场次得分率提升阈值（%）
+const KG_ACH_MIN_SCENE = 3; // 判达标最小有效场次（与 XK-07 已达标、CALC-01 §3 判达标场次门槛同口径）
 
-function renderKgAch() {
-    const sumEl = document.getElementById('kgAchSummary');
-    if (!sumEl) return;
+// 已达标统一口径：挂接单元（kp 取 mSet、能力取 ability）+ 掌握度 ≥ 达标线 + 有效场次 ≥3
+// 三处共用（XK-07 已达标标签、XK-09 已达标数与减量维持、XK-04 达标率卡不做场次门槛），分开各写一套就会互相打脸
+function kgAchSummary() {
     const m = ensurePeriodModel();   // 达标线与正向变化均依赖派生后的 heatData / 树掌握度
     const line = reachLine();            // 达标线（3 档 / 4 档均为 80）
-    const skilledLine = Math.max(90, line);       // 熟练线（默认 90）
-    // 统计单元 = 题目挂接的末级节点（kp 维度取 mSet、能力维度取 ability），与顶部达标率卡严格同口径；
     // 不能拿「全树 derived 节点」当单元：父层是子节点均值、会以层级数量重复命中，未覆盖子树仍带静态基线值
     // （那是演示值不是证据，计入会把「未考查」当成「已达标」，铁律二：未知 ≠ 0）
     const leafRows = currentDimension === 'kp' ? m.mSet : m.ability;
     const leafNames = new Set(leafRows.map(r => r.name));
     const evid = flattenTree(currentTree(), true).filter(n => leafNames.has(n.name));
-    const good = evid.filter(n => masteryOf(n) >= line).sort((a, b) => masteryOf(b) - masteryOf(a));
+    // 判达标场次门槛：有效场次 <3 的节点只标「待确认」，不进已达标与已达标数（XK-07 已达标、CALC-01 §3）
+    const sceneOf = new Map();
+    (heatData[currentDimension] || []).forEach(r => {
+        sceneOf.set(r.name, (r.values || []).filter(v => v !== null && v !== undefined).length);
+    });
+    const judgeable = evid.filter(n => (sceneOf.get(n.name) || 0) >= KG_ACH_MIN_SCENE);
+    const good = judgeable.filter(n => masteryOf(n) >= line).sort((a, b) => masteryOf(b) - masteryOf(a));
+    return { m, line, evid, judgeable, good, pending: evid.length - judgeable.length };
+}
+
+function renderKgAch() {
+    const sumEl = document.getElementById('kgAchSummary');
+    if (!sumEl) return;
+    const { line, evid, judgeable, good, pending } = kgAchSummary();
+    const skilledLine = Math.max(90, line);       // 熟练线（默认 90）
     const skilled = good.filter(n => masteryOf(n) >= skilledLine);
     const passed = good.filter(n => masteryOf(n) < skilledLine);
 
-    // 标签徽标 = 已达标节点数（当前维度挂接单元口径，与顶部达标率卡分子同源）
+    // 标签徽标 = 已达标节点数（当前维度挂接单元口径，已过 ≥3 场门槛；与达标率卡分子不同源，不可互推）
     const cntEl = document.getElementById('kgAchCount');
     if (cntEl) cntEl.innerText = good.length;
 
     const noteEl = document.getElementById('kgAchNote');
-    if (noteEl) noteEl.innerText = `达标线 ≥${line}%（随「设置掌握程度」档位联动）· 统计范围 = 本周期题目挂接的${dimensionLabel()} ${evid.length} 个（与顶部达标率卡同一批挂接单元，此处只取当前维度），不受左侧目录筛选影响`;
+    if (noteEl) noteEl.innerText = `达标线 ≥${line}%（随「设置掌握程度」档位联动）· 统计范围 = 本周期题目挂接的${dimensionLabel()} ${evid.length} 个，其中有效场次 ≥${KG_ACH_MIN_SCENE} 场可判达标 ${judgeable.length} 个${pending ? `（另 ${pending} 个仅 1~2 场，标「待确认」不计入）` : ''}；与顶部达标率卡同一批单元但另加此门槛，两数不可互推，不受左侧目录筛选影响`;
     sumEl.innerHTML = [
         `<b>${good.length}</b> 个已达标`,
-        `占挂接 ${evid.length} 个的 <b>${evid.length ? Math.round(good.length / evid.length * 100) : 0}%</b>`,
+        `占可判达标 ${judgeable.length} 个的 <b>${judgeable.length ? Math.round(good.length / judgeable.length * 100) : 0}%</b>`,
         `其中熟练掌握 <b>${skilled.length}</b> 个`
     ].map(t => `<span>${t}</span>`).join('<span class="kg-diag-ov-sep">·</span>');
 
@@ -3636,7 +3809,7 @@ function renderKgAch() {
     const stable = [], newly = [], rising = [];
     (heatData[currentDimension] || []).forEach(r => {
         const valid = (r.values || []).filter(v => v !== null && v !== undefined).map(v => Math.round((100 - v) * 10) / 10);
-        if (!valid.length) return;
+        if (valid.length < KG_ACH_MIN_SCENE) return;   // 证据不足不判达标/进步，1~2 场只标「待确认」
         const item = { name: r.name, first: valid[0], last: valid[valid.length - 1] };
         item.delta = Math.round((item.last - item.first) * 10) / 10;
         if (valid.every(v => v >= line)) stable.push(item);
@@ -3802,7 +3975,7 @@ function renderTeachAdvice() {
         relCov: kgRelationCoverage(),
         relGaps,
         confEmpty: !confusionData.length,
-        achCount: flattenTree(currentTree(), true).filter(n => masteryOf(n) >= masteryLevels[0].min).length
+        achCount: kgAchSummary().good.length
     };
     const items = TEACH_ADVICE_RULES.filter(r => r.when(ctx));
     box.innerHTML = items.length ? items.map(r => `
@@ -6521,7 +6694,8 @@ init();
     const PRD_GROUPS = [
         { key: 'XK', name: '一、学科学情' },
         { key: 'ST', name: '二、学生追踪' },
-        { key: 'CALC', name: '三、指标口径与计算公式' }
+        { key: 'CALC', name: '三、指标口径与计算公式' },
+        { key: 'CHG', name: '附、更新记录' }
     ];
 
     // 导出 Markdown 文档的标题与文件名前缀：首行 = PRD_APP_NAME + 产品需求文档（PRD），文件 <PRD_EXPORT_NAME>-yyyyMMdd-HHmm.md
@@ -6549,9 +6723,9 @@ init();
                 '| 学年 | 默认当前学年（演示 2025-2026）；下拉只列学年（含 2024-2025、2023-2024），不展示各学年所带年级班级；切换后按所选学年回查该班学生群体的作业与考试数据，年级班级选中保持不变，全量重算 |',
                 '| 班级 | 默认当前学年任教班级（演示高二 1 班）；列表随所选年级的任教权限生成；选「全部班级」时隐藏「班级平均得分率」卡（无单一班级可算均值） |',
                 '| 学科 | 范围为教务权限内学科，恒 ≥1 个：单学科固定不可切，多学科按列表切换，默认选中第一个；演示按双学科（数学、语文）配置，语文无知识体系 → 切语文学科进入 L2-a 缺省页（XK-13），切回数学恢复原页签与图表 |',
-                '| 时间 | 学年 / 月 / 周（默认）/ 自定义四档，档位切换对应日期控件显隐；月、周、自定义可跨学年选择（范围取教务权限数据并集）；档位与日期控件收在「学情来源与统计范围」弹窗顶部的时间条内，筛选栏只回显「时间范围 · 已选 N 份」胶囊，不再直放时间控件；周档胶囊文案为「年 + 第 x 周（起始日期）」（默认周显示 2026年第38周（09-14），结束日由自然周隐含，完整起止区间仅在弹窗周选择器右侧提示），默认档位为「周」 |',
+                '| 时间 | 学年 / 月 / 周（默认）/ 自定义四档，档位切换对应日期控件显隐；月、周、自定义可跨学年选择（范围取教务权限数据并集）；档位与日期控件收在「学情来源与统计范围」弹窗顶部的时间条内，筛选栏只回显「时间范围 · 已选 N 份」胶囊，不再直放时间控件；周档胶囊文案为「年 + 第 x 周（起始日期）」（默认周显示 2026年第38周（09-14），结束日由自然周隐含，完整起止区间仅在弹窗周选择器右侧提示），默认档位为「周」，学生追踪-知识点分析的时间筛选与本页同档同周，两处默认值不得各写一套 |',
                 '| 学情来源 | 筛选栏胶囊点开弹窗（XK-12）：顶部设统计时间范围、下方勾选作业 / 考试，一次设定；选择即时生效，取消不回滚；**作业 + 考试合计最多 20 份**，默认选中最近 20 份（两栏合并后按日期从新到旧，同日按列表原序、作业列在前）；数据时效：作业截止到前一天（不含今天），考试以完整学情发布为准 |',
-                '| 掌握程度 | 「设置掌握程度」打开弹窗（XK-12）；档位全校共用，学科组长及以上可写，学科教师 / 班主任为只读查看（悬停提示联系学科组长） |',
+                '| 掌握程度 | 「设置掌握程度」打开弹窗（XK-12）；档位全校共用并同步学生追踪；学科组长及以上可写，学科教师 / 班主任为只读查看（悬停提示联系学科组长） |',
                 '',
                 '> 已知限制：学科切换不重算演示数据。',
                 '> 已知限制：时间档位只改统计区间回显，不改演示周期任务集——周期模块恒为 6 场演示任务（2025-09-28 ~ 2025-12-11），与默认周 2026-W38 不同年，属原型演示数据的固有取舍；接入真实数据后按档位重取任务集。',
@@ -6568,7 +6742,7 @@ init();
         {
             id: 'XK-04', group: 'XK', title: '周期学情概览',
             body: [
-                '位置：学情汇总页签。统计区间 = 当前时间档位区间（默认周 2026-W38 = 09-14 ~ 09-20，与筛选栏胶囊同源），展示纳入任务数（作业/考试分列）。维度口径与维度切换解耦：两卡都不随维度切换，但分母来源不同——达标率取本周期题目挂接集合（定义见 CALC-01 的 `mSet`），即题目上挂接的末级知识点，不是知识树的末级节点；顽固薄弱取全维度末级节点中满足「≥3 场失分率 ≥40%」者，无挂接节点不可能有 3 场失分记录，因而天然不在其中。两卡分母不同源，不得互相推导。',
+                '位置：学情汇总页签。统计区间 = 当前时间档位区间（默认周 2026-W38 = 09-14 ~ 09-20，与筛选栏胶囊同源），展示纳入任务数（作业/考试分列）。维度口径与维度切换解耦：两卡都不随维度切换，且同源于本周期题目挂接集合（定义见 CALC-01 的 `mSet`）——达标率取该集合内掌握度达标的节点占比，顽固薄弱取该集合内满足「≥3 场失分率 ≥40%」者（含能力末级节点）。两卡同源但不可互推：一个看掌握档，一个看连续失分次数。',
                 '',
                 '| 卡 | 口径 |',
                 '| --- | --- |',
@@ -6616,8 +6790,49 @@ init();
                 '- **查看全部知识点**：默认不勾选，仅知识点维度渲染；勾选后目录、树状图、表格、关联图谱显示全部 111 个节点；统计口径（摘要卡、KPI、诊断计数、教学建议）不随开关变化，属统计红线；知识点与能力两个维度的开关状态分别记忆。',
                 '- **树状图（默认）**：节点按掌握度档位着色；暂无证据与未学恒灰（勾选后仍灰，悬停提示证据状态）；有历史得分的按历史得分率着色；底部图例随掌握档位实时生成。',
                 '- **表格**：层级页签「全部/一级/二级/三级」；不显示检测状态列；无本期证据的行数值显示「—」，未知不算未掌握。',
-                '- **关联图谱**：深度一级 / 二级 / 三级（默认）；关系开关 3 项（前置·后续、易混淆、树状结构，仅文字加选中态）；另有标签策略（简洁/自动/全显，控制画布文字说明）、仅看关联、力导向 / 放射布局。画布只渲染知识点节点及其间边，能力、题型、方法、易错点四类关联对象只在节点详情面板的关联清单出现（类型标签 + 引用计数），不占节点也不连边；节点填充色 = 掌握度档位色，断层节点改红色描边 + 红晕 + 加粗线宽（填充仍表掌握度）；断层红边只画有证据的前置关系；统计条只给两个数字「知识点 当前显示数 / 总数」（总数不随目录模块开关变化，目录隐藏模块时只有显示数减少；未检测数量与口径见悬停提示）；点击节点打开详情面板，统计项仅保留「关联关系 / 子节点」，点击分别切换关联清单与直接子节点清单，不展示子孙节点统计；「前后序关联诊断」按钮只在关联关系列表显示，子节点列表不显示。切换知识点时默认回到关联关系列表。',
+                '- **关联图谱**：深度一级 / 二级 / 三级（默认）；关系开关 3 项（前置·后续、易混淆、树状结构，仅文字加选中态）；另有标签策略（简洁 / 自动 / 全显，控制画布文字说明）、仅看关联、力导向 / 放射布局。画布只渲染知识点节点及其间边，能力、题型、方法、易错点四类关联对象只在节点详情面板的关联清单出现，不占节点也不连边（清单显示口径见下节「详情面板关联清单显示口径」）；节点填充色 = 掌握度档位色，断层节点改红色描边 + 红晕 + 加粗线宽（填充仍表掌握度）；断层红边只画有证据的前置关系；统计条只给两个数字「知识点 当前显示数 / 总数」（总数不随目录模块开关变化，目录隐藏模块时只有显示数减少；未检测数量与口径见悬停提示）。',
                 '- **导出**：按当前维度、层级、目录过滤后的同口径数据导出 CSV（带 BOM），含检测状态列。',
+                '',
+                '**详情面板关联清单显示口径**',
+                '',
+                '点击画布节点打开节点详情面板。面板自上而下：层级标签（一级 / 二级 / 三级知识点）+ 节点周期得分率、节点名、层级路径、两个统计项、清单区；节点无本期证据时头部改显「未检测」灰字，未学与已学无证据的悬停文案不同。统计项固定两项——「关联关系 N」与「子节点 N」，同时是清单切换入口；「前后序关联诊断」按钮只在关联关系清单出现，子节点清单不出现；切换节点时默认回到关联关系清单。',
+                '',
+                '关联关系固定 8 组、按序渲染；某组无数据则整组不渲染，组标题后带该组条数。所有关系类型的对端都是知识点，只是分属不同维度（知识点树 / 能力树 / 题库标签），行尾一律取对端自己的周期得分率：',
+                '',
+                '| 分组（按序） | 对端维度 | 行尾得分率 |',
+                '| --- | --- | --- |',
+                '| 1 前置知识 | 知识点树 | 该前置自己的周期得分率 |',
+                '| 2 后续知识 | 知识点树 | 该后续自己的周期得分率 |',
+                '| 3 易混淆知识点 | 知识点树 | 该点自己的周期得分率 |',
+                '| 4 考查能力 | 能力树 | 该能力自己的周期得分率（按能力标签挂接分值加权） |',
+                '| 5 依赖能力 | 能力树 | 同上，取该能力自己的分 |',
+                '| 6 考查题型 | 题库标签 | 恒出「-」 |',
+                '| 7 常用方法 | 题库标签 | 恒出「-」 |',
+                '| 8 易错点 | 题库标签 | 恒出「-」 |',
+                '',
+                '行格式（8 组通用）：',
+                '',
+                '- 一行 = 行首色点 + 名称 + 行尾周期得分率；行内不挂层级或类型标签胶囊，身份由分组标题表达（面板窄，标签会挤压名称）。',
+                '- 行首色点取对端自身掌握情况：无证据恒灰，仅有周期外历史证据时按历史得分率取色（与图谱同口径）；行尾数字按掌握档位着色、保留整数。',
+                '- 得分率位只有两种结果：本期有作答证据 → 数字；本期无证据 / 未学 / 仅有周期外历史证据 → 「-」，三种情形的悬停文案不同。未知 ≠ 未掌握，禁止补 0 或写「未检测」冒充数值。',
+                '- 不出现任何派生均值：「引用它的知识点均分」「关联点均值」不得冒充对端得分率——那是别的维度的分，不是这个对象的表现。',
+                '- 每组最多列 8 行，超出显示「… 及另外 N 项」；统计项计数取全部条数，不受 8 行截断影响。',
+                '- 断层标记只在「前置知识」组判定：当前节点未掌握（<60%）且前置 <70% 时行加红底与「断层」标记（与画布断层红边同源）。',
+                '- 能力行取该能力自己维度的周期得分率，按该能力标签挂接题目的分值加权，时间衰减与知识点同口径。',
+                '- 题库未回传题型 / 方法 / 易错点标签的作答挂接，这三组在真实数据上恒为「-」；不得用关联知识点均分顶替。',
+                '',
+                '点击与空态：',
+                '',
+                '- 点击行选中该对端：知识点或能力 → 换为该对象的详情面板；题型 / 方法 / 易错点不在任何树内 → 只在画布上脉冲高亮，不换面板。',
+                '- 关联关系为空出「该知识点暂未维护关联关系」；子节点为空出「该知识点暂无直接子节点」；未选中节点时面板出「点击图谱中的节点 / 查看知识点关联详情」。',
+                '',
+                '能力详情（能力作为知识点被点开时）：',
+                '',
+                '- 头部为「一级 / 二级 / 三级能力」+ 该能力自己的周期得分率；无题目挂接该能力标签时出「未检测」。',
+                '- 两个统计项：「关联知识点 N」（同一知识点同时挂考查与依赖只计一次）、「子能力 N」。',
+                '- 两个清单「挂接为考查能力的知识点」「挂接为依赖能力的知识点」按关系类型分列，行尾出各知识点自己的周期得分率；同一知识点同时挂两类时两个分组都出现，计数不重复。两个清单都是全量引用集，不等于薄弱子集；规则 6 只看该能力自身得分率，不计算依赖侧薄弱占比。',
+                '- 子能力清单行尾出子能力自己的周期得分率；无子能力出「该能力暂无子能力」。',
+                '- 行点击进入对应详情；能力不在画布上画点画线，因此不提供「前后序关联诊断」入口。',
                 '',
                 '**节点得分率**：按时间衰减加权计算——单场得分率 = 100 − 该场失分率，权重 = 0.5 的（距周期结束天数 ÷ 半衰期 30 天）次幂，加权求和后除以权重之和。完整步骤、数值示例、边界与口径边界见 XK-06A；热力演进累计列用未加权的有效场次算术平均，两者不可互相引用。',
                 '',
@@ -6749,7 +6964,7 @@ init();
                 '| 摘要卡班级 / 年级平均得分率、周期 KPI 平均得分率、稳定度 | 按任务次数的算术平均（不按分值、不加权） |',
                 '| 热力演进单元格 | 单场失分率原值，不做聚合 |',
                 '| 热力演进累计列、顽固判定、最突出短板、结论里的累计失分率 | 有效场次的算术平均，与加权口径互不引用 |',
-                '| 达标率 | 分子为加权得分率达标的末级节点数，分母为 `mSet`（本周期题目挂接的末级知识点，加上关联知识点至少 1 个被挂接的能力末级节点），不是知识树的末级节点 |',
+                '| 达标率 | 分子为集合内加权得分率 ≥ 达标线的节点数，分母为 `mSet`（本周期题目挂接的末级知识点，加上关联知识点至少 1 个被挂接的能力末级节点），不是知识树的末级节点；三档正算，不得反算 |',
                 '',
                 '**口径选择理由与调参**',
                 '',
@@ -6771,8 +6986,8 @@ init();
                 '```',
                 '步骤 1 · 可诊断性过滤（XK-07D）',
                 '   ↓ 剔除缺证据 / 缺关系 / 环路的条目',
-                '步骤 2 · 证据等级 + 规则判定（XK-07B 规则 0~8）',
-                '   ↓ 每条知识点按 8 条规则逐一命中',
+                '步骤 2 · 证据等级 + 规则判定（XK-07B 规则 1~6）',
+                '   ↓ 每条知识点按 6 条规则逐一命中',
                 '步骤 3 · 冲突消解 + 结构化输出（XK-07C）',
                 '   ↓ 同一知识点命中多规则时取唯一主因',
                 '最终 → 6 个标签分面展示 + 计数徽章一屏总览',
@@ -6786,12 +7001,12 @@ init();
                 '',
                 '| 标签 | 一句话说明 | 判定口径 | 处置要点 | 对应规则 |',
                 '| --- | --- | --- | --- | --- |',
-                '| 顽固薄弱 | 哪些错一直没解决 | 同一考核项 ≥3 次不同任务失分率 ≥40%；强度三档：≥5 次结构性 / 3~4 次疑似 / 1~2 次观察（观察项进折叠区）；**病型五类本期不做** | 全部顽固项共用一条**统一建议**：同点巩固 + 变式复测（复盘失分题 → 变式复测 2 次 → 失分率降到 40% 以下退出名单）；安排**专项课**而非重复讲题 | 规则 2 |',
+                '| 顽固薄弱 | 哪些错一直没解决 | 同一考核项 ≥3 次不同任务失分率 ≥40%；强度两档：≥5 次结构性 / 3~4 次疑似（不设 1~2 次档：命中门槛已要求 ≥3 次失分，该区间不可达）；**病型五类本期不做** | 全部顽固项共用一条**统一建议**：同点巩固 + 变式复测（复盘失分题 → 变式复测 2 次 → 失分率降到 40% 以下退出名单）；安排**专项课**而非重复讲题 | 规则 2 |',
                 '| 前序断层 | 薄弱点的根因在前置链哪一层 | 目标掌握度 <60% 且前置链存在 <70% 节点；回溯三道闸：≤5 层 / 跨一级模块停 / 环路跳过；近 5 层无 <70% 改判「本点自身问题」；前置关系未建 = 第四态，不归因 | 计数「有根因数/断层总数」；**直接讲薄弱点无效，须先补前序**；点击进关联诊断抽屉 | 规则 3 |',
                 '| 易混淆 | 学生把两个概念用反了 | 题库易混淆关系无序对归一；三级：双弱=概念未建立 / 单弱=方向性混淆 / 双强同题失分=情境性混淆；混淆链 ≤3；命中 ≥5 人次才出卡 | 双弱→讲新知、单弱→课中辨析、双强→换情境复测 | 规则 4 |',
-                '| 题型易错点 | 在哪一步错（比错因更细） | 阅卷标注 + 客观题规则匹配；点级=知识点×易错点=讲评落点；同一易错点 ≥3 个知识点命中→跨点习惯性错误 | 可直接写进讲评稿；跨点项升级为审题/书写规范，不逐点重复 | 规则 5 |',
+                '| 易错点 | 在哪一步错（比错因更细） | 阅卷标注 + 客观题规则匹配；点级=知识点×易错点=讲评落点；同一易错点 ≥3 个知识点命中→跨点习惯性错误 | 可直接写进讲评稿；跨点项升级为审题/书写规范，不逐点重复 | 规则 5 |',
                 '| 前后序证据 | 周期内多任务汇总的作答证据 | 四态映射证据等级：本期已考查 A/B、仅历史 C、暂无证据与未学 D；D 级禁止出结论 | **无作答证据=未知**，不得标为未掌握；点节点标签打开关联诊断抽屉 | 规则 1 |',
-                '| 已达标 | 正向展示：存量认可+增量可见 | 统计单元=题目挂接的末级节点；达标线=「掌握」档下限（3档/4档均 80%）；有效场次 ≥2 方判达标，1 场标「待确认」；进步=首末提升 ≥8pp | 转「减量维持」，每周 1 次滚动复测；新晋达标换情境再测一次 | — |',
+                '| 已达标 | 正向展示：存量认可+增量可见 | 统计单元=题目挂接的末级节点；达标线=「掌握」档下限（3档/4档均 80%）；有效场次 ≥3 场方可判达标，1~2 场标「待确认」并进折叠带、不计入已达标数（同规则 1 的 A 级门槛）；进步=首末提升 ≥8pp | 转「减量维持」，每周 1 次滚动复测；新晋达标换情境再测一次 | — |',
                 '',
                 '## 三、顽固薄弱处置（规则 2 展开）',
                 '',
@@ -6803,7 +7018,8 @@ init();
                 '| --- | --- | --- |',
                 '| 结构性 | ≥5 次不同任务失分率 ≥40% | 优先排专项课，统一建议为主路径 |',
                 '| 疑似 | 3~4 次 | 统一建议照常执行，同时核查前置关系标注是否缺失 |',
-                '| 观察 | 1~2 次 | 进折叠区，不出独立建议 |',
+                '',
+                '不设 1~2 次档：顽固命中门槛已要求 ≥3 次不同任务失分，1~2 次区间不可达；原先单列的「观察」档已删除。',
                 '',
                 '**判定红线**：无证据节点不参与比较（未知 ≠ 薄弱，也不等于达标）；统一建议对所有顽固项一视同仁，不得因缺少关系标注而拒绝给建议，也不得反过来由建议推断病型。',
                 '',
@@ -6816,7 +7032,7 @@ init();
                 '- **关系覆盖度**（内部指标）= 有作答证据且已建前置关系的知识点 ÷ 有作答证据知识点；能力维度不适用；仅用于断层卡第四态与教学建议降级判定。',
                 '- **标签禁用**：计数为 0 的标签灰显但仍可点击查看空态文案，不得隐藏。',
                 '',
-                '> 诊断所依赖的关系体系与画布边界见 **XK-07A**；8 条规则的完整算法见 **XK-07B**；多规则冲突时如何取唯一主因见 **XK-07C**；无法诊断时的原因码与页面处理见 **XK-07D**。'
+                '> 诊断所依赖的关系体系与画布边界见 **XK-07A**；6 条规则的完整算法见 **XK-07B**；多规则冲突时如何取唯一主因见 **XK-07C**；无法诊断时的原因码与页面处理见 **XK-07D**。'
             ].join('\n')
         },
         {
@@ -6832,7 +7048,7 @@ init();
                 '| --- | --- | --- | --- |',
                 '| 链条（深链） | 入度≈1，可无限延伸 | 路径回溯（断层链、补链顺序） | — |',
                 '| 二元（无序对） | 两个节点互为混淆 | 成对辨析、混淆链 | 不能做路径回溯 |',
-                '| 枢纽（多对多） | 一个方法/能力连多个知识点 | 聚合统计（方法薄弱、能力短板） | 不能画在图谱上 |',
+                '| 枢纽（多对多） | 一个方法/能力连多个知识点 | 聚合统计（能力短板；方法诊断本期不做） | 不能画在图谱上 |',
                 '| 标签（多对一） | 一个易错点贴多个知识点 | 聚合计数（跨点习惯错误） | 不能画在图谱上 |',
                 '',
                 '## 二、21 类关系明细',
@@ -6841,50 +7057,50 @@ init();
                 '| --- | --- | --- | --- | --- |',
                 '| 前置 / 后续知识 | 915 / 915 | 链条 | 实线箭头 | 断层回溯、补链顺序、达标后衔接 |',
                 '| 易混淆知识点 | 149 | 二元 | 虚线 | 成对辨析、混淆链 |',
-                '| 知识点考查能力 / 依赖能力 | 919 / 902 | 汇聚（4 个能力） | 不上图 | 能力短板（可测）/ 能力根因（待补测） |',
-                '| 知识点解题方法 | 401 | 枢纽 | 不上图 | 方法聚合诊断 |',
+                '| 知识点考查能力 / 依赖能力 | 919 / 902 | 汇聚（4 个能力） | 不上图 | 能力短板（自身得分率，可测）/ 待补测（本周期无证据） |',
+                '| 知识点解题方法 | 401 | 枢纽 | 不上图 | 方法关系仅作详情清单展示，方法诊断本期不做 |',
                 '| 常见易错知识点 | 26 | 标签 | 不上图 | 讲评落点、跨点习惯错误 |',
-                '| 前置 / 后续 / 易混淆题点 | 92 / 92 / 36 | 链条 + 二元 | 实线箭头 + 虚线 | 考法顺序与考法辨析 |',
-                '| 题点的方法 / 易错 / 能力类 | 59 / 69 / 134 / 111 | 枢纽 / 标签 / 汇聚 | 不上图 | 考法画像（启用范围待确认） |',
-                '| 微题点的方法 / 易错 / 能力类 | 23 / 18 / 40 / 36 | 枢纽 / 标签 / 汇聚 | 不上图 | 变式覆盖与变式方法（只做聚合不做链路） |',
+                '| 前置 / 后续 / 易混淆题点 | 92 / 92 / 36 | 链条 + 二元 | 实线箭头 + 虚线 | 题点先后顺序与题点易混辨析（路径型结论本期不做） |',
+                '| 题点的方法 / 易错 / 能力类 | 59 / 69 / 134 / 111 | 枢纽 / 标签 / 汇聚 | 不上图 | 题点画像（不图上，仅详情清单；诊断本期不做） |',
+                '| 微题点的方法 / 易错 / 能力类 | 23 / 18 / 40 / 36 | 枢纽 / 标签 / 汇聚 | 不上图 | 微题点画像（本期不做，二期再定） |',
                 '| 前置 / 后续 / 易混淆微题点 | 21 / 21 / 11 | 链条 + 二元 | 不上图 | 当前演示未展示；真实微题点证据满足对应规则后才出断层或易混诊断 |',
+                '',
+                '**能力关系的读法（2026-11-24 明确）**：依赖能力 / 考查能力两类关系的对端就是「能力」——能力是知识点维度之一（能力树的末级或父节点），不是标签、不是另一类对象。因此能力与知识点同权：点开能力行即进入能力详情，面板反向列出挂接它的知识点；能力不在画布上画点画线（画布仍只画知识点之间的前置 / 易混淆与层级结构边）。清单的显示口径、行格式、计数与空态见 XK-06「详情面板关联清单显示口径」，本节不复述。',
                 '',
                 '## 三、画布-诊断一致性（红线）',
                 '',
                 '**核心原则：画布上看得见的关系才能生成路径型结论。**',
                 '',
-                '- 只有画线类关系（知识点与题点的前后置、易混淆）可生成路径型结论（断层链、混淆对、考法链）',
+                '- 只有画线类关系（知识点与题点的前后置、易混淆）可生成路径型结论（断层链、混淆对）',
                 '- 方法 / 能力 / 易错点属「仅详情类」，只能出现在清单、聚合卡与教学建议中',
                 '- 每条结论须列出所引用关系（类型 + 对象 + 关系度）并可点回图谱',
                 '- **宣称画布可见却引用非画线关系 = 实现缺陷**',
                 '',
                 '## 四、诊断单元与标签裁剪矩阵',
                 '',
-                '一期固定「知识点」单元，6 个标签结构不变；**病型五类本期不做**（方法 / 能力洞察不靠病型分组承载）。二期扩展 5 个单元后，按矩阵裁剪标签：',
+                '一期固定「知识点」单元，6 个标签结构不变；**病型五类本期不做**（能力洞察不靠病型分组承载）。二期扩展 4 个单元后，按矩阵裁剪标签：',
                 '',
                 '| 诊断类型 | 知识点 | 题点 | 微题点 | 解题方法 | 关键能力 |',
                 '| --- | --- | --- | --- | --- | --- |',
-                '| 顽固 / 薄弱 | ✓ | ✓ | ✓ | ✓（方法薄弱） | ✓（能力短板） |',
+                '| 顽固 / 薄弱 | ✓ | ✓ | ✓ | ✗（方法诊断本期不做） | ✓（能力短板） |',
                 '| 前序断层 | ✓ | ✓（题点前置） | ✗ | ✗ | ✗ |',
                 '| 易混淆 | ✓ | ✓（题点混淆） | ✗ | ✗ | ✗ |',
-                '| 方法聚合 | ✓ | 视启用范围 | ✓ | 自身 | ✓ |',
-                '| 能力聚合 | ✓ | 视启用范围 | ✓ | ✓ | 自身 |',
+                '| 能力聚合 | ✓ | 视启用范围 | ✓ | ✗ | 自身 |',
                 '| 易错点聚合 | ✓ | 视启用范围 | ✓ | ✗ | ✗ |',
-                '| 考法覆盖 | ✓ | 自身 | 自身 | ✓ | ✓ |',
-                '| 已达标 | ✓ | ✓ | ✓ | ✓ | ✓ |',
+                '| 已达标 | ✓ | ✓ | ✓ | ✗ | ✓ |',
                 '',
                 '不适用项显示「该单元不提供此类诊断」并禁用，不得显示 0 与「本班无…」。'
             ].join('\n')
         },
         {
-            id: 'XK-07B', group: 'XK', title: '诊断规则集（8 条）',
+            id: 'XK-07B', group: 'XK', title: '诊断规则集（6 条）',
             body: [
-                '> **本节回答**：8 条规则分别判什么、怎么算、参数是多少。规则按编号串行执行，规则 0 是前置门卫。',
+                '> **本节回答**：6 条规则分别判什么、怎么算、参数是多少。规则按编号串行执行，规则 0 是前置门卫。',
                 '',
                 '## 执行顺序',
                 '',
                 '```',
-                '规则 0（可诊断性门卫）→ 规则 1（证据等级过滤）→ 规则 2~8（逐条判定）',
+                '规则 0（可诊断性门卫）→ 规则 1（证据等级过滤）→ 规则 2~6（逐条判定）',
                 '                                                         ↓',
                 '                                              命中多条 → XK-07C 冲突消解',
                 '```',
@@ -6897,35 +7113,37 @@ init();
                 '',
                 '| 等级 | 定义 | 允许的结论 | 页面表现 |',
                 '| --- | --- | --- | --- |',
-                '| A | 周期内 ≥3 场直接考查 | 可定性（顽固/断层/达标） | 正常显示 |',
-                '| B | 1~2 场直接考查 | 只出「疑似」 | 进折叠区 |',
+                '| A | 周期内 ≥3 场直接考查 | 可定性（顽固/断层/达标/能力短板） | 正常显示 |',
+                '| B | 1~2 场直接考查 | 只出「疑似」（规则 6（能力判定）的疑似带即此档，不参与主因排序） | 进折叠区 |',
                 '| C | 仅有历史证据 | 只做趋势参考 | 不进主清单 |',
                 '| D | 无作答证据（暂无/未学） | **禁止出结论** | 只能「待诊断」 |',
                 '',
-                '## 规则 2~8 · 判定口径',
+                '## 规则 2~6 · 判定口径',
                 '',
                 '| # | 规则名 | 命中条件与算法 | 输出 |',
                 '| --- | --- | --- | --- |',
-                '| 2 | 顽固薄弱 | 同一考核项 ≥3 次不同任务失分率 ≥40% 且证据等级 A；强度：≥5 次结构性 / 3~4 次疑似 / 1~2 次观察；**病型五类本期不做**，所有顽固项共用一条统一建议（同点巩固 + 变式复测：复盘失分题 → 变式复测 2 次 → 失分率降到 40% 以下退出名单） | 强度 + 统一建议 |',
+                '| 2 | 顽固薄弱 | 同一考核项 ≥3 次不同任务失分率 ≥40% 且证据等级 A；强度两档：≥5 次结构性 / 3~4 次疑似（不设 1~2 次档：命中门槛已要求 ≥3 次失分，该区间不可达）；**病型五类本期不做**，所有顽固项共用一条统一建议（同点巩固 + 变式复测：复盘失分题 → 变式复测 2 次 → 失分率降到 40% 以下退出名单） | 强度 + 统一建议 |',
                 '| 3 | 前序断层 | 目标掌握度 <未掌握阈值（60%）且前置链存在 <70% 节点；闸 1：最多回溯 5 层，超限标「超过 5 层未定位根因」；闸 2：跨一级模块只提示不归因；闸 3：环路 visited 保护、节点只记一次；兜底：近 5 层无 <70% 改判「本点自身问题」 | 根因节点 + 链深 + 归因态 |',
                 '| 4 | 易混淆 | 题库 149 对单向存储→先无序对归一去重（否则命中数少一半）；双弱=两侧均 <阈值；单弱=一侧 <阈值另一侧达标；双强=两侧达标但同题失分；相邻对同时命中→混淆链（≤3）；命中 ≥5 人次才出卡 | 混淆级别 + 对/链 |',
                 '| 5 | 易错点 | 点级=知识点×易错点→讲评落点；同一易错点 ≥3 个知识点命中→跨点习惯性错误→进「审题/书写规范」，不再逐点重复 | 点级清单 + 跨点标记 |',
-                '| 6 | 方法聚合 | 方法掌握=关联知识点得分率算术平均（不按关系度加权）；方法薄弱=关联点 ≥2 且（顽固或断层占比 ≥50%，或掌握 <65%）；仅被 1 个知识点引用的方法不单独诊断；覆盖 ≥5 个知识点→建议连排 2 课时。**本期仅后台聚合，不出建议**（方法专题依赖病型，已停用） | 方法薄弱清单 |',
-                '| 7 | 能力二分 | 考查侧：关联知识点 ≥8 且平均得分率 <65%→能力短板（可测）；依赖侧：薄弱点占比 ≥40% 且无考查边→标「待补测」，**禁止直接判薄弱**；同一知识点-能力同时存在依赖与考查（227 对）只计一次 | 短板/待补测 |',
-                '| 8 | 考法覆盖 | 考法缺口=已考且 <60% 的题点占比 ≥40%；未验证考法=从未考查占比 ≥50%，不得据此判掌握或薄弱；题点与知识点无直属边（同名仅 6/146），须先补映射；**一期不上线**，标「待数据补齐」 | （一期禁用） |',
+                '| 6 | 能力判定 | 考查能力、依赖能力两类关系的对端都是能力，一律取该能力**自身的周期得分率**（按题目能力标签挂接题目的分值加权，时间衰减与知识点同口径），不计算任何「关联知识点薄弱点占比」；能力短板=该能力自身周期得分率<未掌握阈值（默认 60%，随档位联动）且证据等级 A（≥3 场直接考查）；等级 B（1~2 场）只出「疑似短板」，进折叠带，不作结论；关联知识点数量（≥8）只作覆盖度提示与并列排序，不参与判定；本周期无作答证据 → 标「待补测」（数据缺口，不是薄弱结论）；同一知识点-能力同时存在依赖与考查（227 对）只计一次 | 短板 / 疑似 / 待补测 |',
                 '',
                 '## 参数总表（默认值，均可后台调整）',
+                '',
+                '> 本表是全站阈值唯一出处 CALC-01 §3 的镜像，两处出现差异时以 CALC-01 §3 为准并立即同步。方法与考法两条诊断本期不做，相关参数已随规则下线。',
                 '',
                 '| 参数 | 默认值 | 参数 | 默认值 |',
                 '| --- | --- | --- | --- |',
                 '| 顽固次数 / 失分率阈值 | 3 次 / 40% | 结构性强度 | ≥5 次 |',
-                '| 断层目标 / 前置阈值 | 60% / 70% | 断层回溯层数 | 5 层 |',
-                '| 易混出卡门槛 | 5 人次 | 方法聚合最少点 | 2 个 |',
-                '| 方法薄弱占比 / 掌握阈值 | 50% / 65% | 能力聚合最少点 / 短板阈值 | 8 个 / 65% |',
-                '| 跨点习惯错误 | ≥3 个知识点 | 考法缺口 / 未验证占比 | 40% / 50% |',
-                '| 达标线 | 80%（3档/4档相同） | 进步阈值 | 8 个百分点 |',
-                '| 病型·基础型前置层数 / 薄弱线 | ≤2 层 / 70%（**本期不生效**） | 病型·方法型最少点 / 薄弱占比 / 掌握阈值 | 2 个 / 50% / 65%（**本期不生效**） |',
-                '| 病型·习惯型覆盖知识点数 | ≥3 个（含本点，**本期不生效**） | 病型·概念型对级别 | 双弱 / 单弱（双强不判，**本期不生效**） |'
+                '| 断层目标 / 前置阈值 | 未掌握阈值 60% / 70% | 断层回溯层数 | 5 层 |',
+                '| 易混出卡门槛 | 5 人次 | 易混链长 | ≤3 对 |',
+                '| 能力自身得分率阈值 | 未掌握阈值 60%（随档位联动） | 能力覆盖度提示线 | 8 个知识点 |',
+                '| 能力短板证据门槛（A 档） | ≥3 场直接考查 | 能力疑似带（B 档） | 1~2 场，只进折叠带 |',
+                '| 跨点习惯错误 | ≥3 个知识点 | 上升错因阈值 | 3 个百分点 |',
+                '| 达标线 | 「掌握」档下限：80%（3 档与 4 档相同，90% 是 4 档「优秀」下限、不作达标线） | 进步阈值 | 8 个百分点 |',
+                '| 断层清单条数上限 | 5 项 | 病型·基础型前置层数 / 薄弱线 | ≤2 层 / 70%（**本期不生效**） |',
+                '| 病型·方法型最少点 / 薄弱占比 / 掌握阈值 | 2 个 / 50% / 65%（**本期不生效**） | 病型·习惯型覆盖知识点数 | ≥3 个（含本点，**本期不生效**） |',
+                '| 病型·概念型对级别 | 双弱 / 单弱（双强不判，**本期不生效**） | — | — |'
             ].join('\n')
         },
         {
@@ -6935,7 +7153,7 @@ init();
                 '',
                 '## 一、为什么需要冲突消解',
                 '',
-                '一个知识点可能同时命中断层、易混、顽固、方法、能力。如果全部平铺，教师会看到矛盾建议（「先补前置」与「直接讲本点」并存）。因此**每个知识点只输出一条主因**，其余折叠为「同时命中 N 项」。',
+                '一个知识点可能同时命中断层、易混、顽固、能力。如果全部平铺，教师会看到矛盾建议（「先补前置」与「直接讲本点」并存）。因此**每个知识点只输出一条主因**，其余折叠为「同时命中 N 项」。B 级疑似结论不参与主因排序，一律进折叠带；只有 A 级结论可争夺主因。若某知识点全部命中都是 B 级（1~2 场）而凑不出任何 A 级结论，主因位留空并显示「疑似（证据不足）」，疑似项全部进折叠带，不生成教学动作、不计入建议条数。',
                 '',
                 '## 二、优先级顺序（取第一条命中作主因）',
                 '',
@@ -6945,9 +7163,9 @@ init();
                 '| 2 | 易混淆（单弱） | 概念方向错时刷题无效——辨析优先于练习 |',
                 '| 3 | 顽固薄弱（本期不区分病型） | 统一建议唯一，不存在「按病型给不同动作」的分歧 |',
                 '| 4 | 能力短板 | 跨知识点专项，优先级低于单点问题 |',
-                '| 5 | 考法未验证 | 先补测再判断，不直接给教学动作 |',
-                '| 6 | 已达标 | 减量维持，非问题项 |',
-                '| 7 | 补标注 | 数据治理，不计入教学动作条数 |',
+                '| 5 | 已达标 | 减量维持，非问题项 |',
+                '| 6 | 补标注 | 数据治理，不计入教学动作条数 |',
+                '| — | 主因留空 ·「疑似（证据不足）」 | 仅 B 级（1~2 场）命中、凑不出 A 级结论时，主因位显示该文案，不把疑虑写成结论；此态不出动作 |',
                 '',
                 '## 三、诊断条目统一输出字段',
                 '',
@@ -6968,12 +7186,11 @@ init();
                 '- 易混淆为单向存储→须先归一，否则命中数少一半',
                 '- 关系度为类型常量（前后置与考查 90、依赖与方法与易错 85、易混淆 95）→不可进评分公式，只用于并列排序',
                 '- 前置链存在 1 个 45 节点环（导数极值链与不等式链）→须断环并 visited 保护',
-                '- 题点与知识点无直属边→规则 8 不得上线',
                 '',
                 '## 五、分期',
                 '',
-                '- **一期**：不改 6 标签 UI，落地规则 1~5 与冲突消解、建议优先级',
-                '- **二期**：随诊断单元切换，方法与能力独立标签，规则 8 上线',
+                '- **一期**：不改 6 标签 UI，落地规则 1~6 与冲突消解、建议优先级；规则 6（能力判定）本期生效，但不出独立标签，结论只进教学建议与折叠带',
+                '- **二期**：随诊断单元切换，能力独立标签。方法与考法两条诊断本期不做（方法专题依赖病型，考法依赖题点—知识点映射）',
                 '- **一致性红线**：教学建议分类与底部综合建议必须同源，两处数字不一致即缺陷'
             ].join('\n')
         },
@@ -6991,7 +7208,7 @@ init();
                 '| 级别 | 含义 | 举例 | 页面处理 |',
                 '| --- | --- | --- | --- |',
                 '| 单元级 | 该分析单元不提供此类诊断 | 微题点的前序断层、未开通的题点方法 | 标签禁用 +「该单元不提供此类诊断」，不显示 0 |',
-                '| 规则级 | 整条规则所需关系类型未开通 | 规则 8 无映射边 | 模块置「规则未启用」，从覆盖率分母剔除 |',
+                '| 规则级 | 整条规则所需关系类型未开通 | 题点与知识点无直属映射边 | 模块置「规则未启用」，从覆盖率分母剔除 |',
                 '| 条目级 | 个别知识点缺边/边失效/成环/无证据 | 某知识点无前置关系 | 灰底 + 原因徽章 + 悬停说明，不显示得分率 |',
                 '',
                 '## 三、条目级原因码（按责任方分组）',
@@ -7007,7 +7224,7 @@ init();
                 '| REL-CYCLE 存在环路 | 环检测命中（现有 1 个 45 节点环） | 存在环路，根因不唯一，仅显示环上最弱节点 | 数据侧断环 |',
                 '| REL-ONEWAY 单向异常 | 易混淆只存单向，归一后对端缺失 | 关系数据异常（单向），已按无序对兜底 | 数据修复 |',
                 '| REL-OFF 类型未开通 | 学科关系范围配置 | 该学科未开通此关系，不提供此类诊断 | 产品确认 |',
-                '| MAP-MISSING 映射缺失 | 规则 8 无可用边 | 考法映射缺失，本规则不适用 | 补映射（一期不上线） |',
+                '| MAP-MISSING 映射缺失 | 题点与知识点无直属映射边 | 映射缺失，相关规则不适用 | 补映射（本期不做） |',
                 '',
                 '### 教学侧（教师负责补任务/补测）',
                 '',
@@ -7054,32 +7271,69 @@ init();
         {
             id: 'XK-08', group: 'XK', title: '错因结构分析',
             body: [
-                '- **堆叠柱状图**：各次任务的失分归因占比（错因 × 任务）；图例可点击显隐系列；悬停某一段时高亮该错因在所有任务上的段落，并显示各次占比 + 周期均值 + 首尾占比变化。',
-                '- **错因体系动态化**：错因种类随学科或题目扩展，不写死枚举；配色走色板循环兜底；**干预文案与错因名称 / 学科完全解耦**，仅由方向、幅度、末次占比、逐场单调性四个通用指标驱动（见下表），新增错因种类无需补文案。教学建议只取首尾差 ≥3 个百分点且上升的错因。',
-                '- **限制**：仅智批作业支持错因分析。',
+                '- **堆叠柱状图**：横向 100% 堆叠，一条横柱一次任务，段长 = 该错因占该次任务全部失分的比例，每条合计 100%。',
+                '- **悬停**：停在任一段上，高亮该错因在所有场次的段、淡化其余；气泡给出该错因的周期均值、Δ 徽章和逐场占比，当前场次那一行加亮。图例只作说明，不能点击显隐。',
+                '- **配色**：错因种类随题库扩展，颜色优先取题库定义，未定义的按色板循环取色，柱段、气泡、关键发现三处同源。',
                 '',
-                '**关键发现规则**（与维度无关，页面初始化渲染一次）',
+                '关键发现只回答两件事：本周期失分原因的构成变没变，变的那几条该先做什么。它不随维度筛选变化，初始化时算一次；演示用的是内置矩阵（6 场 × 6 种错因），不是真实数据。',
                 '',
-                '| 步骤 | 规则 |',
-                '| --- | --- |',
-                '| 取数 | 逐错因取两个口径：① **首末两点**＝矩阵首行（最早任务）与末行（最近任务），算 Δ＝末次−首次（1 位小数），只决定升降、幅度、显著性与红/绿；② **逐场序列**＝该错因在周期内每次任务的占比（与堆叠柱状图同源），只决定趋势形态（逐场持续 / 波动） |',
-                '| 显著迁移 | Δ 绝对值 ≥3 个百分点判为显著迁移，按绝对值降序逐条展示；上升红色、下降绿色 |',
-                '| 基本稳定 | Δ 绝对值 <3 归入一条蓝色汇总，注明错因结构未发生明显迁移；其中末次占比 ≥30% 者追加「高位稳定」句：建议纳入常态讲评，不因「未迁移」而忽略 |',
-                '| 单条结构 | 错因名 + 「首次占比 → 末次占比（Δ）」+ 通用干预文案；错因名只作数据展示，不进入文案模板 |',
-                '| 首末 vs 逐场分工 | 显著迁移判定（Δ 绝对值 ≥3）与红/绿着色**仅用首末两点**；方向短语的「逐场持续 / 波动」**额外用逐场序列的相邻差分**。二者同源于错因矩阵，不得仅凭首末两点推断波动 |',
+                '**一、取数：每个错因算四个量**',
                 '',
-                '- **波动如何计算**：设逐场序列 s(1)…s(n)（n＝周期任务数），相邻差分 d(i)＝s(i+1)−s(i)。全部 d(i)≥0 为「逐场不降」、全部 d(i)≤0 为「逐场不升」；存在反号差分即为「波动」。方向短语＝Δ 符号（首末）× 单调性（逐场）的四态组合；仅 Δ 绝对值 ≥3 的显著项才展示方向短语。n<2 时无相邻差分，按单调处理（此时 Δ＝0 亦不显著）。',
+                '| 量 | 怎么算 | 用途 |',
+                '| --- | --- | --- |',
+                '| 首次占比 | 矩阵第一行（最早场次）中该错因的占比 | 与末次占比配对求 Δ |',
+                '| 末次占比 | 矩阵最后一行（最近场次）中该错因的占比 | 求 Δ；另在「高位」判断里单独使用 |',
+                '| Δ | 末次减首次，四舍五入保留 1 位小数，展示带正负号 | 定升降、定是否成条、定红绿 |',
+                '| 逐场序列 | 该错因在各场次的占比按时间先后排列 | 只定方向短语说「持续」还是「波动」 |',
                 '',
-                '**干预文案生成规则**（通用模板，与错因名称 / 学科无关；阈值：急升 Δ≥6、高位末次 ≥30%、低位末次 ≤10%）',
+                '矩阵按时间先后排，首行最早、末行最近，取数与柱子的上下位置无关。首末两点只说明变没变，逐场序列才说明怎么变，不能只用首末两点推中间有没有反复。',
                 '',
-                '| 判定 | 文案结构 |',
-                '| --- | --- |',
-                '| 方向短语 | Δ 符号（首末）× 逐场单调性（全序列相邻差分）四态：Δ>0 且逐场不降→「占比逐场持续上升」；Δ>0 但存在相邻回落→「占比波动上行」；Δ<0 且逐场不升→「占比逐场稳步下降」；Δ<0 但存在相邻反弹→「占比波动回落」。单调性依据逐场序列而非首末两点 |',
-                '| 上升·急升（Δ≥6，优先） | 方向短语 + 「升幅达 Δ 个百分点」+ 先复盘近期任务该错因典型题、定位共性触发条件，再安排专项干预 |',
-                '| 上升·高位（Δ<6 且末次 ≥30%） | 方向短语 + 列为本周期首要干预错因 + 短时高频专项讲练 + 下周期复测验证 |',
-                '| 上升·常规 | 方向短语 + 短时、高频率针对性讲练 + 下周期复测验证是否退出上升名单 |',
-                '| 下降·低位（末次 ≤10%，优先） | 方向短语 + 干预见效、转滚动观察 + 课时让给上升错因 |',
-                '| 下降·常规 | 方向短语 + 保持当前干预节奏并持续观察、防止反弹 |'
+                '**二、分拣：成条还是合并**',
+                '',
+                '| 归类 | 条件 | 页面输出 |',
+                '| --- | --- | --- |',
+                '| 显著迁移 | Δ 绝对值 ≥3 个百分点 | 单独成行，按 Δ 绝对值从大到小排；Δ 为正红色、为负绿色 |',
+                '| 基本稳定 | Δ 绝对值 <3 个百分点 | 合并为一条蓝色汇总，明细见下 |',
+                '',
+                '- 成条行的固定结构：错因名 + 首次占比 → 末次占比（加粗）+ Δ 徽章（如 +9%、-7%）+ 一行处置句。错因名只作数据展示，不写进文案句子。',
+                '- 汇总文案：「基本稳定：A、B 的占比变化均在 ±3% 以内，错因结构未发生明显迁移。」名单按错因体系当前顺序用顿号拼接，不按 Δ 或末次排序。',
+                '- 汇总内若有错因末次占比 ≥30%，追加：「其中 A、B 末次占比仍 ≥30%，属高位稳定：建议纳入常态讲评，不因「未迁移」而忽略。」',
+                '',
+                '**三、方向短语（四态）**',
+                '',
+                '| 方向 | 逐场走势 | 短语 |',
+                '| --- | --- | --- |',
+                '| 上升 | 一路不降 | 占比逐场持续上升 |',
+                '| 上升 | 中途有回落 | 占比波动上行 |',
+                '| 下降 | 一路不升 | 占比逐场稳步下降 |',
+                '| 下降 | 中途有反弹 | 占比波动回落 |',
+                '',
+                '单调性按 Δ 的方向单向校验：上升项要求每一步相邻差 ≥0，持平算不降，出现任一步回落即判波动；下降项对称。只有 1 场任务时无差分可比，按波动处理，但此时 Δ 必为 0，不会成条，页面上看不到这种措辞。',
+                '',
+                '**四、处置句（只对成条的错因）**',
+                '',
+                '方向短语在前、处置句在后，两段拼成完整一句。',
+                '',
+                '| 分支 | 条件 | 方向短语之后的原文 |',
+                '| --- | --- | --- |',
+                '| 急升 | Δ ≥6 个百分点 | 「，升幅达 Δ 个百分点：建议先复盘近期任务中该错因的典型题、定位共性触发条件，再安排专项干预」 |',
+                '| 高位 | Δ 为正且 <6，末次 ≥30% | 「且末次占比已 ≥30%：建议列为本周期首要干预错因，短时高频专项讲练 + 下周期复测验证」 |',
+                '| 上升常规 | Δ 为正且 <6，末次 <30% | 「：建议安排短时、高频率的针对性讲练，并在下周期复测验证是否退出上升名单」 |',
+                '| 低位 | Δ 为负，末次 ≤10% | 「且末次占比已 ≤10%：干预见效，转为滚动观察，把课时让给上升错因」 |',
+                '| 下降常规 | Δ 为负，末次 >10% | 「：保持当前干预节奏并持续观察，防止反弹」 |',
+                '',
+                '- 命中顺序：上升侧先试急升、再高位、最后上升常规；下降侧先试低位、再下降常规。急升与高位同时满足时只出急升。',
+                '- 两段都由通用指标生成，不含错因名与学科名，换学科、新增错因种类都不用补文案。',
+                '',
+                '**五、边界**',
+                '',
+                '- **区间补全**：上升常规实际覆盖 3 ≤ Δ <6，下降常规实际覆盖 Δ ≤ -3 且末次 >10%；Δ 绝对值在 1 到 2 的错因进蓝色汇总，拿不到这两条文案。',
+                '- **Δ 为 0**：一律进基本稳定（实现上落下降侧，但不成条、不出文案）。',
+                '- **30% 有两个身份**：分支里的「高位」给处置建议，汇总里的「高位稳定」只提醒别忽略，两处文案不互用。',
+                '- **场次口径**：矩阵覆盖周期内全部场次，含考试，不按作业 / 考试过滤；只有 1 场任务时首末同值，Δ=0，全部进基本稳定。',
+                '- **与教学建议不是同一套**：教学建议的限时短训只取 Δ ≥3 的上升项、按 Δ 降序，文案固定写「占比持续上升」，不套本节四态——逐场有波动的错因在那里同样写成持续上升。',
+                '',
+                '> 用演示数据验一遍：计算失误 28→37（Δ+9，逐场 28/30/32/33/35/37 一路不降）走急升；概念混淆 26→19（Δ-7，末次 19%）、审题不清 16→12（Δ-4，末次 12%）走下降常规；方法选择 14→14、书写规范 10→12（Δ+2）、未作答 6→6 进基本稳定，末次都低于 30%，不触发高位稳定句。'
             ].join('\n')
         },
         {
@@ -7093,12 +7347,12 @@ init();
                 '| --- | --- |',
                 '| 顽固薄弱名单 | 按当前维度热力数据：同一考核项在 ≥3 次不同任务中失分率 ≥40%；按各次平均失分率降序 |',
                 '| 前序断层清单 | 知识点树二级及以下节点（一级模块不入）中掌握度 <60% 且有本周期或历史作答证据者；按掌握度升序，最多 5 项 |',
-                '| 根因回溯 | 对每个断层项沿前置链回溯：取有作答证据且掌握度最低的前置继续上溯，该前置掌握度 ≥70% 即停，最多 8 层；链上除起点外存在 <70% 的薄弱节点即判「根因在前序」，取最深层薄弱节点为根因；暂无作答证据的前置只记为断点，不判薄弱 |',
+                '| 根因回溯 | 对每个断层项沿前置链回溯：取有作答证据且掌握度最低的前置继续上溯，该前置掌握度 ≥70% 即停，最多 5 层（与 XK-07B 规则 3 的制动闸、CALC-01 §3「断层回溯层数」同一口径，超限标「超过 5 层未定位根因」）；链上除起点外存在 <70% 的薄弱节点即判「根因在前序」，取最深层薄弱节点为根因；暂无作答证据的前置只记为断点，不判薄弱 |',
                 '| 上升错因 | 错因末次任务占比 − 首次任务占比 ≥3 个百分点；按差值降序 |',
                 '| 前置关系覆盖度 | 有作答证据且已建前置关系的知识点数 ÷ 有作答证据的知识点数 ×100%，四舍五入取整；能力维度或完全无证据时无值 |',
                 '| 无关系薄弱点 | 顽固名单与断层清单取并集去重，保留无前置关系标注者；按失分热度降序（顽固项取平均失分率，断层项取 100 − 掌握度） |',
                 '| 易混淆对数据 | 易混淆对记录是否为空；为空时关系建设引导追加同步补充提示 |',
-                '| 已达标数 | 掌握度 ≥ 当前最高档下限的末级节点数（3 档=80%、4 档=90%，默认 3 档） |',
+                '| 已达标数 | 掌握度 ≥ 80% 且有效场次 ≥3 场的末级节点数（3 档与 4 档相同，90% 是 4 档「优秀」下限、不作达标线；1~2 场标「待确认」不计入，见 CALC-01 §3） |',
                 '',
                 '**六类建议（一期实际产出 6 条；文案中的维度名随当前「知识点 / 能力」维度）**',
                 '',
@@ -7108,9 +7362,12 @@ init();
                 '| 前序补偿 #F97316 | 前序断层清单非空 | 按下表三分支取文案 | 「查看断层归因」→ 诊断区「断层」标签 |',
                 '| 成对辨析 #F59E0B | 易混淆对非空 | 「N 对易混淆，最高「A vs B」全班 X 人次（取人次最高的一对）。建议 10 分钟辨析课 + 学生互讲差异，替代无效刷题。」 | 「查看易混淆」→ 诊断区「混淆」标签 |',
                 '| 限时短训 #EF4444 | 上升错因非空 | 「错因迁移：错因名 +Δ%，最多列 3 项、超出追加「等 N 项」，占比持续上升。建议安排短时、高频率的针对性讲练，并优先讲解对应错因。」 | 「查看错因分析」→ 错因分析区 |',
-                '| 减量维持 #10B981 | 已达标数 >0 | 「N 个{维度}已达掌握线（≥最高档下限%，3 档 80 / 4 档 90）。建议转为每周 1 次滚动复测防回退，把课时让给薄弱项。」 | 「查看已达标」→ 诊断区「已达标」标签 |',
+                '| 减量维持 #10B981 | 已达标数 >0 | 「N 个{维度}已达掌握线（≥80%，3 档与 4 档相同）。建议转为每周 1 次滚动复测防回退，把课时让给薄弱项。」 | 「查看已达标」→ 诊断区「已达标」标签 |',
                 '| 关系建设引导 #64748B | 无关系薄弱点非空 | 「N 个薄弱{维度}尚无前置关系标注，前序归因能力受限。建议题库优先标注：失分热度前 3 名；易混淆数据为空时追加「易混淆对数据为空，建议同步补充」。」 | 「查看断层归因」→ 诊断区「断层」标签 |',
-                '| 空态 | 六类全不命中 | 「本周期各项诊断均无异常，按既有教学节奏推进即可」 | 无按钮 |',
+                '| 空态·疑似优先 | 六类全不命中，但折叠带存在 ≥1 条 B 级疑似（疑似短板或其他仅 1~2 场命中的结论） | 「本周期 N 个{维度}仅 1~2 场证据，暂判疑似（如「疑似短板」），不出教学动作；补测 ≥1 场后自动重判。」N = 折叠带疑似条目去重数 | 「查看疑似」→ 诊断区折叠带 |',
+                '| 空态·全无 | 六类全不命中、折叠带无 B 级疑似，且无 C / D 级待诊断条目 | 「本周期各项诊断均无异常，按既有教学节奏推进即可」 | 无按钮 |',
+                '',
+                '**空态判定顺序（不得跳步）**：① 折叠带内有 B 级疑似 → 用「疑似优先」，**不得说「无异常」**；② 无疑似但存在 C 级（仅有历史证据）或 D 级（无作答证据）条目 → 按 XK-07D 归入「待诊断 / 补测」清单展示，同样不作「无异常」结论；③ 两者皆无 → 才用「全无」。全模块不可诊断时的页面级文案见 XK-13，不叠用本表。',
                 '',
                 '**前序补偿的三分支文案（按序判定，取第一个命中）**',
                 '',
@@ -7120,7 +7377,7 @@ init();
                 '| 无根因但存在无证据前置 | 「N 个{维度}掌握度 <60%，根因暂未定位：B 个前置暂无作答证据，须先诊断再归因。」 |',
                 '| 其余（前置关系未建） | 「N 个{维度}掌握度 <60%，前置关系尚未建立（前置关系标注覆盖 C%），暂按同点巩固处理；题库补充标注后自动升级为前序归因。」覆盖度无值时省略括号 |',
                 '',
-                '**二期预留（本期规则表不产出，仅保留触发口径）**：方法专题（同一方法关联 ≥2 个知识点且 ≥50% 关联点薄弱）、能力专项（某能力关联知识点 ≥8 个且平均得分率 <65%）、补测验证（能力仅有依赖边无考查边，或关联题点未考占比 ≥50%）；见 XK-07 规则 6/7/8，一期不上线。',
+                '**本期不做（不列预留参数，避免被当成待办）**：方法专题与考法覆盖两条诊断本期不做；能力专项已由规则 6 在本期产出（A 级判短板、B 级只出疑似并进折叠带）。',
                 '',
                 '**综合教学建议（建议列表下方的整合执行块）**',
                 '',
@@ -7232,17 +7489,17 @@ init();
                 '',
                 '### XK-12.3 题库 21 类关系生成矩阵',
                 '',
-                '21 类关系 = 7 类业务关系 × 知识点 / 题点 / 微题点 3 个层级。当前抽屉演示仅展示 ID 2、3、4；ID 7 仅后台计算、不展示建议卡，其余规则待同级数据接入后生效。未展示不等于排除，未落地不得伪造卡片或结论。',
+                '21 类关系 = 7 类业务关系 × 知识点 / 题点 / 微题点 3 个层级。当前抽屉演示仅展示 ID 2、3、4；ID 7（解题方法）本期停用，既不出后台结论也不出建议卡，其余规则待同级数据接入后生效。未展示不等于排除，未落地不得伪造卡片或结论。',
                 '',
                 '| 关系与 ID | 生成条件 | 分级边界与限制 |',
                 '| --- | --- | --- |',
                 '| 前置：知识 2、题点 10、微题点 17 | 同级关系与证据齐备后：暂无证据 → 前置诊断；周期 <70% → 前置补练；周期 ≥70% 不补练；历史仅参考；未学不生成 | 题点还须具备题点与知识点映射；三级证据不得互借。无关系不显示前序区，不推断「前置已达标」 |',
                 '| 后续：知识 3、题点 11、微题点 18 | 知识点 / 微题点当前周期 ≥80%；题点当前有周期证据且个人达标；同时名单与后续范围非空才生成后续应用 | 后续由前置关系反向推导，不重复维护；不得借用其他层级的掌握度 |',
                 '| 易混淆：知识 4、题点 12、微题点 19 | 有同级关系即可生成预防性辨析；同级真实命中 ≥5 人次才进入诊断 | 题点须先做无序对归一；知识点的双弱、单弱、双强同题失分分型及处置沿用 XK-07B 规则 4 |',
-                '| 解题方法：知识 7、题点 13、微题点 20 | 知识点：关联点 ≥2，且顽固或断层占比 ≥50%，或平均得分率 <65%，才生成方法聚合建议；题点按方法证据、微题点按变式方法证据达到同级聚合阈值后生成 | 不做路径回溯，不推断学习先后或前置链；ID 7 当前仅后台计算 |',
+                '| 解题方法：知识 7、题点 13、微题点 20 | 本期停用，不生成任何建议卡；关系只在详情清单展示；题库未回传 methods 标签时该维度显示「-」，不得用关联点均分顶替 | 不做路径回溯，不推断学习先后或前置链；ID 7 本期不参与后台计算，也不出建议 |',
                 '| 常见易错：知识 8、题点 14、微题点 21 | 有同级阅卷标注或客观题规则命中才生成讲评落点；同一易错覆盖 ≥3 个知识点 / 题点时，升级为跨点 / 跨题点习惯错误 | 只有关系、没有命中不生成；微题点不得由知识点易错记录下放推断 |',
-                '| 考查能力：知识 5、题点 15、微题点 22 | 按同级真实作答聚合；关联项 ≥8 且平均得分率 <65% 才输出「能力短板」 | 未达条件不生成，不进入前后序抽屉，不生成前后序建议 |',
-                '| 依赖能力：知识 9、题点 16、微题点 23 | 依赖关系关联的薄弱点占比 ≥40%，且没有对应考查边时，只输出「待补测」 | 不直接判能力薄弱，不生成分组补练或补练名单 |',
+                '| 考查能力：知识 5、题点 15、微题点 22 | 按同级真实作答聚合；该能力自身周期得分率 <未掌握阈值且证据等级 A 才输出「能力短板」，B 级只出「疑似短板」并进折叠带；关联项 ≥8 只作覆盖度提示 | 未达条件不生成，不进入前后序抽屉，不生成前后序建议 |',
+                '| 依赖能力：知识 9、题点 16、微题点 23 | 与考查能力同口径：只取该能力自身周期得分率判定，不计算依赖侧薄弱点占比；本周期无作答证据时只输出「待补测」 | 不直接判能力薄弱，不生成分组补练或补练名单；依赖边只表达先修要求，不提供作答证据 |',
                 '',
                 '### XK-12.4 学生分组与六类建议',
                 '',
@@ -7318,7 +7575,7 @@ init();
                 '',
                 '| 模块 | L0 | L0-b | L1 | L2-a | L2-b | L3 | L4 |',
                 '| --- | --- | --- | --- | --- | --- | --- | --- |',
-                '| 顶部筛选栏 | N | N | N | N | N | N | N |',
+                '| 顶部筛选栏 / 学生追踪筛选条 | N | N | N | N | N | N | N |',
                 '| 周期概览 KPI（班级 5 卡） | E | D | D | E | N | N | N |',
                 '| 得分趋势图（班级） | E | E | E | E | N | N | N |',
                 '| 任务清单 | E | N | N | N | N | N | N |',
@@ -7331,7 +7588,7 @@ init();
                 '| 明细页「查看详情」 | H | N | N | N | N | N | N |',
                 '| 导出 | 禁用 | 禁用 | 禁用 | 禁用 | 可用 | 可用 | 可用 |',
                 '',
-                '- **同页互斥**：只渲染最高级空态（L0 > L0-b > L1 > L2 > L3 > L4），低级别模块折叠为一行摘要（如「另有 4 个模块因无任务未展示」），默认收起可展开；禁止 6 张 KPI 全为「—」各带一行「暂无数据」；筛选栏与顶部导航始终可用，内容级主页签可随面板一起让位；空态不劫持滚动、不强行弹窗。',
+                '- **同页互斥**：只渲染最高级空态（L0 > L0-b > L1 > L2 > L3 > L4），低级别模块折叠为一行摘要（如「另有 4 个模块因无任务未展示」），默认收起可展开；禁止 5 张 KPI 全为「—」各带一行「暂无数据」；筛选栏与顶部导航始终可用，内容级主页签可随面板一起让位；空态不劫持滚动、不强行弹窗。',
                 '- **文案四要素**：现象、原因、影响，加「下一步」（仅当使用者能自助处置时必填；产品侧与数据治理侧原因只说明不指引，避免制造无效动作）。',
                 '- **红线**：空态不显示「0」（0 = 有数据且为零）；得分率分母为 0 置「—」，不显示 0%；不得输出「已达标 / 无问题 / 各项正常」；不同原因不得共用一句「暂无数据」；L0 下不输出任何诊断条目（含关系未建）。',
                 '',
@@ -7364,7 +7621,7 @@ init();
                 '| --- | --- |',
                 '| 一 · 口径不互引 | 单次原值、算术平均、时间衰减加权是三类独立口径，各自只与同类比较；不得用 A 的分子配 B 的分母，也不得用 A 的结论解释 B 的数字 |',
                 '| 二 · 未知 ≠ 0 | 未考查、无作答证据、未学，不进分子也不进分母，页面显示「—」或「未覆盖」；按 0 计入会系统性压低所有均值与达标率 |',
-                '| 三 · 阈值单点 | 全部阈值只在 §3 定义一次；页面文案、悬停气泡、导出 CSV 不得出现第二套数字 |',
+                '| 三 · 阈值单点 | 全部阈值只在 CALC-01 §3 定义一次；页面文案、悬停气泡、导出 CSV 不得出现第二套数字 |',
                 '',
                 '### 1 基础量（全部下游计算的原子输入）',
                 '',
@@ -7397,15 +7654,14 @@ init();
                 '| 阈值 | 取值 | 使用位置 |',
                 '| --- | --- | --- |',
                 '| 达标线 | 「掌握」档下限：3 档 80%、4 档 80%（4 档的 90% 是「优秀」下限，不作达标线；达标线与档位数无关） | XK-04 达标率分子、XK-07 已达标 |',
+                '| 判达标场次门槛 | ≥3 场（1~2 场标「待确认」，进折叠带，不计入已达标数） | XK-07 已达标、XK-09 已达标数；XK-04 达标率卡不设该门槛，两数不可互推 |',
                 '| 未掌握线 | 3 档 60% / 4 档 60%（取最低档上界） | XK-05 卡2、XK-06 树图着色、XK-07 断层目标 |',
                 '| 顽固：次数与失分率 | ≥3 次且失分率 ≥40% | XK-04 卡4、XK-05 卡6、XK-06 热力与底部结论、XK-07 |',
-                '| 顽固强度分档 | ≥5 次结构性 / 3~4 次疑似 / 1~2 次观察 | XK-07 顽固薄弱 |',
+                '| 顽固强度分档 | ≥5 次结构性 / 3~4 次疑似（无观察档） | XK-07 顽固薄弱 |',
                 '| 断层：前置阈值与回溯层数 | <70% / ≤5 层 | XK-07 前序断层 |',
                 '| 易混出卡与链长 | ≥5 人次 / ≤3 | XK-07 易混淆 |',
                 '| 跨点习惯错误 | 同一易错点在 ≥3 个知识点命中 | XK-07 易错点 |',
-                '| 方法聚合 | 关联点 ≥2 且（顽固或断层占比 ≥50% 或掌握 <65%） | XK-07 规则 6 |',
-                '| 能力聚合 | 考查侧 ≥8 点且 <65%；依赖侧薄弱占比 ≥40% | XK-07 规则 7 |',
-                '| 考法覆盖 | 缺口 ≥40%；未验证 ≥50% | XK-07 规则 8（一期不上线） |',
+                '| 能力聚合 | 能力自身得分率 <60%（随档位联动）；证据 A 判短板、B 出疑似；考查与依赖同口径，不算依赖侧占比 | XK-07 规则 6 |',
                 '| 热力单元格五档 | <20 / 20~40 / 40~60 / 60~75 / ≥75，固定五档，不随掌握档位切换（另设 0% 无失分、未考查两态） | XK-06 热力演进 |',
                 '| 行尾趋势与错因迁移 | 前后两半均值差 ±5 / 首末占比差 ±3 | XK-06 行尾判定章、XK-08 |',
                 '| 周期趋势档 | +3 显著回升 / +1 缓慢回升 / ±1 内持平 / −1 缓慢下滑 / −3 明显下滑 | XK-04 周期结论 |',
@@ -7433,7 +7689,7 @@ init();
                 '',
                 '| 指标 | 计算 | 使用位置 |',
                 '| --- | --- | --- |',
-                '| 节点得分率（加权） | Σ(`w` × `rate`) ÷ Σ`w`，`rate` 取该节点各场的单场知识点得分率（`qRate`，见 §7） | XK-06 树状图、表格、关联图谱、XK-11 详情页 |',
+                '| 节点得分率（加权） | Σ(`w` × `rate`) ÷ Σ`w`，`rate` 取该节点各场的单场知识点得分率（`qRate`，见 CALC-01 §7） | XK-06 树状图、表格、关联图谱、XK-11 详情页 |',
                 '| 节点掌握档位 | 加权得分率落入档位区间后的档位名与色值 | XK-06 节点着色与图例、XK-07 配色 |',
                 '| 覆盖徽章 x/y | 子树有证据节点数 ÷ 子树节点总数 | XK-06 统一目录 |',
                 '| 已检测节点数 | 证据为「本期已考查」或「仅有历史证据」的节点数 | XK-05 卡1 |',
@@ -7450,7 +7706,7 @@ init();
                 '| 前序断层 | 目标掌握度低于未掌握线，且祖先链存在 <70% 节点（回溯 ≤5 层） | XK-07、XK-07C 主因排序 |',
                 '| 可诊断覆盖率 | 可诊断 N ÷ 应诊断 M（%） | XK-07D 模块底部、XK-09、导出 CSV |',
                 '| 易混淆分级与命中人次 | 无序对归一后判双弱 / 单弱 / 双强，累计命中人次 | XK-07 |',
-                '| 方法掌握度 | 关联知识点得分率的算术平均（不按关系度加权） | XK-07 规则 6 |',
+                '| 能力掌握度 | 能力维度的自身周期得分率（按能力标签挂接题目分值加权，时间衰减同知识点），不借用关联知识点均分 | XK-07 规则 6 |',
                 '| 错因占比迁移 | 末次占比 − 首次占比，绝对值 ≥3 为显著迁移 | XK-08 关键发现 |',
                 '| 建议触发条件 | XK-09 规则表的 when 条件 | XK-09 教学建议 |',
                 '',
@@ -7458,7 +7714,7 @@ init();
                 '',
                 '| 边界 | 说明 |',
                 '| --- | --- |',
-                '| 周期概览均值 vs 节点掌握度 | 前者按任务次数算术平均，回答「这周期整体考得怎么样」；后者按 `w` 加权，回答「单个知识点现在是什么水平」。两者不相等是正常现象，页面不得互相引用，更不得为了让它们相等而改公式 |',
+                '| 周期概览均值 vs 节点掌握度加权 | 前者按任务次数算术平均，回答「这周期整体考得怎么样」；后者按 `w` 加权，回答「单个知识点现在是什么水平」。两者不相等是正常现象，页面不得互相引用，更不得为了让它们相等而改公式 |',
                 '| 热力累计失分率 vs 节点得分率 | 前者是有效场次 `loss` 的算术平均，后者是按 `w` 加权的 `rate`；只有恰好 1 场考查时才互补为 100 |',
                 '',
                 '### 6 已知实现差异（原型 vs 本章规范）——本版已全部收敛',
@@ -7467,7 +7723,7 @@ init();
                 '| --- | --- | --- |',
                 '| D1 | XK-04 卡3 达标率分母 | 已收敛：分母取 `mSet`（题目挂接的 kpTree 末级节点 + 被挂接的能力末级节点）；达标 / 薄弱 / 未掌握三档在同一集合内正算，三者之和恒等于分母 |',
                 '| D3 | XK-04 徽章与副行 | 已收敛：提交率（276 ÷ 288 = 95.8%）由周期模型实时派生；原演示常量中的教学跟进类指标（含其固定百分比）已随跟进功能整体删除，不再保留任何演示数值 |',
-                '| D4 | XK-06 节点得分率 | 已收敛：节点掌握度 = 100 − Σ(`w` × `loss`) ÷ Σ`w`，`loss` 由单场题目挂接聚合而来（见 §7）；前端只做档位映射 |',
+                '| D4 | XK-06 节点得分率 | 已收敛：节点掌握度 = 100 − Σ(`w` × `loss`) ÷ Σ`w`，`loss` 由单场题目挂接聚合而来（见 CALC-01 §7）；前端只做档位映射 |',
                 '',
                 '### 7 数据基座：末级知识点图谱与题目挂接',
                 '',
@@ -7493,7 +7749,97 @@ init();
                 '- 不进集合 ≠ 0 分：页面不显示 0，也不显示档位色（未知 ≠ 未掌握）；',
                 '- 原型题库规模：本周期 6 场任务（共 56 题）、末级知识点 61 条，覆盖当前考核项所在的集合与逻辑、函数基础、指数与对数、三角函数等模块；接入真实数据时原子表按教研标签表增量补行即可，派生链不需改动。',
                 '',
-                '> 本章只登记口径，不重复各章交互细节。新增任何指标时，先在 §3 登记阈值、在 §4 登记使用位置，再改页面——顺序颠倒就会出现同一个数字两种算法。'
+                '> 本章只登记口径，不重复各章交互细节。新增任何指标时，先在 CALC-01 §3 登记阈值、在 CALC-01 §4 登记使用位置，再改页面——顺序颠倒就会出现同一个数字两种算法。'
+            ].join('\n')
+        },
+        {
+            id: 'CHG-01', group: 'CHG', title: '更新记录',
+            body: [
+                '**用途**：登记 PRD 口径的每次修订（时间、涉及章节、改了什么），供评审与二次开发核对；只记变更，不重复正文。',
+                '',
+                '**2026-11-24 · XK-07 规则 6、参数总表**',
+                '',
+                '- 方法掌握由「关联知识点得分率算术平均」改为「该方法自身的周期得分率」：按题库 methods 标签挂接题目的分值加权，时间衰减与知识点同口径。',
+                '- 方法薄弱改为自身得分率低于未掌握阈值（默认 60%，随档位联动）且证据等级 ≥B；关联点 ≥2 由准入条件降为覆盖度提示（≥5 个知识点建议连排 2 课时）。',
+                '- 数据依赖：题库未回传 methods 标签则该方法无自身得分率、显示「-」，禁止用关联点均分顶替。',
+                '',
+                '**2026-11-24 · XK-07 规则 7、参数总表**',
+                '',
+                '- 能力短板由「关联知识点 ≥8 个且平均得分率低于 65%」改为「能力自身周期得分率低于未掌握阈值（默认 60%，随档位联动）且证据等级 ≥B」。',
+                '- 关联知识点 ≥8 降为覆盖度提示与并列排序，不参与判定。',
+                '- 依赖侧当日暂不变：薄弱点占比 ≥40% 且无考查边→标「待补测」，禁止直接判薄弱。（同日稍后已改为单侧口径，见下文「2026-11-24 · XK-07B 规则 7」）',
+                '',
+                '**2026-11-24 · XK-12.3、CALC-01**',
+                '',
+                '- 解题方法、考查能力两行的生成条件同步改为自身得分率。',
+                '- 指标对照里「方法掌握度 = 关联知识点得分率算术平均」拆为「方法 / 能力掌握度 = 各自维度的自身周期得分率」。',
+                '',
+                '**2026-11-24 · XK-06 详情面板、XK-07A**',
+                '',
+                '- 详情面板关联清单行尾口径：前置 / 后续 / 易混淆 / 子节点 / 考查与依赖能力 / 题型 / 方法 / 易错点的对端同属知识点维度，行尾只出对端自身周期得分率，取不到显示「-」。',
+                '- 删除关联知识点均值派生口径（relAvgOf 与 .kg-rel-avg）。',
+                '- 详情面板关联清单的显示口径已正式写入 XK-06「详情面板关联清单显示口径」：8 组固定顺序、行格式（色点 + 名称 + 行尾得分率）、禁止派生均值、点击跳转与空态、能力详情与计数去重；XK-07A 只保留「能力是知识点维度之一」的语义并指回 XK-06，不再复述显示细节。',
+                '',
+                '**2026-11-24 · XK-07A、能力详情**',
+                '',
+                '- 明确依赖能力 / 考查能力两类关系的对端就是「能力」：能力同属知识点维度，面板取其自身周期得分率。',
+                '- 新增能力详情：点击能力行进入，反向列出挂接该能力的知识点（分考查 / 依赖两组，行尾出各知识点自己的周期得分率）与子能力。',
+                '- 能力不上画布，所以能力详情不提供前后序关联诊断入口；画布仍只画知识点之间的前置 / 易混淆与层级结构边。',
+                '- 同一知识点同时挂考查与依赖时计数去重（规则 7 只计一次），两个分组仍按关系类型分列。',
+                '',
+                '**2026-11-24 · XK-07B 规则 7、XK-12.3、XK-07A**',
+                '',
+                '- 规则 7 由「能力二分」改为「能力判定」：考查能力 / 依赖能力两类关系的对端都只取该能力自身的周期得分率，删除依赖侧「关联薄弱点占比 ≥40%」聚合与「无考查边」前提。',
+                '- 「待补测」不再由占比推导，改为证据态：该能力本周期无作答证据即标「待补测」，属数据缺口，不判薄弱。',
+                '- XK-12.3 依赖能力行、XK-07A 关系表诊断用途列、CALC-01 指标对照同步改为单侧口径；XK-06 详情面板条款同步删除「占比在规则 7 聚合层计算」的表述。',
+                '',
+                '**2026-11-24 · XK-07B 规则 1/6/7、参数总表、XK-07C**',
+                '',
+                '- 修掉规则 7 与规则 1 的矛盾：能力短板由「证据等级 ≥B」改为「证据等级 A（≥3 场直接考查）」；B 级（1~2 场）只出「疑似短板」，进折叠带，不作结论。',
+                '- 方法一侧同步对齐（同一条证据门槛参数覆盖两个维度，不能只改一半）：方法薄弱改 A 级判定，B 级出「疑似方法薄弱」进折叠带。',
+                '- 参数总表「方法 / 能力诊断证据门槛 ≥B」拆为两档：「短板证据门槛（A 档）≥3 场」与「疑似带（B 档）1~2 场，只进折叠带」；方法 / 能力覆盖度提示线合并为 5 / 8 个知识点。',
+                '- XK-07C 补一句：B 级疑似不进主因排序，只有 A 级可争夺主因；XK-12.3 两行、CALC-01 指标对照两行、XK-07 二期预留同步。',
+                '',
+                '**2026-11-24 · XK-07C、XK-07B 规则 2、CALC-01**',
+                '',
+                '- XK-07C 明确主因留空态：某知识点仅有 B 级（1~2 场）命中、凑不出任何 A 级结论时，主因位留空并显示「疑似（证据不足）」，疑似项只进折叠带，不生成动作、不计入建议条数。',
+                '- 删除规则 2 强度的「1~2 次观察」档：命中门槛已要求 ≥3 次不同任务失分，该区间不可达；强度收敛为两档（≥5 次结构性 / 3~4 次疑似）。XK-07 六标签表、XK-07B 规则 2、CALC-01 顽固强度分档、XK-07A 处置表同步。',
+                '',
+                '**2026-11-24 · XK-09 空态**',
+                '',
+                '- 教学建议空态由单句「各项诊断均无异常」拆为两支：「疑似优先」（折叠带存在 B 级疑似时提示补测，不得说无异常）与「全无」；并明确 C / D 级证据按 XK-07D 归入待诊断，不计入「无异常」。',
+                '',
+                '**2026-11-24 · XK-07B 规则集、XK-07A、XK-07C、XK-12.3、CALC-01、XK-09、XK-13**',
+                '',
+                '- 规则集由 8 条收敛为 6 条：删除原规则 6（方法聚合）与原规则 8（考法覆盖），原规则 7（能力判定）改称规则 6。理由：方法专题依赖病型、考法依赖题点-知识点映射，两者本期都没有数据链路，连规则带参数一并下线，避免留一条永远判不出结论的规则。',
+                '- 历史条目按重编号对应阅读：旧「规则 6」= 方法（已删）、旧「规则 7」= 能力（现规则 6）、旧「规则 8」= 考法（已删）。',
+                '- 连带清除：参数总表的方法与考法参数、XK-07A 关系表两行诊断用途、诊断单元矩阵「方法聚合 / 考法覆盖」两行、XK-07C 主因表「考法未验证」、XK-12.3 解题方法行的后台计算、CALC-01 方法 / 考法两行阈值、XK-07D 对规则 8 的引用、XK-09 空态「疑似方法薄弱」。21 类关系本身不删，只把方法 / 考法的诊断用途标为本期不做。',
+                '- XK-09 达标线修正为 80%（3 档与 4 档相同）：原文按「当前最高档下限」取值，4 档会算出 90%，与 CALC-01 §3 冲突。90% 是 4 档「优秀」下限，只用于档位展示、不作达标线；已达标数与「减量维持」文案同步。',
+                '- XK-09 根因回溯由「最多 8 层」改为「最多 5 层」，与 XK-07B 规则 3 的闸 1、CALC-01 §3「断层回溯层数」同一口径，超限文案统一为「超过 5 层未定位根因」。',
+                '- 周期概览 KPI 统一 5 卡：XK-13 处置矩阵与 AC-08 原写 6 张，与实际渲染的 5 卡（平均得分率 / 稳定度 / 知识点达标率 / 顽固薄弱知识点 / 提交率）不符，已全部改为 5。',
+                '- 参数总表补齐三项（上升错因阈值 3 个百分点、易混链长 ≤3 对、断层清单条数上限 5 项），并声明本表只是 CALC-01 §3 的速查镜像，两处冲突以 CALC-01 §3 为准。',
+                '- 引用与编号修复：AC-13 缺号改为 AC-11；正文「§3」「§7」统一加「CALC-01」前缀（原引用本身有效，仅补出处消除跨章歧义）；XK-02 补「并同步学生追踪」，XK-13 模块名补「/ 学生追踪筛选条」，XK-04 抽屉正文改为与 `mSet` 同源口径。',
+                '',
+                '**2026-11-24 · XK-07 已达标、XK-09 已达标数、CALC-01 §3**',
+                '',
+                '- 判达标由「有效场次 ≥2 场」改为「≥3 场」，1~2 场标「待确认」并进折叠带、不计入已达标数。原口径与 XK-07B 规则 1（A 级 = ≥3 场才可定性，含达标）和 XK-13 的 L4（周期 ≤2 场结论仅供参考）冲突：规则 1 写明「全部诊断共用、先行过滤」，2 场的节点本不该进入「可定性」。',
+                '- 新阈值登记进 CALC-01 §3 阈值总表「判达标场次门槛」，并在该行注明 XK-04 达标率卡不设此门槛——达标率卡回答「本周期掌握面多大」，用 mSet 全量；「已达标」回答「哪些点可减量维持」，需 ≥3 场稳定证据才敢减量。两者不可互推。',
+                '- 「减量维持」建议引用的已达标数同步加上场次门槛，避免建议数与标签计数不同源。新增 AC-12 验收：1~2 场达标的节点不得进已达标，第 3 场仍达标才转正。',
+                '',
+                '**2026-11-24 · XK-07、XK-07A、XK-07B、XK-07C、XK-07D**',
+                '',
+                '- 这 5 章此前存在两套写法：抽屉为详版（含 `## 一、二、三` 小标题、4~5 列表格、页面表现列），PRD.md 为精简版（粗体段落 + 3 列表格）。现按「以抽屉为准」逐字回写 PRD.md，21 章双载体全部逐字一致。',
+                '- 回写前逐项核对抽屉版未丢事实：边数（915 / 919 / 902 / 401 / 26 / 149）、关系度常量（90 / 85 / 95）、参数（覆盖度提示线 8 个知识点、227 对去重只计一次、1 个 45 节点环、链长 ≤3、命中 ≥5 人次才出卡、不设 1~2 次档）与原因码表均无遗漏。抽屉版另有精简版缺的内容：REL-MISSING / REL-CHANGED / REL-CYCLE / REL-OFF / MAP-MISSING 五个原因码、冲突消解项序 6 条完整、标签表增「一句话说明」与「对应规则」两列。',
+                '- 修正上一轮改出的自相矛盾：XK-07 流程图第 2 步原写「规则 0~6」，紧接一行却写「按 6 条规则逐一命中」；规则 0 是步骤 1 的可诊断性门卫、不计入 6 条，故改为「规则 1~6」。',
+                '',
+                '**本次复核后维持不变**',
+                '',
+                '- 画布边界：仅渲染知识点与知识点之间的前置、易混淆（有向箭头）与层级结构边；能力 / 题型 / 方法 / 易错点不上图，只在详情面板展示（能力行点击进入能力详情）。',
+                '- 证据红线：未知 ≠ 未掌握。无本周期作答证据的节点不出得分率、不显示 0、不显示档位色，行尾显示「-」。',
+                '',
+                '**遗留与待定**',
+                '',
+                '- 题库当前只回传 atoms / abilities 两个标签字段，methods / types / errors 缺失：规则 6（能力判定）与题型 / 易错点行尾在真实数据上恒为「-」，须待题库补字段，不得以关联知识点均分填充。方法 / 考法两条诊断本期不做，不再计入该缺口。'
             ].join('\n')
         }
     ];
