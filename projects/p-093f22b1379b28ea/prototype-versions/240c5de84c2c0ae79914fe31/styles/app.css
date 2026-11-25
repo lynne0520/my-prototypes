@@ -4152,7 +4152,7 @@ body {
    知识点关联图谱模块
    ============================================================ */
 
-/* 工具栏：深度 / 关系开关 / 标签策略 / 仅看关联 / 统计 */
+/* 工具栏：深度 / 标签策略 / 仅看关联 / 统计 */
 .kg-toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -4618,43 +4618,23 @@ body {
     white-space: nowrap;
 }
 
-.kg-rel-tag {
-    font-size: 10.5px;
-    color: var(--text-muted);
-    background: #f1f5f9;
-    padding: 1px 6px;
-    border-radius: 4px;
-    flex-shrink: 0;
-}
-
-.kg-rel-count {
-    font-size: 10.5px;
-    color: var(--text-muted);
-    flex-shrink: 0;
-}
-
-/* 关联均值：非知识点关联对象（能力 / 题型 / 方法 / 易错点）的派生画像——关联知识点本期得分率的
-   算术平均。胶囊底纹 + 「关联均」前缀，与左侧知识点掌握度（裸文加粗）在视觉与口径上双重区分 */
-.kg-rel-avg {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 1px 5px;
-    border-radius: 4px;
-    flex-shrink: 0;
-    white-space: nowrap;
-}
-
-.kg-rel-avg.none {
+/* 无得分率占位：本期无作答证据 / 未学 / 仅有周期外历史证据时，得分率位恒显示「-」。
+   不再用「未检测」长文案挤占 300px 面板，也不得补 0 冒充数值（未知 ≠ 未掌握） */
+.kg-rel-rate-none {
+    font-size: 11px;
     color: #94a3b8;
-    background: #f1f5f9;
-    font-weight: 400;
+    flex-shrink: 0;
+    min-width: 32px;
+    text-align: right;
 }
 
-/* 掌握度徽标：前置 / 后续知识行尾部的小型百分比，颜色随档位 */
+/* 得分率位右对齐成列：知识点名左侧伸展，分数统一靠右，去除标签后行尾保持整齐 */
 .kg-rel-mastery {
     font-size: 10.5px;
     font-weight: 700;
     flex-shrink: 0;
+    min-width: 32px;
+    text-align: right;
 }
 
 /* 断层链警示：前置行命中（当前节点 <60 且前置 <70）红底 + 断层 chip */
