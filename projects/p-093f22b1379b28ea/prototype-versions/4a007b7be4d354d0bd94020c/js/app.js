@@ -1336,8 +1336,8 @@ function panelVisible(id) {
 
 // 维度清单（数据驱动）：主页签栏内嵌子导航 chip 按此渲染；真实数据接入后按学科配置维度组
 const DIMENSIONS = [
-    { key: 'kp', label: '知识点', count: () => flattenTree(AppData.kpTree, true).length },
-    { key: 'ability', label: '能力', count: () => flattenTree(AppData.abilityTree, true).length }
+    { key: 'kp', label: '知识点' },
+    { key: 'ability', label: '能力' }
 ];
 
 // 渲染维度 chip：单维度学科不渲染（无切换需求，页签栏零维度痕迹）；多维度 chip 流排、溢出横向滚动
@@ -1349,7 +1349,7 @@ function renderDimChips() {
         return;
     }
     group.innerHTML = DIMENSIONS.map(d =>
-        `<span class="dim-chip${d.key === currentDimension ? ' active' : ''}" data-dim="${d.key}" title="切换至${d.label}维度">${d.label} (${d.count()})</span>`
+        `<span class="dim-chip${d.key === currentDimension ? ' active' : ''}" data-dim="${d.key}" title="切换至${d.label}维度">${d.label}</span>`
     ).join('');
 }
 
@@ -1399,7 +1399,7 @@ function refreshDashboard() {
     renderPeriodTaskTable();
     renderCommonMistakes();
 
-    // 维度标签（chip 组随 refreshDashboard 刷新 active 与计数；isKp 供层级 Tab 文案等后续渲染复用）
+    // 维度标签（chip 组随 refreshDashboard 刷新 active，仅显示维度名称不带数量；isKp 供层级 Tab 文案等后续渲染复用）
     const isKp = currentDimension === 'kp';
     setChapterSidebarExpanded(chapterSidebarExpanded);
     renderDimChips();
@@ -3985,8 +3985,6 @@ function renderTeachAdvice() {
             if (rule) rule.actions[Number(b.dataset.act)].run(ctx);
         };
     });
-    const expBtn = document.getElementById('btnExportAdvice');
-    if (expBtn) expBtn.onclick = () => showProtoToast('教学建议单已导出（原型演示）');
     renderTeachAdviceSummary(items, ctx);
 }
 
@@ -4002,16 +4000,8 @@ const ADVICE_PLAN_META = {
 };
 const ADVICE_PLAN_ORDER = ['fault', 'stub', 'conf', 'cause', 'gap', 'maintain'];
 
-function renderTeachAdviceSummary(items, ctx, opts) {
-    const box = document.getElementById((opts && opts.boxId) || 'teachAdviceSummary');
-    if (!box) return;
-    const planItems = ADVICE_PLAN_ORDER.map(id => items.find(r => r.id === id)).filter(Boolean);
-    if (!planItems.length) {
-        box.innerHTML = '';
-        box.style.display = 'none';
-        return;
-    }
-    box.style.display = '';
+// 综合建议明细行：页面渲染与 CSV 导出共用同一口径；关注范围给出去重后全量名单，展示层自行截断为 3 项
+function advicePlanRowsOf(items, ctx, opts) {
     const defaultScopeOf = id => {
         if (id === 'stub') return calcPeriodStats().stubSorted.map(k => k.name);
         if (id === 'maintain') return flattenTree(currentTree(), true).filter(n => masteryOf(n) >= masteryLevels[0].min).map(n => n.name);
@@ -4028,29 +4018,50 @@ function renderTeachAdviceSummary(items, ctx, opts) {
         return [];
     };
     const scopeOf = id => [...new Set(opts && opts.scopeOf ? opts.scopeOf(id) : defaultScopeOf(id))];
-    const steps = planItems.map((r, i) =>
-        `<span class="adv-plan-step"><span class="adv-plan-no tone-${r.tone}">${i + 1}</span>${r.title}</span>`)
+    return ADVICE_PLAN_ORDER.map(id => items.find(r => r.id === id)).filter(Boolean)
+        .map((r, i) => ({
+            no: i + 1,
+            id: r.id,
+            tone: r.tone,
+            title: r.title,
+            scene: (ADVICE_PLAN_META[r.id] || {}).scene || '—',
+            scope: scopeOf(r.id),
+            why: r.why(ctx)
+        }));
+}
+
+function renderTeachAdviceSummary(items, ctx, opts) {
+    const box = document.getElementById((opts && opts.boxId) || 'teachAdviceSummary');
+    if (!box) return;
+    const plan = advicePlanRowsOf(items, ctx, opts);
+    if (!plan.length) {
+        box.innerHTML = '';
+        box.style.display = 'none';
+        return;
+    }
+    box.style.display = '';
+    const steps = plan.map(p =>
+        `<span class="adv-plan-step"><span class="adv-plan-no tone-${p.tone}">${p.no}</span>${p.title}</span>`)
         .join('<i class="fas fa-arrow-right adv-plan-arrow"></i>');
     const parts = opts && opts.parts ? opts.parts : buildDefaultAdviceParts(items, ctx);
-    const covNote = planItems.some(r => r.id === 'fault') && ctx.relCov !== null && ctx.relCov < 60
+    const covNote = plan.some(p => p.id === 'fault') && ctx.relCov !== null && ctx.relCov < 60
         ? `<div class="adv-summary-cov"><i class="fas fa-circle-info"></i> 前置关系标注覆盖 <b>${ctx.relCov}%</b> · 前序补偿按同点巩固口径，归因能力受限</div>`
         : '';
-    const rows = planItems.map(r => {
-        const scope = scopeOf(r.id);
-        const scopeTxt = scope.length
-            ? escapeHTML(scope.slice(0, 3).join('、')) + (scope.length > 3 ? ` 等 <b>${scope.length}</b> 项` : '')
+    const rows = plan.map(p => {
+        const scopeTxt = p.scope.length
+            ? escapeHTML(p.scope.slice(0, 3).join('、')) + (p.scope.length > 3 ? ` 等 <b>${p.scope.length}</b> 项` : '')
             : '—';
         return `<tr>
-            <td><span class="adv-plan-dot tone-${r.tone}"></span>${r.title}</td>
-            <td class="adv-plan-scope" title="${escapeHTML(scope.join('、'))}">${scopeTxt}</td>
-            <td class="adv-plan-scene">${ADVICE_PLAN_META[r.id].scene}</td>
+            <td><span class="adv-plan-dot tone-${p.tone}"></span>${p.title}</td>
+            <td class="adv-plan-scope" title="${escapeHTML(p.scope.join('、'))}">${scopeTxt}</td>
+            <td class="adv-plan-scene">${p.scene}</td>
         </tr>`;
     }).join('');
     const summaryTitle = (opts && opts.title) || '综合教学建议';
     box.innerHTML = `
         <div class="adv-summary-hd">
             <div class="adv-summary-title">${summaryTitle}</div>
-            <div class="adv-summary-sub">将上方 ${planItems.length} 条建议按「先补差、再突破、后巩固」整合为一周期执行建议</div>
+            <div class="adv-summary-sub">将上方 ${plan.length} 条建议按「先补差、再突破、后巩固」整合为一周期执行建议</div>
         </div>
         ${covNote}
         <div class="adv-plan-path">${steps}</div>
@@ -4062,10 +4073,81 @@ function renderTeachAdviceSummary(items, ctx, opts) {
             </table>
         </div>
         <div class="adv-summary-actions">
-            <button type="button" class="advice-btn ghost" id="btnExportPlan"><i class="fas fa-file-export"></i> 导出建议</button>
+            <button type="button" class="advice-btn ghost" id="btnExportAdvice"><i class="fas fa-file-export"></i> 导出综合建议</button>
         </div>`;
-    const expPlanBtn = box.querySelector('#btnExportPlan');
-    if (expPlanBtn) expPlanBtn.onclick = () => showProtoToast('综合教学建议已导出（原型演示）');
+    // 导出按钮就在被导出的卡片上：无入选条目时整块（含按钮）隐藏，没有可执行方案就不给入口
+    // 同一 id 可能同时存在于班级 / 个人两个容器，必须限定在 box 内查询绑定
+    const expBtn = box.querySelector('#btnExportAdvice');
+    if (expBtn) expBtn.onclick = () => exportAdviceCSV(items, ctx, opts);
+}
+
+/* ---------------- 教学建议导出（CSV：带 BOM，Excel 双击直开不乱码） ---------------- */
+
+// 数据依据在原型里是 HTML 片段，进 CSV 前先去标签、还原实体、压空白，避免单元格里冒出 <b>
+function advicePlainText(html) {
+    return String(html == null ? '' : html)
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/<[^>]*>/g, '')
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+        .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function adviceExportStamp() {
+    const d = new Date();
+    const p = n => String(n).padStart(2, '0');
+    return {
+        day: `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`,
+        time: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+    };
+}
+
+// CSV 抬头块：首列写标题与口径，导出后可直接当纸质清单的表头
+function adviceExportHead(title, stamp, ctx, plan) {
+    const rows = [[title], ['维度', dimensionLabel()], ['导出时间', stamp.time]];
+    if (plan && plan.some(p => p.id === 'fault') && ctx && ctx.relCov !== null && ctx.relCov < 60) {
+        rows.push(['前置关系标注覆盖', `${ctx.relCov}%（前序补偿按同点巩固口径，归因能力受限）`]);
+    }
+    rows.push([]);
+    return rows;
+}
+
+// 教学建议导出（唯一入口）：只导「综合教学建议」执行方案；数据依据不进表格，一律回页面查看
+// 关注范围给去重后全量名单，不套页面「前 3 项」截断；无教学动作时不给导出，避免产出空表
+function exportAdviceCSV(items, ctx, opts) {
+    if (!items || !items.length) {
+        showProtoToast('本周期各项诊断均无异常，暂无可导出的建议');
+        return;
+    }
+    const plan = advicePlanRowsOf(items, ctx, opts);
+    if (!plan.length) {
+        showProtoToast('本周期无可纳入教学路径的教学动作，建议依据请在页面查看');
+        return;
+    }
+    const itemMap = {};
+    items.forEach(r => { itemMap[r.id] = r; });
+    // 「页面入口」列是导出后回页面核对依据的唯一落点，依据本身不进 CSV
+    const entryOf = id => (itemMap[id] ? itemMap[id].actions.map(a => a.label).join(' / ') : '—');
+    const parts = opts && opts.parts ? opts.parts : buildDefaultAdviceParts(items, ctx);
+    const stamp = adviceExportStamp();
+    const rows = adviceExportHead(`综合教学建议（${dimensionLabel()}维度）`, stamp, ctx, plan);
+    rows.push(['教学路径', plan.map(p => `${p.no}.${p.title}`).join(' → ')]);
+    rows.push(['综合建议', advicePlainText(parts.join('；')) + '。']);
+    rows.push([]);
+    rows.push(['序号', '类型', '关注范围', '关注项数', '使用场景', '页面入口']);
+    plan.forEach(p => rows.push([
+        p.no,
+        p.title,
+        p.scope.length ? p.scope.join('、') : '—',
+        p.scope.length,
+        p.scene,
+        entryOf(p.id)
+    ]));
+    const filename = `学科学情_综合教学建议_${dimensionLabel()}_${stamp.day}.csv`;
+    downloadCSV(filename, rows);
+    showProtoToast(`综合教学建议已导出 CSV（${plan.length} 条动作，依据请在页面查看）`);
 }
 
 // 班级版综合建议文案模板：把各条 why 压缩为一句执行顺序（个人视角由 opts.parts 覆盖）
@@ -6725,7 +6807,7 @@ init();
             id: 'XK-03', group: 'XK', title: '主页签',
             body: [
                 '- 两个主页签：学情汇总（默认）/ 知识点分析，同一时刻只显示一个面板。',
-                '- 维度子导航：「知识点分析」激活时页签后展开维度 chip，维度项由学科配置决定；单维度学科不显示，超宽横向滚动，切换筛选后计数同步刷新。',
+                '- 维度子导航：「知识点分析」激活时页签后展开维度 chip，维度项由学科配置决定；单维度学科不显示，超宽横向滚动；chip 仅显示维度名称，不带数量。',
                 '- 切页签后补渲染面板内图表（隐藏期间不渲染）；页签只控制显示，不改变数据口径。'
             ].join('\n')
         },
@@ -7329,7 +7411,7 @@ init();
         {
             id: 'XK-09', group: 'XK', title: '教学建议',
             body: [
-                '由建议规则表驱动，把各诊断结论汇总为可执行建议条目；一期只输出建议、数据依据与诊断直达，不提供题目生成或组卷。每条建议 = 标题 + 语义色左边条与同色极浅底 + 数据依据段落 + 右侧直达按钮；数字与名单全部按当前周期数据实时派生。模块「导出建议」按钮仅提示「教学建议单已导出（原型演示）」。',
+                '由建议规则表驱动，把各诊断结论汇总为可执行建议条目；一期只输出建议、数据依据与诊断直达，不提供题目生成或组卷。每条建议 = 标题 + 语义色左边条与同色极浅底 + 数据依据段落 + 右侧直达按钮；数字与名单全部按当前周期数据实时派生。综合教学建议卡片底部的「导出综合建议」是本模块唯一导出入口（无入选条目时随卡片一起隐藏）：只导出综合教学建议（教学路径 + 综合建议句 + 序号 / 类型 / 关注范围 / 关注项数 / 使用场景 / 页面入口），数据依据不进表格、只在页面查看，页面入口列即回页面核对依据的落点；关注范围给去重后全量名单。',
                 '',
                 '**建议的数据依据（全部实时派生，不写死）**',
                 '',
@@ -7379,7 +7461,7 @@ init();
                 '| 教学路径 | 入选项按序编号 1 至 N，编号底色 = 该条语义色，条目间用箭头连接 |',
                 '| 综合建议句 | 按固定语序拼接分句，用「；」分隔、只拼命中项，句末加「。」：前序补偿有根因「先补 R 个前序根因，否则当前薄弱点讲不透」/ 无根因「直接对 F 个断层点做同点巩固（前置关系未建，暂不归因）」；专项突破「再对 S 个顽固薄弱做同点巩固 + 变式复测」；成对辨析「课中穿插成对辨析，替代重复刷题」；限时短训「课后限时短训压制上升错因」；减量维持「已达标 A 项转为滚动复测，让出课时」 |',
                 '| 三列明细表 | 教学动作 = 语义色圆点 + 条目标题；关注范围与使用场景见下表 |',
-                '| 空态与导出 | 无入选条目时整块隐藏；「导出建议」按钮仅提示「综合教学建议已导出（原型演示）」 |',
+                '| 空态与导出 | 唯一导出入口是综合块底部的「导出综合建议」；无入选条目时整块（含按钮）隐藏，即无导出入口——没有可执行方案就不给导出，也不产空文件；数据依据不进导出，一律回页面查看 |',
                 '',
                 '**关注范围与使用场景（综合建议明细表逐行口径）**',
                 '',
@@ -7746,6 +7828,20 @@ init();
             id: 'CHG-01', group: 'CHG', title: '更新记录',
             body: [
                 '**用途**：登记 PRD 口径的每次修订（时间、涉及章节、改了什么），供评审与二次开发核对；只记变更，不重复正文。',
+                '',
+                '**2026-11-25 · XK-09 导出按钮位置与命名**',
+                '',
+                '- 唯一导出按钮由模块头移入「综合教学建议」卡片底部，文案「导出综合建议」，样式沿用次级按钮并右对齐。理由：导出的就是这张卡片的整合结论，按钮贴在被导出对象上，不必再靠文案解释导的是哪一份。',
+                '- 连带空态口径变更：按钮随卡片一起隐藏，不再有模块头常驻入口——没有可执行方案时页面本就不出现导出口（导出函数内对无教学动作仍保留提示兜底，防以后入口位置再变时产出空表）。',
+                '- 模块头右侧只留说明文案，不含任何导出按钮。',
+                '',
+                '**2026-11-25 · XK-09 导出入口与导出内容**',
+                '',
+                '- 导出入口由「导出建议单（逐条）」与综合块「导出建议」两个并列按钮收敛为一个（位置与命名最终以「2026-11-25 · XK-09 导出按钮位置与命名」为准）。理由：两份文件五类条目的数据依据逐字相同、重叠七八成，同时发给同一人易生「哪份为准」。',
+                '- 导出内容只保留综合教学建议：抬头、教学路径、综合建议句、6 列明细（序号 / 类型 / 关注范围 / 关注项数 / 使用场景 / 页面入口）。',
+                '- 数据依据不进导出：曾以「建议依据附录」作为第二段随文件下发，因与第一段重复且使文件失去「一页执行方案」的用途而取消；依据一律回页面查看，「页面入口」列即对应落点。',
+                '- 无教学动作（只命中关系建设引导）或六类全不命中时不产文件、只给提示，避免下发空表。',
+                '- 关注范围给去重后全量名单，不套页面「前 3 项 + 等 N 项」截断；文件带 BOM，文件名「学科学情_综合教学建议_{维度}_{yyyymmdd}.csv」；抬头「前置关系标注覆盖」仅在入选含前序补偿且覆盖度 <60% 时输出。',
                 '',
                 '**2026-11-24 · XK-07 规则 6、参数总表**',
                 '',
